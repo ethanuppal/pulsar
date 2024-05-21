@@ -1,0 +1,8 @@
+[package]
+name = "pulsar"
+version = "0.0.0"
+edition = "2021"
+
+[[bin]]
+name = "main"
+path = "src/bin/main.rs"
