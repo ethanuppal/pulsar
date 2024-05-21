@@ -1,0 +1,7 @@
+{
+    "editor.formatOnSave": true,
+    "rust-analyzer.rustfmt.overrideCommand": [
+        "rustfmt",
+        "+nightly",
+    ]
+}
