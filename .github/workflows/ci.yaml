@@ -17,7 +17,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
+    - name: Install Dependencies
+      run: make deps
     - name: Build
       run: make build
-    - name: Run tests
+    - name: Test
       run: make test
