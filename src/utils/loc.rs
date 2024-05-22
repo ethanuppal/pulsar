@@ -1,6 +1,7 @@
 use std::{fmt::Display, rc::Rc};
 
 /// Different sources of text data.
+#[derive(Clone, Debug)]
 pub enum Source {
     /// `Source::File { name, contents }` is a text file with name `name` and
     /// contents `contents`.
@@ -18,7 +19,7 @@ impl Source {
         &self, pos: usize, before: usize, after: usize
     ) -> (Vec<String>, usize) {
         match self {
-            Source::File { name: _, contents } => {
+            Self::File { name: _, contents } => {
                 assert!(pos < contents.len());
                 let bytes = contents.as_bytes();
 
@@ -85,7 +86,10 @@ impl Display for Source {
 
 /// `Loc(line, col, pos, source)` is a location referring to line `line` and
 /// column `col` of `source`, where the combination of `line` and `col` produces
-/// a direct offset `pos`. */
+/// a direct offset `pos`. It is formatted as `"{source}:{line}:{col}"` where
+/// `{source}` is the formatted substitution of `source` and likewise for
+/// `line`/`col`.
+#[derive(Debug)]
 pub struct Loc {
     pub line: usize,
     pub col: usize,
@@ -102,6 +106,6 @@ impl Loc {
 
 impl Display for Loc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}:{}", self.source, self.line, self.col)
+        write!(f, "{}:{}:{}", self.source.as_ref(), self.line, self.col)
     }
 }

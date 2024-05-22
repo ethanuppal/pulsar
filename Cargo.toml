@@ -6,3 +6,6 @@ edition = "2021"
 [[bin]]
 name = "main"
 path = "src/bin/main.rs"
+
+[dev-dependencies]
+proptest = "1.4.0"
