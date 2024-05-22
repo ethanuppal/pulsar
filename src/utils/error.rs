@@ -1,7 +1,6 @@
-use colored::*;
-use std::fmt::Display;
-
 use super::loc::Loc;
+use colored::*;
+use std::{fmt::Display, io};
 
 type ErrorCode = i32;
 
@@ -55,7 +54,7 @@ pub enum Style {
 }
 
 /// An error at a given location with various information and diagnostics. Use
-/// [`Error::to_string`] to obtain a printable version of the error.
+/// [`Error::fmt`] to obtain a printable version of the error.
 pub struct Error {
     style: Style,
     level: Level,
@@ -187,5 +186,37 @@ impl ErrorBuilder {
 
     pub fn build(self) -> Error {
         self.error
+    }
+}
+
+pub struct ErrorManager {
+    max_count: usize,
+    errors: Vec<Error>
+}
+
+impl ErrorManager {
+    fn with_max_count(max_count: usize) -> ErrorManager {
+        ErrorManager {
+            max_count,
+            errors: vec![]
+        }
+    }
+
+    fn push(&mut self, error: Error) -> bool {
+        if self.errors.len() == self.max_count {
+            false
+        } else {
+            self.errors.push(error);
+            true
+        }
+    }
+
+    fn consume<W: io::Write>(&mut self, mut output: W) -> io::Result<()> {
+        for error in &self.errors {
+            output.write_all(error.to_string().as_bytes())?;
+            output.flush()?;
+        }
+        self.errors.clear();
+        Ok(())
     }
 }

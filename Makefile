@@ -24,3 +24,8 @@ deps:
 clean:
 	@echo '[INFO] Removing build files'
 	@cargo clean
+
+.PHONY: docs
+docs:
+	@echo '[INFO] Building and viewing documentation'
+	@cargo doc --no-deps --open

@@ -26,12 +26,7 @@ impl Source {
         }
     }
 
-    /// `source.lines(pos, before, after)` is a pair of a vector containing the
-    /// line in `source` at position `pos`, preceded by the up to `before`
-    /// previous lines and up to `after` subsequent lines, as well as an index
-    /// into the vector for the line containing `pos`.
-    ///
-    /// Requires: `pos` is a valid position in `source`.
+    /// @see [`Loc::lines`]
     fn lines(
         &self, pos: usize, before: usize, after: usize
     ) -> (Vec<String>, usize) {
@@ -126,7 +121,12 @@ pub struct Loc {
 }
 
 impl Loc {
-    /// See [`Source::lines`].
+    /// `loc.lines(before, after)` is a pair of a vector containing the
+    /// line in `loc.source` at position `loc.pos`, preceded by the up to
+    /// `before` previous lines and up to `after` subsequent lines, as well
+    /// as an index into the vector for the line containing `loc.pos`.
+    ///
+    /// Requires: `loc.pos` is a valid position in `loc.source`.
     pub fn lines(&self, before: usize, after: usize) -> (Vec<String>, usize) {
         self.source.lines(self.pos, before, after)
     }

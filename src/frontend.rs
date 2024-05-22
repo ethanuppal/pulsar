@@ -1,3 +1,5 @@
+//! This crate defines the lexer, parser, and abstract syntax tree for pulsar.
+
 pub mod ast;
 pub mod lexer;
 pub mod parser;
