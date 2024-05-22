@@ -13,7 +13,8 @@ pub enum ErrorCode {
     UnexpectedToken,
     InvalidTopLevelConstruct,
     ConstructShouldBeTopLevel,
-    InvalidTokenForStatement
+    InvalidTokenForStatement,
+    InvalidOperatorSyntax
 }
 
 impl Display for ErrorCode {

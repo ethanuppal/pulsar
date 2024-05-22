@@ -5,6 +5,14 @@ mod tests {
     use pulsar::frontend::token::{Token, TokenType};
     use pulsar::utils::loc::Loc;
 
+    fn make_token(ty: TokenType, value: &str) -> Token {
+        Token {
+            ty,
+            value: value.into(),
+            loc: Loc::default()
+        }
+    }
+
     #[test]
     fn test_format_constant_int() {
         assert_snapshot!(
@@ -24,7 +32,7 @@ mod tests {
             ty: None
         });
         assert_snapshot!(
-            Expr { value: ExprValue::BinOp(left, TokenType::Plus, right), ty: None }.to_string(),
+            Expr { value: ExprValue::BinOp(left, make_token(TokenType::Plus, "+"), right), ty: None }.to_string(),
             @"(5 + 3)"
         )
     }

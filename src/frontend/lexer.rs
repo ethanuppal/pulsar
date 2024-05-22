@@ -169,9 +169,10 @@ impl Iterator for Lexer {
             ")" => { TokenType::RightPar }
             "{" => { TokenType::LeftBrace }
             "}" => { TokenType::RightBrace }
+            "=" => { TokenType::Assign }
             "\n" => { TokenType::Newline }
             "func" => { TokenType::Func }
-            "return" => { TokenType::Return }
+            "let" => { TokenType::Let }
             _ => {
                 if self.current().is_numeric() {
                     Some(self.make_number_token())

@@ -1,4 +1,4 @@
-use super::token::{Name, TokenType};
+use super::token::{Name, Token, TokenType};
 use super::ty::{StmtType, Type};
 use crate::utils::format;
 use std::fmt;
@@ -8,7 +8,8 @@ pub type Param = (String, Type);
 
 pub enum ExprValue {
     ConstantInt(i64),
-    BinOp(Box<Expr>, TokenType, Box<Expr>)
+    PrefixOp(Token, Box<Expr>),
+    BinOp(Box<Expr>, Token, Box<Expr>)
 }
 
 pub struct Expr {
@@ -20,8 +21,11 @@ impl Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.value {
             ExprValue::ConstantInt(i) => write!(f, "{}", i),
-            ExprValue::BinOp(left, op, right) => {
-                write!(f, "({} {} {})", left, op, right)
+            ExprValue::PrefixOp(op, rhs) => {
+                write!(f, "({} {})", op.value, rhs)
+            }
+            ExprValue::BinOp(lhs, op, rhs) => {
+                write!(f, "({} {} {})", lhs, op.value, rhs)
             }
         }
     }

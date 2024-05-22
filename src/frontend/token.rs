@@ -11,10 +11,11 @@ pub enum TokenType {
     Char,
     String,
     Func,
-    Return,
+    Let,
     Plus,
     Minus,
     Times,
+    Assign,
     LeftPar,
     RightPar,
     LeftBrace,
@@ -35,10 +36,11 @@ impl Debug for TokenType {
                 Self::Char => "char",
                 Self::String => "string",
                 Self::Func => "func",
-                Self::Return => "return",
+                Self::Let => "let",
                 Self::Plus => "plus",
                 Self::Minus => "minus",
                 Self::Times => "times",
+                Self::Assign => "assign",
                 Self::LeftPar => "left-par",
                 Self::RightPar => "right-par",
                 Self::LeftBrace => "left-brace",
@@ -63,6 +65,7 @@ impl fmt::Display for TokenType {
                 Self::RightPar => ")",
                 Self::LeftBrace => "{",
                 Self::RightBrace => "}",
+                Self::Assign => "=",
                 _ => default.as_str()
             }
         )

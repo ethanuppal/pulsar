@@ -1,15 +1,3 @@
-func this() {
+func main() {
+    let x = 3
 }
-
-func is() {}
-
-func a() {
-
-    }
-
-func valid() {
-
-
-}
-
-func program() {}
