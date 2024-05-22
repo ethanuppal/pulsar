@@ -18,6 +18,7 @@ test: build
 deps:
 	@echo '[INFO] Installing dependencies'
 	@cargo install cargo-nextest
+	@curl -LsSf https://insta.rs/install.sh | sh
 
 .PHONY: clean
 clean:

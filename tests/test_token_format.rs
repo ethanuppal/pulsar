@@ -1,5 +1,3 @@
-extern crate pulsar;
-
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
