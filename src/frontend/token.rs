@@ -17,6 +17,8 @@ pub enum TokenType {
     Times,
     LeftPar,
     RightPar,
+    LeftBrace,
+    RightBrace,
     Newline
 }
 
@@ -39,6 +41,8 @@ impl Display for TokenType {
                 Self::Times => "times",
                 Self::LeftPar => "left-par",
                 Self::RightPar => "right-par",
+                Self::LeftBrace => "left-brace",
+                Self::RightBrace => "right-brace",
                 Self::Newline => "\\n"
             }
         )
@@ -53,6 +57,16 @@ pub struct Token<'a> {
 
 impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}, ty = {}, loc = {})", self.value, self.ty, self.loc)
+        write!(
+            f,
+            "({}, ty = {}, loc = {})",
+            if self.value == "\n" {
+                "\\n"
+            } else {
+                self.value.as_str()
+            },
+            self.ty,
+            self.loc
+        )
     }
 }

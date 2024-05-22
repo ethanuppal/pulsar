@@ -6,13 +6,14 @@ use crate::utils::{
     loc::{Loc, Source}
 };
 
-struct Lexer<'a> {
+pub struct Lexer<'a> {
     loc: Loc<'a>,
     buffer: Vec<char>,
     error: Option<Error<'a>>
 }
 
 impl<'a> Lexer<'a> {
+    /// Creates a new lexer for the given `source`.
     pub fn new(source: &'a Source) -> Self {
         Lexer {
             loc: Loc {
@@ -26,18 +27,48 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn advance(&self) {}
+    /// The current character in the buffer.
+    fn current(&self) -> char {
+        self.buffer[self.loc.pos]
+    }
 
-    fn advance_n(&self, n: usize) {
+    /// Whether the lexer has no remaining characters in the
+    /// buffer.
+    fn is_eof(&self) -> bool {
+        self.loc.pos == self.buffer.len()
+    }
+
+    /// Consumes a single character in the buffer.
+    fn advance(&mut self) {
+        if self.current() == '\n' {
+            self.loc.col = 0;
+            self.loc.line += 1;
+        }
+        self.loc.pos += 1;
+        self.loc.col += 1;
+    }
+
+    /// Consumes `n` characters in the buffer.
+    fn advance_n(&mut self, n: usize) {
         for _ in 0..n {
             self.advance();
         }
     }
 
-    pub fn make_token(&self, ty: TokenType, length: usize) -> Token<'a> {
+    /// Skips past all non-newline whitespace.
+    fn skip(&mut self) {
+        while !self.is_eof()
+            && self.current().is_whitespace()
+            && self.current() != '\n'
+        {
+            self.advance();
+        }
+    }
+
+    fn make_token(&mut self, ty: TokenType, length: usize) -> Token<'a> {
         let loc_copy = self.loc;
         self.advance_n(length);
-        let value: String = self.buffer[self.loc.pos..self.loc.pos + length]
+        let value: String = self.buffer[loc_copy.pos..loc_copy.pos + length]
             .iter()
             .collect();
         Token {
@@ -46,15 +77,45 @@ impl<'a> Lexer<'a> {
             loc: loc_copy
         }
     }
+
+    /// Reqiores: `current().is_numeric()`.
+    fn make_number_token(&mut self) -> Token<'a> {
+        let loc_copy = self.loc;
+        let mut length = 0;
+        while !self.is_eof() && self.current().is_numeric() {
+            self.advance();
+            length += 1;
+        }
+        self.loc = loc_copy;
+        self.make_token(TokenType::Integer, length)
+    }
+
+    /// Reqiores: `current().is_alphabetic() || current() == '_'`.
+    fn make_identifier_token(&mut self) -> Token<'a> {
+        let loc_copy = self.loc;
+        let mut length = 0;
+        while !self.is_eof()
+            && (self.current().is_alphanumeric() || self.current() == '_')
+        {
+            self.advance();
+            length += 1;
+        }
+        self.loc = loc_copy;
+        self.make_token(TokenType::Identifier, length)
+    }
 }
 
 macro_rules! lex {
     ( $self:ident in $($token:expr => { $token_type:expr })* _ => $finally:block) => {
         $(
-            if $token == "+" {
+            {
                 let input_token_length = ($token).len();
+                if $self.loc.pos + input_token_length <= $self.buffer.len()
+                    && $self.buffer[$self.loc.pos..$self.loc.pos + input_token_length].iter().copied().eq($token.chars()) {
+
                 return Some($self.make_token($token_type, input_token_length));
-            };
+               };
+            }
         )*
         $finally
     };
@@ -64,9 +125,13 @@ impl<'a> Iterator for Lexer<'a> {
     type Item = Token<'a>;
 
     fn next(&mut self) -> Option<Token<'a>> {
-        if let Some(error) = &self.error {
+        if self.is_eof() {
+            return None;
+        } else if let Some(_) = &self.error {
             return None;
         }
+
+        self.skip();
 
         lex! { self in
             "+" => { TokenType::Plus }
@@ -74,11 +139,19 @@ impl<'a> Iterator for Lexer<'a> {
             "*" => { TokenType::Times }
             "(" => { TokenType::LeftPar }
             ")" => { TokenType::RightPar }
+            "{" => { TokenType::LeftBrace }
+            "}" => { TokenType::RightBrace }
             "\n" => { TokenType::Newline }
             "func" => { TokenType::Func }
             "return" => { TokenType::Return }
             _ => {
-                None
+                if self.current().is_numeric() {
+                    Some(self.make_number_token())
+                } else if self.current().is_alphabetic() || self.current() == '_' {
+                    Some(self.make_identifier_token())
+                } else {
+                    None
+                }
             }
         }
     }
