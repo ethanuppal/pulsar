@@ -2,7 +2,8 @@
 mod tests {
     use insta::assert_snapshot;
     use pulsar::frontend::ast::{Expr, ExprValue, Node, NodeValue};
-    use pulsar::frontend::token::TokenType;
+    use pulsar::frontend::token::{Token, TokenType};
+    use pulsar::utils::loc::Loc;
 
     #[test]
     fn test_format_constant_int() {
@@ -32,7 +33,11 @@ mod tests {
     fn test_format_function() {
         let body = vec![Node {
             value: NodeValue::LetBinding {
-                name: "x".to_string(),
+                name: Token {
+                    ty: TokenType::Identifier,
+                    value: "x".into(),
+                    loc: Loc::default()
+                },
                 value: Box::new(Expr {
                     value: ExprValue::ConstantInt(5),
                     ty: None
@@ -42,7 +47,11 @@ mod tests {
         }];
         assert_snapshot!(
             Node {
-                value: NodeValue::Function { name: "foo".to_string(), body },
+                value: NodeValue::Function { name: Token {
+                    ty: TokenType::Identifier,
+                    value: "foo".into(),
+                    loc: Loc::default()
+                }, body },
                 ty: None
             }.to_string(),
             @r###"
@@ -56,7 +65,11 @@ mod tests {
     #[test]
     fn test_format_let_binding() {
         assert_snapshot!(
-            Node { value: NodeValue::LetBinding { name: "x".to_string(), value: Box::new(Expr { value: ExprValue::ConstantInt(5), ty: None }) }, ty: None }.to_string(),
+            Node { value: NodeValue::LetBinding { name: Token {
+                ty: TokenType::Identifier,
+                value: "x".into(),
+                loc: Loc::default()
+            }, value: Box::new(Expr { value: ExprValue::ConstantInt(5), ty: None }) }, ty: None }.to_string(),
             @"let x = 5"
         )
     }

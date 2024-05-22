@@ -1,0 +1,39 @@
+---
+source: tests/test_parser.rs
+expression: "parser_output(\"tests/data/parserfail_in1.pl\", error_manager.clone())"
+---
+func main() {}
+func nested() {}
+error[E0006]: tests/data/parserfail_in1.pl:6:5: Invalid token at the start of statement
+   5 │  func foo() {
+   6 │      fun bad_nested() {
+   7 │  
+
+error[E0005]: tests/data/parserfail_in1.pl:12:5: Unexpected top-level construct
+  11 │  func foo() {
+  12 │      func nested() {
+  13 │          
+Did you mean to place it at the top level?
+
+error[E0003]: tests/data/parserfail_in1.pl:12:5: Expected 'right-brace' at end of function body
+  11 │  func foo() {
+  12 │      func nested() {
+            └─── Received 'func' here
+  13 │          
+   ...
+  10 │  
+  11 │  func foo() { 
+                   │ function body opened here
+  12 │      func nested() {
+
+error[E0004]: tests/data/parserfail_in1.pl:15:1: Unexpected right-brace at top level
+  14 │      }
+  15 │  } 
+  16 │  
+Allowed constructs at top level include functions and imports
+
+error[E0003]: tests/data/parserfail_in1.pl:17:20: Expected 'right-par' at end of function parameters
+  16 │  
+  17 │  func missing_close( 
+                           │ Received 'newline' here
+  18 │

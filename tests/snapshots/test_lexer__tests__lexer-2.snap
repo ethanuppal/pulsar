@@ -1,0 +1,19 @@
+---
+source: tests/test_lexer.rs
+expression: "lexer_output(\"tests/data/lexer_in2.pl\", error_manager.clone())"
+---
+(1, ty = integer, loc = tests/data/lexer_in2.pl:1:1)
+(2, ty = integer, loc = tests/data/lexer_in2.pl:1:3)
+(3, ty = integer, loc = tests/data/lexer_in2.pl:1:5)
+(4, ty = integer, loc = tests/data/lexer_in2.pl:1:7)
+(5, ty = integer, loc = tests/data/lexer_in2.pl:1:9)
+(\n, ty = newline, loc = tests/data/lexer_in2.pl:1:10)
+(id, ty = identifier, loc = tests/data/lexer_in2.pl:2:1)
+(\n, ty = newline, loc = tests/data/lexer_in2.pl:2:3)
+(id1, ty = identifier, loc = tests/data/lexer_in2.pl:3:1)
+(\n, ty = newline, loc = tests/data/lexer_in2.pl:3:4)
+(_id1, ty = identifier, loc = tests/data/lexer_in2.pl:4:1)
+(\n, ty = newline, loc = tests/data/lexer_in2.pl:4:5)
+(1, ty = integer, loc = tests/data/lexer_in2.pl:5:1)
+(id, ty = identifier, loc = tests/data/lexer_in2.pl:5:2)
+(\n, ty = newline, loc = tests/data/lexer_in2.pl:5:4)

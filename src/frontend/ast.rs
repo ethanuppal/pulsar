@@ -1,8 +1,8 @@
-use super::token::{Name, Token, TokenType};
+use super::token::{Name, TokenType};
 use super::ty::{StmtType, Type};
 use crate::utils::format;
+use std::fmt;
 use std::fmt::Display;
-use std::fmt::{self, write};
 
 pub type Param = (String, Type);
 
@@ -28,8 +28,8 @@ impl Display for Expr {
 }
 
 pub enum NodeValue {
-    Function { name: String, body: Vec<Node> },
-    LetBinding { name: String, value: Box<Expr> }
+    Function { name: Name, body: Vec<Node> },
+    LetBinding { name: Name, value: Box<Expr> }
 }
 
 pub struct Node {
@@ -45,7 +45,7 @@ impl Node {
                 let insert_newline = if body.is_empty() { "" } else { "\n" };
                 format!(
                     "func {}() {{{}{}{}{}}}",
-                    name,
+                    name.value,
                     insert_newline,
                     body.iter()
                         .map(|node| { node.pretty(level + 1) })
@@ -56,7 +56,7 @@ impl Node {
                 )
             }
             NodeValue::LetBinding { name, value } => {
-                format!("let {} = {}", name, value)
+                format!("let {} = {}", name.value, value)
             }
         };
         result.push_str(&content);

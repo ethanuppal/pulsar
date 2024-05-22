@@ -93,7 +93,7 @@ impl Display for Source {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Source::File { name, contents: _ } => write!(f, "{}", name),
-            Source::Unknown => Ok(())
+            Source::Unknown => write!(f, "<unknown>")
         }
     }
 }
@@ -141,8 +141,8 @@ impl Display for Loc {
 impl Default for Loc {
     fn default() -> Self {
         Loc {
-            line: 0,
-            col: 0,
+            line: 1,
+            col: 1,
             pos: 0,
             source: Rc::new(Source::Unknown)
         }

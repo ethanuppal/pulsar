@@ -2,7 +2,7 @@ use crate::utils::loc::Loc;
 use core::fmt;
 use core::fmt::Debug;
 
-#[derive(Clone)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TokenType {
     Identifier,
     Integer,
@@ -43,7 +43,7 @@ impl Debug for TokenType {
                 Self::RightPar => "right-par",
                 Self::LeftBrace => "left-brace",
                 Self::RightBrace => "right-brace",
-                Self::Newline => "\\n"
+                Self::Newline => "newline"
             }
         )
     }
@@ -69,10 +69,25 @@ impl fmt::Display for TokenType {
     }
 }
 
+#[derive(Clone)]
 pub struct Token {
     pub ty: TokenType,
     pub value: String,
     pub loc: Loc
+}
+
+impl Token {
+    /// ```
+    /// let token = Token {
+    ///     ty: TokenType::Identifier,
+    ///     value: "main".to_string(),
+    ///     loc: Loc::default()
+    /// };
+    /// assert_eq(token.value.len(), token.length());
+    /// ```
+    pub fn length(&self) -> usize {
+        self.value.len()
+    }
 }
 
 impl Debug for Token {

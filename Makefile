@@ -12,7 +12,7 @@ build:
 .PHONY: test
 test: build
 	@echo '[INFO] Running tests'
-	@cargo nextest run
+	@cargo nextest run --features disable_color
 
 .PHONY: deps
 deps:

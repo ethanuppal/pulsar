@@ -2,17 +2,32 @@
 
 use super::token::{Token, TokenType};
 use crate::utils::{
-    error::Error,
+    error::{ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
     loc::{Loc, Source}
 };
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
+/// Produces tokens from an input source.
+///
+/// # Example
+/// ```
+/// fn lex(source: Rc<Source>, error_manager: Rc<RefCell<ErrorManager>>) {
+///     let lexer = Lexer::new(source, error_manager);
+///     for token in lexer {
+///         println! {"{}", token};
+///     }
+/// }
+/// ```
 pub struct Lexer {
     loc: Loc,
     buffer: Vec<char>,
-    error: Option<Error>
+    error_manager: Rc<RefCell<ErrorManager>>
 }
 
+/// Enables exploration of the lexer buffer, e.g., with [`Lexer::advance`],
+/// without side effects.
+///
+/// Note: this macro must only be invoked within the lexer.
 macro_rules! with_unwind {
     ($self:ident in $action:stmt) => {
         let old_loc = $self.loc.clone();
@@ -24,8 +39,10 @@ macro_rules! with_unwind {
 }
 
 impl Lexer {
-    /// Creates a new lexer for the given `source`.
-    pub fn new(source: Rc<Source>) -> Self {
+    /// Constructs a lexer for the given `source`.
+    pub fn new(
+        source: Rc<Source>, error_manager: Rc<RefCell<ErrorManager>>
+    ) -> Self {
         Lexer {
             loc: Loc {
                 line: 1,
@@ -34,7 +51,7 @@ impl Lexer {
                 source: source.clone()
             },
             buffer: source.contents().chars().collect(),
-            error: None
+            error_manager
         }
     }
 
@@ -76,6 +93,8 @@ impl Lexer {
         }
     }
 
+    /// Consumes `length` characters and creates a token over those characters
+    /// with type `ty`.
     fn make_token(&mut self, ty: TokenType, length: usize) -> Token {
         let loc_copy = self.loc.clone();
         self.advance_n(length);
@@ -136,9 +155,7 @@ impl Iterator for Lexer {
     type Item = Token;
 
     fn next(&mut self) -> Option<Token> {
-        if self.is_eof() {
-            return None;
-        } else if let Some(_) = &self.error {
+        if self.is_eof() || self.error_manager.borrow().has_errors() {
             return None;
         }
 
@@ -161,6 +178,14 @@ impl Iterator for Lexer {
                 } else if self.current().is_alphabetic() || self.current() == '_' {
                     Some(self.make_identifier_token())
                 } else {
+                    let error = ErrorBuilder::new()
+                        .of_style(Style::Primary)
+                        .at_level(Level::Error)
+                        .with_code(ErrorCode::UnrecognizedCharacter)
+                        .at_region(self.loc.clone(), 1)
+                        .message("Encountered unrecognized character".into())
+                        .build();
+                    self.error_manager.borrow_mut().record(error);
                     None
                 }
             }
