@@ -54,18 +54,20 @@ pub enum Style {
     Secondary
 }
 
-pub struct Error {
+/// An error at a given location with various information and diagnostics. Use
+/// [`Error::to_string`] to obtain a printable version of the error.
+pub struct Error<'a> {
     style: Style,
     level: Level,
     code: ErrorCode,
-    loc: Loc,
+    loc: Loc<'a>,
     length: usize,
     message: String,
     explain: Option<String>,
     fix: Option<String>
 }
 
-impl Display for Error {
+impl<'a> Display for Error<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -126,7 +128,7 @@ impl Display for Error {
     }
 }
 
-impl Default for Error {
+impl<'a> Default for Error<'a> {
     fn default() -> Self {
         Error {
             style: Style::Primary,
@@ -141,11 +143,11 @@ impl Default for Error {
     }
 }
 
-pub struct ErrorBuilder {
-    error: Error
+pub struct ErrorBuilder<'a> {
+    error: Error<'a>
 }
 
-impl ErrorBuilder {
+impl<'a> ErrorBuilder<'a> {
     pub fn new() -> Self {
         ErrorBuilder {
             error: Error::default()
@@ -162,7 +164,7 @@ impl ErrorBuilder {
         self
     }
 
-    pub fn at_region(mut self, loc: Loc, length: usize) -> Self {
+    pub fn at_region(mut self, loc: Loc<'a>, length: usize) -> Self {
         self.error.loc = loc;
         self.error.length = length;
         self
@@ -183,7 +185,7 @@ impl ErrorBuilder {
         self
     }
 
-    pub fn build(self) -> Error {
+    pub fn build(self) -> Error<'a> {
         self.error
     }
 }

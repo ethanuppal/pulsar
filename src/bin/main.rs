@@ -12,7 +12,7 @@ pub fn main() {
         line: 3,
         col: 6,
         pos: 17,
-        source: source.into()
+        source: &source
     };
     let error = ErrorBuilder::new()
         .of_style(Style::Primary)

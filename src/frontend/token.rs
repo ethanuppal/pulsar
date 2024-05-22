@@ -3,108 +3,55 @@ use core::fmt;
 use std::fmt::Display;
 
 #[derive(Clone, Debug)]
-pub enum Literal {
+pub enum TokenType {
+    Identifier,
     Integer,
     Float,
     Bool,
     Char,
-    String
-}
-
-impl Display for Literal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Integer => "integer",
-                Self::Float => "float",
-                Self::Bool => "bool",
-                Self::Char => "char",
-                Self::String => "string"
-            }
-        )
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum Keyword {
+    String,
     Func,
-    Return
-}
-
-impl Display for Keyword {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Func => "func",
-                Self::Return => "return"
-            }
-        )
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum Symbol {
+    Return,
     Plus,
     Minus,
     Times,
     LeftPar,
-    RightPar
+    RightPar,
+    Newline
 }
 
-impl Display for Symbol {
+impl Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",
             match self {
+                Self::Identifier => "identifier",
+                Self::Integer => "integer",
+                Self::Float => "float",
+                Self::Bool => "bool",
+                Self::Char => "char",
+                Self::String => "string",
+                Self::Func => "func",
+                Self::Return => "return",
                 Self::Plus => "plus",
                 Self::Minus => "minus",
                 Self::Times => "times",
                 Self::LeftPar => "left-par",
-                Self::RightPar => "right-par"
+                Self::RightPar => "right-par",
+                Self::Newline => "\\n"
             }
         )
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum Type {
-    Identifier,
-    Literal(Literal),
-    Keyword(Keyword),
-    Symbol(Symbol),
-    Newline
-}
-
-impl Display for Type {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Identifier => write!(f, "identifier"),
-            Self::Literal(literal) => write!(f, "{}", literal),
-            Self::Keyword(keyword) => write!(f, "{}", keyword),
-            Self::Symbol(symbol) => write!(f, "{}", symbol),
-            Self::Newline => write!(f, "\\n")
-        }
-    }
-}
-
-/// `Token(ty, value, loc)` is a token of type `ty` at location `loc` with
-/// contents `value`.
-///
-/// A token is formatted as `"(value, ty = {ty}, loc = {loc})"`, where `{ty}`
-/// and `{loc}` represent the formatted substitutions of the `ty` and `loc`
-/// fields of the token.
-pub struct Token {
-    pub ty: Type,
+pub struct Token<'a> {
+    pub ty: TokenType,
     pub value: String,
-    pub loc: Loc
+    pub loc: Loc<'a>
 }
 
-impl Display for Token {
+impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}, ty = {}, loc = {})", self.value, self.ty, self.loc)
     }

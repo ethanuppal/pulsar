@@ -1,14 +1,26 @@
-use std::{fmt::Display, rc::Rc};
+use std::fmt::Display;
 
 /// Different sources of text data.
 #[derive(Clone, Debug)]
 pub enum Source {
     /// `Source::File { name, contents }` is a text file with name `name` and
     /// contents `contents`.
-    File { name: String, contents: String }
+    File {
+        name: String,
+        contents: String
+    },
+    Unknown
 }
 
 impl Source {
+    /// `contents(source)` is the string contents of `source`.
+    pub fn contents(&self) -> &str {
+        match self {
+            Self::File { name: _, contents } => contents,
+            Self::Unknown => ""
+        }
+    }
+
     /// `source.lines(pos, before, after)` is a pair of a vector containing the
     /// line in `source` at position `pos`, preceded by the up to `before`
     /// previous lines and up to `after` subsequent lines, as well as an index
@@ -72,6 +84,7 @@ impl Source {
 
                 (result, pos_current_line)
             }
+            Self::Unknown => (vec![], 0)
         }
     }
 }
@@ -79,7 +92,8 @@ impl Source {
 impl Display for Source {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Source::File { name, contents: _ } => write!(f, "{}", name)
+            Source::File { name, contents: _ } => write!(f, "{}", name),
+            Source::Unknown => Ok(())
         }
     }
 }
@@ -98,34 +112,34 @@ impl Default for Source {
 /// a direct offset `pos`. It is formatted as `"{source}:{line}:{col}"` where
 /// `{source}` is the formatted substitution of `source` and likewise for
 /// `line`/`col`.
-#[derive(Debug)]
-pub struct Loc {
+#[derive(Debug, Clone, Copy)]
+pub struct Loc<'a> {
     pub line: usize,
     pub col: usize,
     pub pos: usize,
-    pub source: Rc<Source>
+    pub source: &'a Source
 }
 
-impl Loc {
+impl Loc<'_> {
     /// See [`Source::lines`].
     pub fn lines(&self, before: usize, after: usize) -> (Vec<String>, usize) {
         self.source.lines(self.pos, before, after)
     }
 }
 
-impl Display for Loc {
+impl Display for Loc<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}:{}", self.source.as_ref(), self.line, self.col)
+        write!(f, "{}:{}:{}", self.source, self.line, self.col)
     }
 }
 
-impl Default for Loc {
+impl Default for Loc<'_> {
     fn default() -> Self {
         Loc {
             line: 0,
             col: 0,
             pos: 0,
-            source: Rc::new(Source::default())
+            source: &Source::Unknown
         }
     }
 }

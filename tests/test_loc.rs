@@ -3,7 +3,6 @@ extern crate pulsar;
 #[cfg(test)]
 mod tests {
     use pulsar::utils::loc::{Loc, Source};
-    use std::rc::Rc;
 
     #[test]
     fn test_loc_lines() {
@@ -15,7 +14,7 @@ mod tests {
             line: 3,
             col: 1,
             pos: 13, // Position of 'l' in "line3"
-            source: Rc::new(source)
+            source: &source
         };
 
         {

@@ -6,11 +6,11 @@ BUILD	:= debug
 build:
 	@echo '[INFO] Building project'
 	@cargo build
-	@rm -f ./main
-	@ln -s ./target/$(BUILD)/main ./main
+	@echo './target/$(BUILD)/main "$$@"' > ./main
+	@chmod u+x ./main
 
 .PHONY: test
-test:
+test: build
 	@echo '[INFO] Running tests'
 	@cargo nextest run
 
