@@ -5,22 +5,33 @@ use crate::utils::{
     error::Error,
     loc::{Loc, Source}
 };
+use std::rc::Rc;
 
-pub struct Lexer<'a> {
-    loc: Loc<'a>,
+pub struct Lexer {
+    loc: Loc,
     buffer: Vec<char>,
-    error: Option<Error<'a>>
+    error: Option<Error>
 }
 
-impl<'a> Lexer<'a> {
+macro_rules! with_unwind {
+    ($self:ident in $action:stmt) => {
+        let old_loc = $self.loc.clone();
+        {
+            $action
+        }
+        $self.loc = old_loc;
+    };
+}
+
+impl Lexer {
     /// Creates a new lexer for the given `source`.
-    pub fn new(source: &'a Source) -> Self {
+    pub fn new(source: Rc<Source>) -> Self {
         Lexer {
             loc: Loc {
                 line: 1,
                 col: 1,
                 pos: 0,
-                source: source
+                source: source.clone()
             },
             buffer: source.contents().chars().collect(),
             error: None
@@ -65,8 +76,8 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn make_token(&mut self, ty: TokenType, length: usize) -> Token<'a> {
-        let loc_copy = self.loc;
+    fn make_token(&mut self, ty: TokenType, length: usize) -> Token {
+        let loc_copy = self.loc.clone();
         self.advance_n(length);
         let value: String = self.buffer[loc_copy.pos..loc_copy.pos + length]
             .iter()
@@ -79,28 +90,28 @@ impl<'a> Lexer<'a> {
     }
 
     /// Reqiores: `current().is_numeric()`.
-    fn make_number_token(&mut self) -> Token<'a> {
-        let loc_copy = self.loc;
+    fn make_number_token(&mut self) -> Token {
         let mut length = 0;
-        while !self.is_eof() && self.current().is_numeric() {
-            self.advance();
-            length += 1;
+        with_unwind! { self in
+            while !self.is_eof() && self.current().is_numeric() {
+                self.advance();
+                length += 1;
+            }
         }
-        self.loc = loc_copy;
         self.make_token(TokenType::Integer, length)
     }
 
     /// Reqiores: `current().is_alphabetic() || current() == '_'`.
-    fn make_identifier_token(&mut self) -> Token<'a> {
-        let loc_copy = self.loc;
+    fn make_identifier_token(&mut self) -> Token {
         let mut length = 0;
-        while !self.is_eof()
+        with_unwind! { self in
+            while !self.is_eof()
             && (self.current().is_alphanumeric() || self.current() == '_')
-        {
-            self.advance();
-            length += 1;
+            {
+                self.advance();
+                length += 1;
+            }
         }
-        self.loc = loc_copy;
         self.make_token(TokenType::Identifier, length)
     }
 }
@@ -121,10 +132,10 @@ macro_rules! lex {
     };
 }
 
-impl<'a> Iterator for Lexer<'a> {
-    type Item = Token<'a>;
+impl Iterator for Lexer {
+    type Item = Token;
 
-    fn next(&mut self) -> Option<Token<'a>> {
+    fn next(&mut self) -> Option<Token> {
         if self.is_eof() {
             return None;
         } else if let Some(_) = &self.error {

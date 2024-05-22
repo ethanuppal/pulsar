@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::rc::Rc;
 
 /// Different sources of text data.
 #[derive(Clone, Debug)]
@@ -13,6 +14,10 @@ pub enum Source {
 }
 
 impl Source {
+    pub fn file(name: String, contents: String) -> Rc<Source> {
+        Rc::new(Source::File { name, contents })
+    }
+
     /// `contents(source)` is the string contents of `source`.
     pub fn contents(&self) -> &str {
         match self {
@@ -112,34 +117,34 @@ impl Default for Source {
 /// a direct offset `pos`. It is formatted as `"{source}:{line}:{col}"` where
 /// `{source}` is the formatted substitution of `source` and likewise for
 /// `line`/`col`.
-#[derive(Debug, Clone, Copy)]
-pub struct Loc<'a> {
+#[derive(Debug, Clone)]
+pub struct Loc {
     pub line: usize,
     pub col: usize,
     pub pos: usize,
-    pub source: &'a Source
+    pub source: Rc<Source>
 }
 
-impl Loc<'_> {
+impl Loc {
     /// See [`Source::lines`].
     pub fn lines(&self, before: usize, after: usize) -> (Vec<String>, usize) {
         self.source.lines(self.pos, before, after)
     }
 }
 
-impl Display for Loc<'_> {
+impl Display for Loc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}:{}", self.source, self.line, self.col)
     }
 }
 
-impl Default for Loc<'_> {
+impl Default for Loc {
     fn default() -> Self {
         Loc {
             line: 0,
             col: 0,
             pos: 0,
-            source: &Source::Unknown
+            source: Rc::new(Source::Unknown)
         }
     }
 }

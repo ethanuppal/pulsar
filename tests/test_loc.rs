@@ -4,15 +4,15 @@ mod tests {
 
     #[test]
     fn test_loc_lines() {
-        let source = Source::File {
-            name: "test".to_string(),
-            contents: "line1\nline2\nline3\nline4\nline5".to_string()
-        };
+        let source = Source::file(
+            "test".to_string(),
+            "line1\nline2\nline3\nline4\nline5".to_string()
+        );
         let loc = Loc {
             line: 3,
             col: 1,
             pos: 13, // Position of 'l' in "line3"
-            source: &source
+            source: source
         };
 
         {

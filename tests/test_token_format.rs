@@ -3,6 +3,7 @@ mod tests {
     use proptest::prelude::*;
     use pulsar::frontend::token::{Token, TokenType};
     use pulsar::utils::loc::{Loc, Source};
+    use std::rc::Rc;
 
     fn arb_token_type() -> impl Strategy<Value = TokenType> {
         prop_oneof![
@@ -23,18 +24,23 @@ mod tests {
         ]
     }
 
-    fn arb_loc() -> impl Strategy<Value = Loc<'static>> {
-        (
-            any::<usize>(), // line
-            any::<usize>(), // col
-            any::<usize>()  // pos
-        )
-            .prop_map(|(line, col, pos)| Loc {
+    fn arb_source() -> impl Strategy<Value = Rc<Source>> {
+        prop_oneof![
+            (any::<String>(), any::<String>())
+                .prop_map(|(name, contents)| { Source::file(name, contents) }),
+            Just(Rc::new(Source::Unknown)),
+        ]
+    }
+
+    fn arb_loc() -> impl Strategy<Value = Loc> {
+        (any::<usize>(), any::<usize>(), any::<usize>(), arb_source()).prop_map(
+            |(line, col, pos, source)| Loc {
                 line,
                 col,
                 pos,
-                source: &Source::Unknown
-            })
+                source
+            }
+        )
     }
 
     proptest! {
@@ -57,8 +63,8 @@ mod tests {
             loc in arb_loc(),
         ) {
             assert_eq!(
-                format!("({}, ty = {}, loc = {})", value, ty, loc),
-                format!("{}",  Token { ty, value, loc })
+                format!("({}, ty = {:?}, loc = {})", value, ty, loc),
+                format!("{:?}",  Token { ty, value, loc })
             );
         }
     }

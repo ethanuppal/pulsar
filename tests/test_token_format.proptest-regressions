@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 0bd630feb9fc526d2619ed29bbee434b983795c37004a9811d7b3c7a52f37cca # shrinks to ty = plus, value = "", loc = Loc { line: 0, col: 0, pos: 0, source: File { name: "", contents: "" } }

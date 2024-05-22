@@ -1,8 +1,8 @@
 use crate::utils::loc::Loc;
 use core::fmt;
-use std::fmt::Display;
+use core::fmt::Debug;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum TokenType {
     Identifier,
     Integer,
@@ -22,7 +22,7 @@ pub enum TokenType {
     Newline
 }
 
-impl Display for TokenType {
+impl Debug for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -49,17 +49,37 @@ impl Display for TokenType {
     }
 }
 
-pub struct Token<'a> {
-    pub ty: TokenType,
-    pub value: String,
-    pub loc: Loc<'a>
+impl fmt::Display for TokenType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let default = format!("{:?}", self);
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Plus => "+",
+                Self::Minus => "-",
+                Self::Times => "*",
+                Self::LeftPar => "(",
+                Self::RightPar => ")",
+                Self::LeftBrace => "{",
+                Self::RightBrace => "}",
+                _ => default.as_str()
+            }
+        )
+    }
 }
 
-impl Display for Token<'_> {
+pub struct Token {
+    pub ty: TokenType,
+    pub value: String,
+    pub loc: Loc
+}
+
+impl Debug for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "({}, ty = {}, loc = {})",
+            "({}, ty = {:?}, loc = {})",
             if self.value == "\n" {
                 "\\n"
             } else {
@@ -70,3 +90,5 @@ impl Display for Token<'_> {
         )
     }
 }
+
+pub type Name = Token;
