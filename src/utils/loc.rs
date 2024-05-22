@@ -84,6 +84,15 @@ impl Display for Source {
     }
 }
 
+impl Default for Source {
+    fn default() -> Self {
+        Source::File {
+            name: String::new(),
+            contents: String::new()
+        }
+    }
+}
+
 /// `Loc(line, col, pos, source)` is a location referring to line `line` and
 /// column `col` of `source`, where the combination of `line` and `col` produces
 /// a direct offset `pos`. It is formatted as `"{source}:{line}:{col}"` where
@@ -107,5 +116,16 @@ impl Loc {
 impl Display for Loc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}:{}", self.source.as_ref(), self.line, self.col)
+    }
+}
+
+impl Default for Loc {
+    fn default() -> Self {
+        Loc {
+            line: 0,
+            col: 0,
+            pos: 0,
+            source: Rc::new(Source::default())
+        }
     }
 }
