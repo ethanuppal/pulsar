@@ -17,6 +17,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
+    - name: Rust Caching
+      uses: Swatinem/rust-cache@v2.7.3
     - name: Install Dependencies
       run: make deps
     - name: Build
