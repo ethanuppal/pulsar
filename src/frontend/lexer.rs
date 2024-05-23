@@ -29,10 +29,10 @@ pub struct Lexer {
 ///
 /// Note: this macro must only be invoked within the lexer.
 macro_rules! with_unwind {
-    ($self:ident in $action:stmt) => {
+    ($self:ident in $($action:tt)*) => {
         let old_loc = $self.loc.clone();
         {
-            $action
+            $($action)*
         }
         $self.loc = old_loc;
     };
@@ -108,7 +108,7 @@ impl Lexer {
         }
     }
 
-    /// Reqiores: `current().is_numeric()`.
+    /// Requires: `current().is_numeric()`.
     fn make_number_token(&mut self) -> Token {
         let mut length = 0;
         with_unwind! { self in
@@ -120,7 +120,7 @@ impl Lexer {
         self.make_token(TokenType::Integer, length)
     }
 
-    /// Reqiores: `current().is_alphabetic() || current() == '_'`.
+    /// Requires: `current().is_alphabetic() || current() == '_'`.
     fn make_identifier_token(&mut self) -> Token {
         let mut length = 0;
         with_unwind! { self in
@@ -133,18 +133,37 @@ impl Lexer {
         }
         self.make_token(TokenType::Identifier, length)
     }
+
+    /// Requires: ` current() == '@'`.
+    fn make_directive_token(&mut self) -> Option<Token> {
+        let mut length = 1;
+        with_unwind! { self in
+            self.advance();
+            if self.is_eof()
+                || !(self.current().is_alphanumeric() || self.current() == '_')
+            {
+                return None;
+            }
+            while !self.is_eof()
+                && (self.current().is_alphanumeric() || self.current() == '_')
+            {
+                    self.advance();
+                    length += 1;
+            }
+        }
+        Some(self.make_token(TokenType::Directive, length))
+    }
 }
 
 macro_rules! lex {
-    ( $self:ident in $($token:expr => { $token_type:expr })* _ => $finally:block) => {
+    ($self:ident in $(| $token:expr => {$token_type:expr})* | _ $finally:block) => {
         $(
             {
                 let input_token_length = ($token).len();
                 if $self.loc.pos + input_token_length <= $self.buffer.len()
                     && $self.buffer[$self.loc.pos..$self.loc.pos + input_token_length].iter().copied().eq($token.chars()) {
-
-                return Some($self.make_token($token_type, input_token_length));
-               };
+                    return Some($self.make_token($token_type, input_token_length));
+                };
             }
         )*
         $finally
@@ -162,22 +181,30 @@ impl Iterator for Lexer {
         self.skip();
 
         lex! { self in
-            "+" => { TokenType::Plus }
-            "-" => { TokenType::Minus }
-            "*" => { TokenType::Times }
-            "(" => { TokenType::LeftPar }
-            ")" => { TokenType::RightPar }
-            "{" => { TokenType::LeftBrace }
-            "}" => { TokenType::RightBrace }
-            "=" => { TokenType::Assign }
-            "\n" => { TokenType::Newline }
-            "func" => { TokenType::Func }
-            "let" => { TokenType::Let }
-            _ => {
+            | "+" => { TokenType::Plus }
+            | "-" => { TokenType::Minus }
+            | "*" => { TokenType::Times }
+            | "(" => { TokenType::LeftPar }
+            | ")" => { TokenType::RightPar }
+            | "{" => { TokenType::LeftBrace }
+            | "}" => { TokenType::RightBrace }
+            | "[" => { TokenType::LeftBracket }
+            | "]" => { TokenType::RightBracket }
+            | "=" => { TokenType::Assign }
+            | "|>" => { TokenType::Pipeline }
+            | ":" => { TokenType::Colon }
+            | "..." => { TokenType::Dots }
+            | "," => { TokenType::Comma }
+            | "\n" => { TokenType::Newline }
+            | "func" => { TokenType::Func }
+            | "let" => { TokenType::Let }
+            | _ {
                 if self.current().is_numeric() {
                     Some(self.make_number_token())
                 } else if self.current().is_alphabetic() || self.current() == '_' {
                     Some(self.make_identifier_token())
+                } else if self.current() == '@' {
+                    self.make_directive_token()
                 } else {
                     let error = ErrorBuilder::new()
                         .of_style(Style::Primary)

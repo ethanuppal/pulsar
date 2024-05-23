@@ -46,6 +46,7 @@ mod tests {
                     value: "x".into(),
                     loc: Loc::default()
                 },
+                hint: None,
                 value: Box::new(Expr {
                     value: ExprValue::ConstantInt(5),
                     ty: None
@@ -77,7 +78,7 @@ mod tests {
                 ty: TokenType::Identifier,
                 value: "x".into(),
                 loc: Loc::default()
-            }, value: Box::new(Expr { value: ExprValue::ConstantInt(5), ty: None }) }, ty: None }.to_string(),
+            }, hint: None, value: Box::new(Expr { value: ExprValue::ConstantInt(5), ty: None }) }, ty: None }.to_string(),
             @"let x = 5"
         )
     }

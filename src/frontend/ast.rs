@@ -8,6 +8,11 @@ pub type Param = (String, Type);
 
 pub enum ExprValue {
     ConstantInt(i64),
+
+    /// `ArrayLiteral(elements, should_continue)` is an array literal beginning
+    /// with `elements` and filling the remainder of the array with zeros if
+    /// `should_continue`.
+    ArrayLiteral(Vec<Expr>, bool),
     PrefixOp(Token, Box<Expr>),
     BinOp(Box<Expr>, Token, Box<Expr>)
 }
@@ -20,20 +25,52 @@ pub struct Expr {
 impl Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.value {
-            ExprValue::ConstantInt(i) => write!(f, "{}", i),
+            ExprValue::ConstantInt(i) => {
+                write!(f, "{}", i)?;
+            }
+            ExprValue::ArrayLiteral(elements, should_continue) => {
+                write!(
+                    f,
+                    "[{}{}]",
+                    elements
+                        .iter()
+                        .map(|ty| ty.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    if *should_continue {
+                        format!(
+                            "{}...",
+                            if elements.is_empty() { "" } else { ", " }
+                        )
+                    } else {
+                        "".into()
+                    }
+                )?;
+            }
             ExprValue::PrefixOp(op, rhs) => {
-                write!(f, "({} {})", op.value, rhs)
+                write!(f, "({} {})", op.value, rhs)?;
             }
             ExprValue::BinOp(lhs, op, rhs) => {
-                write!(f, "({} {} {})", lhs, op.value, rhs)
+                write!(f, "({} {} {})", lhs, op.value, rhs)?;
             }
         }
+        if let Some(ty) = &self.ty {
+            write!(f, ": {}", ty)?;
+        }
+        Ok(())
     }
 }
 
 pub enum NodeValue {
-    Function { name: Name, body: Vec<Node> },
-    LetBinding { name: Name, value: Box<Expr> }
+    Function {
+        name: Name,
+        body: Vec<Node>
+    },
+    LetBinding {
+        name: Name,
+        hint: Option<Type>,
+        value: Box<Expr>
+    }
 }
 
 pub struct Node {
@@ -59,8 +96,17 @@ impl Node {
                     format::make_indent(level)
                 )
             }
-            NodeValue::LetBinding { name, value } => {
-                format!("let {} = {}", name.value, value)
+            NodeValue::LetBinding {
+                name,
+                hint: hint_opt,
+                value
+            } => {
+                let hint_str = if let Some(hint) = hint_opt {
+                    format!(": {}", hint)
+                } else {
+                    "".into()
+                };
+                format!("let {}{} = {}", name.value, hint_str, value)
             }
         };
         result.push_str(&content);

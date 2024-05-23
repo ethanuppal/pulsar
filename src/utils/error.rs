@@ -14,7 +14,8 @@ pub enum ErrorCode {
     InvalidTopLevelConstruct,
     ConstructShouldBeTopLevel,
     InvalidTokenForStatement,
-    InvalidOperatorSyntax
+    InvalidOperatorSyntax,
+    MalformedType
 }
 
 impl Display for ErrorCode {
@@ -29,6 +30,7 @@ impl Default for ErrorCode {
     }
 }
 
+#[derive(PartialEq, Eq)]
 pub enum Level {
     Info,
     Note,
@@ -282,7 +284,7 @@ impl ErrorManager {
         if self.is_full() {
             false
         } else {
-            if error.style == Style::Primary {
+            if error.style == Style::Primary && error.level == Level::Error {
                 self.primary_count += 1
             }
             self.errors.push(error);

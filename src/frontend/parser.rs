@@ -1,7 +1,8 @@
 use super::{
     ast::{Expr, ExprValue, Node},
     op::{Op, Precedence},
-    token::{Token, TokenType}
+    token::{Token, TokenType},
+    ty::Type
 };
 use crate::{
     frontend::ast::NodeValue,
@@ -45,6 +46,12 @@ impl Parser {
         }
     }
 
+    fn is_at(&self, ty: TokenType) -> bool {
+        self.current_opt()
+            .map(|token| token.ty == ty)
+            .unwrap_or_default()
+    }
+
     fn advance(&mut self) {
         self.pos += 1
     }
@@ -53,6 +60,15 @@ impl Parser {
         let result = self.current().clone();
         self.advance();
         result
+    }
+
+    fn unget(&mut self) -> bool {
+        if self.pos > 0 {
+            self.pos -= 1;
+            true
+        } else {
+            false
+        }
     }
 
     fn consume_ignored(&mut self) {
@@ -251,9 +267,126 @@ impl Parser {
         self.synchronize(|_| false);
     }
 
+    fn parse_primary_type(&mut self) -> Option<Type> {
+        let type_token = expect! { self in
+            TokenType::Identifier => "for primary type"
+        }?;
+        Some(match type_token.value.as_str() {
+            "Int64" | "Int" => Type::Int64,
+            other => Type::Name(other.into())
+        })
+    }
+
+    fn parse_array_type(&mut self, inner: Type) -> Option<Type> {
+        let open_bracket =
+            expect! { self in TokenType::LeftBracket => "in array type" }?;
+        let size_token =
+            expect! { self in TokenType::Integer => "for array size" }?;
+        let close_brace =
+            expect! { self in TokenType::RightBracket => "in array type" };
+        if close_brace.is_none() {
+            self.report(
+                self.error_refback(&open_bracket, "Bracket opened here".into())
+            );
+            return None;
+        }
+
+        let size = i64::from_str_radix(size_token.value.as_str(), 10).ok()?;
+        if size < 0 {
+            self.report(
+                ErrorBuilder::new()
+                    .of_style(Style::Primary)
+                    .at_level(Level::Error)
+                    .with_code(ErrorCode::MalformedType)
+                    .at_token(&size_token)
+                    .message("Array size cannot be negative".into())
+                    .build()
+            );
+            return None;
+        } else if size == 0 {
+            self.report(
+                ErrorBuilder::new()
+                    .of_style(Style::Primary)
+                    .at_level(Level::Warning)
+                    .with_code(ErrorCode::MalformedType)
+                    .at_token(&size_token)
+                    .message("Array size is zero".into())
+                    .build()
+            );
+        }
+
+        let result = Type::Array(Box::new(inner), size as usize);
+        if self.is_at(TokenType::LeftBracket) {
+            self.parse_array_type(result)
+        } else {
+            Some(result)
+        }
+    }
+
+    fn parse_type(&mut self) -> Option<Type> {
+        if self.is_eof() {
+            self.report(self.error_unexpected_eof("in type"));
+            return None;
+        }
+        let primary = self.parse_primary_type()?;
+        if self.is_at(TokenType::LeftBracket) {
+            self.parse_array_type(primary)
+        } else {
+            Some(primary)
+        }
+    }
+
+    fn parse_array_expr(&mut self) -> Option<Expr> {
+        let open_bracket = expect! { self in TokenType::LeftBracket => "to start array literal" }?;
+
+        let mut elements = vec![];
+        let mut should_continue = false;
+        let mut i = 0;
+        while !self.is_eof() && self.current().ty != TokenType::RightBracket {
+            if i > 0 {
+                expect! { self in TokenType::Comma => "between array elements" }?;
+            }
+            match (self.current_opt().map(|token| token.ty), i) {
+                (Some(TokenType::RightBracket), i) => {
+                    if i > 0 {
+                        break;
+                    }
+                }
+                (Some(TokenType::Dots), _) => {
+                    should_continue = true;
+                    self.advance();
+                    break;
+                }
+                _ => {}
+            }
+            let element_opt = self.parse_expr();
+            if let Some(element) = element_opt {
+                elements.push(element);
+            } else {
+                self.synchronize(|token| token.ty == TokenType::RightBrace);
+                return None;
+            }
+
+            i += 1;
+        }
+
+        let close_brace = expect! { self in TokenType::RightBracket => "to end array literal" };
+        if close_brace.is_none() {
+            self.report(
+                self.error_refback(&open_bracket, "Bracket opened here".into())
+            );
+            return None;
+        }
+
+        Some(Expr {
+            value: ExprValue::ArrayLiteral(elements, should_continue),
+            ty: None
+        })
+    }
+
     fn parse_literal_expr(&mut self) -> Option<Expr> {
         let literal_token = expect_n! { self in
-            [TokenType::Integer, TokenType::Float, TokenType::Char] => "at start of expression"
+            [TokenType::Integer, TokenType::Float, TokenType::Char, TokenType::LeftBracket] => "at start of expression"
         }?;
         match literal_token.ty {
             TokenType::Integer => Some(Expr {
@@ -262,6 +395,10 @@ impl Parser {
                 ),
                 ty: None
             }),
+            TokenType::LeftBracket => {
+                self.unget();
+                self.parse_array_expr()
+            }
             _ => None
         }
     }
@@ -357,6 +494,7 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Option<Expr> {
+        self.consume_ignored();
         let primary = self.parse_primary_expr()?;
         if let Some(binary_op) =
             self.current_opt().map(|token| Op::from(token.ty)).flatten()
@@ -381,6 +519,12 @@ impl Parser {
             TokenType::Identifier => "for name in let binding"
         }?;
 
+        let mut hint = None;
+        if self.current().ty == TokenType::Colon {
+            self.advance();
+            hint = Some(self.parse_type()?);
+        }
+
         expect! { self in TokenType::Assign => "after name in let binding" }?;
 
         let value = self.parse_expr()?;
@@ -388,6 +532,7 @@ impl Parser {
         Some(Node {
             value: NodeValue::LetBinding {
                 name,
+                hint,
                 value: Box::new(value)
             },
             ty: None

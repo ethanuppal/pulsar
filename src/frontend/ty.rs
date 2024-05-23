@@ -1,14 +1,19 @@
-use super::token::Name;
 use std::fmt::Display;
 
 pub enum Type {
-    Var(Name)
+    Var(i64),
+    Name(String),
+    Int64,
+    Array(Box<Type>, usize)
 }
 
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Var(name) => write!(f, "{}", name.value)
+            Self::Var(var) => write!(f, "'{}", var),
+            Self::Name(name) => write!(f, "{}", name),
+            Self::Int64 => write!(f, "Int64"),
+            Self::Array(ty, size) => write!(f, "{}[{}]", ty, size)
         }
     }
 }

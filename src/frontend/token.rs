@@ -20,6 +20,13 @@ pub enum TokenType {
     RightPar,
     LeftBrace,
     RightBrace,
+    LeftBracket,
+    RightBracket,
+    Pipeline,
+    Dots,
+    Colon,
+    Comma,
+    Directive,
     Newline
 }
 
@@ -45,6 +52,13 @@ impl Debug for TokenType {
                 Self::RightPar => "right-par",
                 Self::LeftBrace => "left-brace",
                 Self::RightBrace => "right-brace",
+                Self::LeftBracket => "left-bracket",
+                Self::RightBracket => "right-bracket",
+                Self::Colon => "colon",
+                Self::Pipeline => "pipeline",
+                Self::Dots => "dots",
+                Self::Comma => "comma",
+                Self::Directive => "directive",
                 Self::Newline => "newline"
             }
         )
@@ -65,7 +79,13 @@ impl fmt::Display for TokenType {
                 Self::RightPar => ")",
                 Self::LeftBrace => "{",
                 Self::RightBrace => "}",
+                Self::LeftBracket => "[",
+                Self::RightBracket => "]",
+                Self::Colon => ":",
                 Self::Assign => "=",
+                Self::Pipeline => "|>",
+                Self::Dots => "...",
+                Self::Comma => ",",
                 _ => default.as_str()
             }
         )
