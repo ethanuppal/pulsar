@@ -3,6 +3,7 @@ use super::token::TokenType;
 /// A precedence value must be strictly nonnegative.
 pub type Precedence = i32;
 
+/// Parsing information for an operator.
 pub struct Op {
     pub is_binary: bool,
     pub is_unary: bool,

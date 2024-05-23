@@ -99,7 +99,7 @@ impl Display for Error {
                 f,
                 "{}: {}: ",
                 self.level.form_header(self.code).bold(),
-                self.loc
+                self.loc.to_string().underline()
             )?;
         }
         write!(f, "{}\n", self.message.bold())?;

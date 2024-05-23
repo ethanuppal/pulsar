@@ -50,5 +50,15 @@ mod tests {
             "tests/data/parser_in1.pl",
             error_manager.clone()
         ));
+
+        assert_snapshot!(parser_output(
+            "tests/data/parser_in2.pl",
+            error_manager.clone()
+        ));
+
+        assert_snapshot!(parser_output(
+            "tests/data/parser_in3.pl",
+            error_manager.clone()
+        ));
     }
 }

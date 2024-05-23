@@ -1,4 +1,4 @@
-use super::token::{Name, Token, TokenType};
+use super::token::{Name, Token};
 use super::ty::{StmtType, Type};
 use crate::utils::format;
 use std::fmt;

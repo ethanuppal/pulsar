@@ -45,14 +45,6 @@ impl Parser {
         }
     }
 
-    fn peek(&self) -> Option<&Token> {
-        if self.pos + 1 < self.buffer.len() {
-            Some(&self.buffer[self.pos + 1])
-        } else {
-            None
-        }
-    }
-
     fn advance(&mut self) {
         self.pos += 1
     }
@@ -187,6 +179,17 @@ impl Parser {
     }
 }
 
+// macro_rules! expect_any {
+//     ($self:ident in _ => $context:expr) => {
+//         if $self.is_eof() {
+//             $self.report($self.error_unexpected_eof($context));
+//             None
+//         } else {
+//             Some($self.take())
+//         }
+//     };
+// }
+
 macro_rules! expect {
     ($self:ident in $token_type:expr => $context:expr) => {
         if $self.is_eof() {
@@ -286,10 +289,10 @@ impl Parser {
             self.parse_prefix_expr(prefix_op)
         } else if self.current().ty == TokenType::LeftPar {
             let open_paren = self.take();
+            let expr = self.parse_expr()?;
             let closing_paren = expect! { self in
                 TokenType::RightPar => "in expression"
             };
-            let expr = self.parse_expr()?;
             if closing_paren.is_none() {
                 self.report(self.error_refback(
                     &open_paren,
@@ -305,12 +308,52 @@ impl Parser {
     }
 
     /// Implements [operator-precedence parsing](https://en.wikipedia.org/wiki/Operator-precedence_parser).
-    ///
-    /// Requires: the current token is a binary operator.
     fn parse_binary_expr(
         &mut self, lhs: Expr, min_precedence: Precedence
     ) -> Option<Expr> {
-        None
+        let mut lhs = lhs;
+        let mut lookahead = self.current().clone();
+        while !self.is_eof()
+            && Op::from(lookahead.ty)
+                .map(|op| op.is_binary && op.binary_precedence > min_precedence)
+                .unwrap_or_default()
+        {
+            let op_token = self.take();
+            let op = Op::from(op_token.ty).unwrap();
+
+            let mut rhs = self.parse_primary_expr()?;
+            lookahead = self.current().clone();
+            while !self.is_eof()
+                && Op::from(lookahead.ty)
+                    .map(|next_op| {
+                        next_op.is_binary
+                            && ((next_op.is_left_associative
+                                && next_op.binary_precedence
+                                    > op.binary_precedence)
+                                || (!next_op.is_left_associative
+                                    && next_op.binary_precedence
+                                        == op.binary_precedence))
+                    })
+                    .unwrap_or_default()
+            {
+                let next_op = Op::from(lookahead.ty).unwrap();
+                rhs = self.parse_binary_expr(
+                    rhs,
+                    op.binary_precedence
+                        + if next_op.binary_precedence > op.binary_precedence {
+                            1
+                        } else {
+                            0
+                        }
+                )?;
+                lookahead = self.current().clone();
+            }
+            lhs = Expr {
+                value: ExprValue::BinOp(Box::new(lhs), op_token, Box::new(rhs)),
+                ty: None
+            };
+        }
+        Some(lhs)
     }
 
     fn parse_expr(&mut self) -> Option<Expr> {
