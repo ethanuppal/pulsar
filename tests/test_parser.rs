@@ -27,6 +27,7 @@ mod tests {
         for node in parser {
             output.push_str(&format!("{}\n", node));
         }
+
         let mut buffer = Vec::new();
         if error_manager.borrow().has_errors() {
             error_manager

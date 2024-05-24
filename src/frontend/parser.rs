@@ -321,7 +321,7 @@ impl Parser {
             );
         }
 
-        let result = Type::Array(Box::new(inner), size as usize);
+        let result = Type::Array(Box::new(inner), size as isize);
         if self.is_at(TokenType::LeftBracket) {
             self.parse_array_type(result)
         } else {
@@ -396,7 +396,7 @@ impl Parser {
 
     fn parse_literal_expr(&mut self) -> Option<Expr> {
         let literal_token = expect_n! { self in
-            [TokenType::Integer, TokenType::Float, TokenType::Char, TokenType::LeftBracket] => "at start of expression"
+            [TokenType::Integer, TokenType::Float, TokenType::Char, TokenType::LeftBracket, TokenType::Identifier] => "at start of expression"
         }?;
         match literal_token.ty {
             TokenType::Integer => Some(Expr {
@@ -409,6 +409,10 @@ impl Parser {
                 self.unget();
                 self.parse_array_expr()
             }
+            TokenType::Identifier => Some(Expr {
+                value: ExprValue::BoundName(literal_token),
+                ty: Type::make_unknown()
+            }),
             _ => None
         }
     }

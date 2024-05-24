@@ -2,7 +2,18 @@ use pulsar::{
     frontend::{infer::TypeInferer, lexer::Lexer, parser::Parser},
     utils::{error::ErrorManager, loc::Source}
 };
-use std::{fs, io::stdout};
+use std::{cell::RefCell, fs, io::stdout, rc::Rc};
+
+fn handle_errors(error_manager: Rc<RefCell<ErrorManager>>) -> Result<(), ()> {
+    if error_manager.borrow().has_errors() {
+        error_manager
+            .borrow_mut()
+            .consume_and_write(&mut stdout())
+            .map_err(|_| ())?;
+        return Err(());
+    }
+    Ok(())
+}
 
 pub fn main() -> Result<(), ()> {
     let filename = "data/test.pl";
@@ -15,26 +26,15 @@ pub fn main() -> Result<(), ()> {
 
     let lexer = Lexer::new(source, error_manager.clone());
     let tokens: Vec<_> = lexer.into_iter().collect();
-    if error_manager.borrow().has_errors() {
-        error_manager
-            .borrow_mut()
-            .consume_and_write(&mut stdout())
-            .map_err(|_| ())?;
-        return Err(());
-    }
+    handle_errors(error_manager.clone())?;
 
     let parser = Parser::new(tokens, error_manager.clone());
     let program_ast: Vec<_> = parser.into_iter().collect();
-    if error_manager.borrow().has_errors() {
-        error_manager
-            .borrow_mut()
-            .consume_and_write(&mut stdout())
-            .map_err(|_| ())?;
-        return Err(());
-    }
+    handle_errors(error_manager.clone())?;
 
-    let mut type_inferer = TypeInferer::new(error_manager);
+    let mut type_inferer = TypeInferer::new(error_manager.clone());
     type_inferer.infer(program_ast);
+    handle_errors(error_manager)?;
 
     Ok(())
 }

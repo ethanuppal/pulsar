@@ -11,6 +11,7 @@ pub type Param = (Token, Type);
 #[derive(Clone)]
 pub enum ExprValue {
     ConstantInt(i64),
+    BoundName(Token),
 
     /// `ArrayLiteral(elements, should_continue)` is an array literal beginning
     /// with `elements` and filling the remainder of the array with zeros if
@@ -31,6 +32,9 @@ impl Display for Expr {
         match &self.value {
             ExprValue::ConstantInt(i) => {
                 write!(f, "{}", i)?;
+            }
+            ExprValue::BoundName(name) => {
+                write!(f, "{}", name.value)?;
             }
             ExprValue::ArrayLiteral(elements, should_continue) => {
                 write!(

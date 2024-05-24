@@ -23,7 +23,7 @@ impl Gen {
             *id += 1;
             result
         } else {
-            id_map.insert(name, 0);
+            id_map.insert(name, 1);
             0
         }
     }

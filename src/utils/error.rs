@@ -15,7 +15,8 @@ pub enum ErrorCode {
     ConstructShouldBeTopLevel,
     InvalidTokenForStatement,
     InvalidOperatorSyntax,
-    MalformedType
+    MalformedType,
+    UnboundName
 }
 
 impl Display for ErrorCode {
