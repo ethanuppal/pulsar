@@ -41,7 +41,9 @@ impl NodeTrait for TypeNode {}
 
 pub struct TypeConstraint {
     pub lhs: TypeCell,
-    pub rhs: TypeCell
+    pub rhs: TypeCell,
+    pub lhs_ctx: Token,
+    pub rhs_ctx: Token
 }
 
 pub struct TypeInferer {
@@ -106,19 +108,34 @@ impl TypeInferer {
         );
     }
 
-    fn report_unification_failure(&mut self, lhs: TypeCell, rhs: TypeCell) {
+    fn report_unification_failure(
+        &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Token, rhs_ctx: Token
+    ) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::TypeError)
-                .without_loc() // for now
+                .at_token(&lhs_ctx)
                 .message(format!(
                     "Failed to unify types `{}` and `{}`",
                     lhs, rhs
                 ))
+                .explain(format!("Type inferred here to be `{}`", lhs))
                 .build()
         );
+        if lhs_ctx.loc != rhs_ctx.loc {
+            self.report(
+                ErrorBuilder::new()
+                    .of_style(Style::Secondary)
+                    .at_level(Level::Error)
+                    .with_code(ErrorCode::TypeError)
+                    .at_token(&rhs_ctx)
+                    .message("...".into())
+                    .explain(format!("Type inferred here to be `{}`", rhs))
+                    .build()
+            );
+        }
     }
 }
 
@@ -127,8 +144,15 @@ impl TypeInferer {
         Type::Var(Gen::next("TypeInferer::get_type_var".into()))
     }
 
-    fn add_constraint(&mut self, lhs: TypeCell, rhs: TypeCell) {
-        self.constraints.push(TypeConstraint { lhs, rhs });
+    fn add_constraint(
+        &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Token, rhs_ctx: Token
+    ) {
+        self.constraints.push(TypeConstraint {
+            lhs,
+            rhs,
+            lhs_ctx,
+            rhs_ctx
+        });
     }
 
     /// Extracts constraints from the expression `expr` and returns either a
@@ -141,7 +165,12 @@ impl TypeInferer {
             ExprValue::BoundName(name) => {
                 if let Some(name_ty) = self.env.find(name.value.clone()) {
                     *expr.ty.as_mut() = self.new_type_var();
-                    self.add_constraint(expr.ty.clone(), name_ty.clone());
+                    self.add_constraint(
+                        expr.ty.clone(),
+                        name_ty.clone(),
+                        expr.start.clone(),
+                        name.clone()
+                    );
                 } else {
                     self.report_unbound_name(name);
                     return None;
@@ -158,7 +187,9 @@ impl TypeInferer {
                     let element_type = self.visit_expr(element)?;
                     self.add_constraint(
                         element_ty_var_cell.clone(),
-                        element_type
+                        element_type,
+                        expr.start.clone(),
+                        element.start.clone()
                     );
                 }
             }
@@ -171,8 +202,18 @@ impl TypeInferer {
                         let lhs_ty = self.visit_expr(lhs)?;
                         let rhs_ty = self.visit_expr(rhs)?;
 
-                        self.add_constraint(expr.ty.clone(), lhs_ty);
-                        self.add_constraint(expr.ty.clone(), rhs_ty);
+                        self.add_constraint(
+                            expr.ty.clone(),
+                            lhs_ty,
+                            expr.start.clone(),
+                            lhs.start.clone()
+                        );
+                        self.add_constraint(
+                            expr.ty.clone(),
+                            rhs_ty,
+                            expr.start.clone(),
+                            rhs.start.clone()
+                        );
 
                         *expr.ty.as_mut() = Type::Int64;
                     }
@@ -239,7 +280,12 @@ impl TypeInferer {
             ) => {
                 let value_ty = self.visit_expr(&value)?;
                 if let Some(hint) = hint_opt {
-                    self.add_constraint(hint.clone(), value_ty.clone());
+                    self.add_constraint(
+                        hint.clone(),
+                        value_ty.clone(),
+                        name.clone(),
+                        value.start.clone()
+                    );
                 }
                 self.env.bind(name.value.clone(), value_ty);
             }
@@ -251,24 +297,31 @@ impl TypeInferer {
 
     fn unify(
         &mut self, dsu: &mut DisjointSets<TypeNode>, lhs: TypeCell,
-        rhs: TypeCell
-    ) -> Option<()> {
+        rhs: TypeCell, lhs_ctx: Token, rhs_ctx: Token
+    ) -> Result<(), String> {
         let lhs_tn = TypeNode::from_currently_stable_cell(lhs.clone());
         let rhs_tn = TypeNode::from_currently_stable_cell(rhs.clone());
         dsu.add(lhs_tn.clone());
         dsu.add(rhs_tn.clone());
-        let lhs_r = dsu.find(lhs_tn)?;
-        let rhs_r = dsu.find(rhs_tn)?;
+        let lhs_r = dsu
+            .find(lhs_tn)
+            .ok_or_else(|| "dsu find failed".to_string())?;
+        let rhs_r = dsu
+            .find(rhs_tn)
+            .ok_or_else(|| "dsu find failed".to_string())?;
         if lhs_r != rhs_r {
             match (lhs_r.get(), rhs_r.get()) {
                 (Type::Var(_), Type::Var(_)) => {
-                    dsu.union(lhs_r, rhs_r, true)?;
+                    dsu.union(lhs_r, rhs_r, true)
+                        .ok_or_else(|| "dsu union failed".to_string())?;
                 }
                 (Type::Var(_), _) => {
-                    dsu.union(lhs_r, rhs_r, false)?;
+                    dsu.union(lhs_r, rhs_r, false)
+                        .ok_or_else(|| "dsu union failed".to_string())?;
                 }
                 (_, Type::Var(_)) => {
-                    dsu.union(rhs_r, lhs_r, false)?;
+                    dsu.union(rhs_r, lhs_r, false)
+                        .ok_or_else(|| "dsu union failed".to_string())?;
                 }
                 // TODO: impl when they are the same type constructor
                 // in which case we need to deal with subterms and unify those
@@ -282,10 +335,14 @@ impl TypeInferer {
                             todo!("fail here")
                         }
                         (ARRAY_TYPE_UNKNOWN_SIZE, _) => {
-                            dsu.union(lhs_r, rhs_r, false)?;
+                            dsu.union(lhs_r, rhs_r, false).ok_or_else(
+                                || "dsu union failed".to_string()
+                            )?;
                         }
                         (_, ARRAY_TYPE_UNKNOWN_SIZE) => {
-                            dsu.union(rhs_r, lhs_r, false)?;
+                            dsu.union(rhs_r, lhs_r, false).ok_or_else(
+                                || "dsu union failed".to_string()
+                            )?;
                         }
                         _ => {
                             if lhs_size != rhs_size {
@@ -294,33 +351,62 @@ impl TypeInferer {
                                         .of_style(Style::Primary)
                                         .at_level(Level::Error)
                                         .with_code(ErrorCode::TypeError)
-                                        .without_loc()
+                                        .at_token(&lhs_ctx)
                                         .message(format!(
                                             "Array sizes don't match: {} != {}",
                                             lhs_size, rhs_size
                                         ))
                                         .build()
                                 );
-                                return None;
+                                self.report(
+                                    ErrorBuilder::new()
+                                        .of_style(Style::Secondary)
+                                        .at_level(Level::Error)
+                                        .with_code(ErrorCode::TypeError)
+                                        .at_token(&rhs_ctx)
+                                        .message("...".into())
+                                        .explain(format!("Inferred to have size {} here based on environment", rhs_size))
+                                        .build()
+                                );
+
+                                return Err("array type error".into());
                             }
                         }
                     }
-                    self.unify(dsu, lhs_element_ty, rhs_element_ty)?;
+                    self.unify(
+                        dsu,
+                        lhs_element_ty,
+                        rhs_element_ty,
+                        lhs_ctx,
+                        rhs_ctx
+                    )?;
                 }
                 _ => {
-                    self.report_unification_failure(lhs, rhs);
-                    return None;
+                    self.report_unification_failure(lhs, rhs, lhs_ctx, rhs_ctx);
+                    return Err("unification failure".into());
                 }
             }
         }
-        Some(())
+        Ok(())
     }
 
     fn unify_constraints(&mut self) -> Option<DisjointSets<TypeNode>> {
         let mut dsu = DisjointSets::new();
         while !self.constraints.is_empty() {
             let constraint = self.constraints.pop()?;
-            self.unify(&mut dsu, constraint.lhs, constraint.rhs)?;
+            let _ = self
+                .unify(
+                    &mut dsu,
+                    constraint.lhs,
+                    constraint.rhs,
+                    constraint.lhs_ctx,
+                    constraint.rhs_ctx
+                )
+                .map_err(|_| {
+                    if !self.error_manager.borrow().has_errors() {
+                        panic!("TypeInferer failed without error message");
+                    }
+                });
         }
         Some(dsu)
     }

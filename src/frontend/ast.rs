@@ -23,6 +23,7 @@ pub enum ExprValue {
 #[derive(Clone)]
 pub struct Expr {
     pub value: ExprValue,
+    pub start: Token,
     pub ty: TypeCell
 }
 

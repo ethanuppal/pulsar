@@ -390,7 +390,8 @@ impl Parser {
 
         Some(Expr {
             value: ExprValue::ArrayLiteral(elements, should_continue),
-            ty: Type::make_unknown()
+            ty: Type::make_unknown(),
+            start: open_bracket
         })
     }
 
@@ -403,21 +404,25 @@ impl Parser {
                 value: ExprValue::ConstantInt(
                     i64::from_str_radix(&literal_token.value, 10).unwrap()
                 ),
-                ty: Type::make_unknown()
+                ty: Type::make_unknown(),
+                start: literal_token
             }),
             TokenType::LeftBracket => {
                 self.unget();
                 self.parse_array_expr()
             }
             TokenType::Identifier => Some(Expr {
-                value: ExprValue::BoundName(literal_token),
-                ty: Type::make_unknown()
+                value: ExprValue::BoundName(literal_token.clone()),
+                ty: Type::make_unknown(),
+                start: literal_token
             }),
             _ => None
         }
     }
 
-    fn parse_prefix_expr(&mut self, prefix_op: Op) -> Option<Expr> {
+    fn parse_prefix_expr(
+        &mut self, prefix_op: Op, start: Token
+    ) -> Option<Expr> {
         if !prefix_op.is_unary {
             self.report(self.error_invalid_operator(self.current(), "unary"));
             return None;
@@ -428,7 +433,8 @@ impl Parser {
 
         Some(Expr {
             value: ExprValue::PrefixOp(op_token, Box::new(rhs)),
-            ty: Type::make_unknown()
+            ty: Type::make_unknown(),
+            start
         })
     }
 
@@ -437,7 +443,7 @@ impl Parser {
             self.report(self.error_unexpected_eof("in expression".into()));
             None
         } else if let Some(prefix_op) = Op::from(self.current().ty) {
-            self.parse_prefix_expr(prefix_op)
+            self.parse_prefix_expr(prefix_op, self.current().clone())
         } else if self.current().ty == TokenType::LeftPar {
             let open_paren = self.take();
             let expr = self.parse_expr()?;
@@ -460,7 +466,7 @@ impl Parser {
 
     /// Implements [operator-precedence parsing](https://en.wikipedia.org/wiki/Operator-precedence_parser).
     fn parse_binary_expr(
-        &mut self, lhs: Expr, min_precedence: Precedence
+        &mut self, lhs: Expr, min_precedence: Precedence, start: Token
     ) -> Option<Expr> {
         let mut lhs = lhs;
         let mut lookahead = self.current().clone();
@@ -495,13 +501,15 @@ impl Parser {
                             1
                         } else {
                             0
-                        }
+                        },
+                    start.clone()
                 )?;
                 lookahead = self.current().clone();
             }
             lhs = Expr {
                 value: ExprValue::BinOp(Box::new(lhs), op_token, Box::new(rhs)),
-                ty: Type::make_unknown()
+                ty: Type::make_unknown(),
+                start: start.clone()
             };
         }
         Some(lhs)
@@ -509,12 +517,13 @@ impl Parser {
 
     fn parse_expr(&mut self) -> Option<Expr> {
         self.consume_ignored();
+        let start = self.current().clone();
         let primary = self.parse_primary_expr()?;
         if let Some(binary_op) =
             self.current_opt().map(|token| Op::from(token.ty)).flatten()
         {
             if binary_op.is_binary {
-                self.parse_binary_expr(primary, -1)
+                self.parse_binary_expr(primary, -1, start)
             } else {
                 self.report(
                     self.error_invalid_operator(self.current(), "binary")

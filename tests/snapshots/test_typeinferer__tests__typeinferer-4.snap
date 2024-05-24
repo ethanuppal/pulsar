@@ -1,0 +1,16 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(\"tests/data/infer4.pl\", error_manager.clone())"
+---
+func main() -> Unit {
+    let huh: Int64 = []: 't6[?]
+}error[E0010]: tests/data/infer4.pl:2:8: Failed to unify types `Int64` and `'t6[?]`
+   1 │  func main() {
+   2 │     let huh: Int = []
+               └── Type inferred here to be `Int64`
+   3 │  }
+...
+   1 │  func main() {
+   2 │     let huh: Int = []
+                          │ Type inferred here to be `'t6[?]`
+   3 │  }

@@ -1,7 +1,7 @@
 use std::{fmt::Display, rc::Rc};
 
 /// Different sources of text data.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub enum Source {
     /// `Source::File { name, contents }` is a text file with name `name` and
     /// contents `contents`.
@@ -106,12 +106,28 @@ impl Default for Source {
     }
 }
 
+impl PartialEq for Source {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Unknown, Self::Unknown) => true,
+            (
+                Self::File { name, contents: _ },
+                Self::File {
+                    name: other_name,
+                    contents: _
+                }
+            ) => name == other_name,
+            _ => false
+        }
+    }
+}
+
 /// `Loc(line, col, pos, source)` is a location referring to line `line` and
 /// column `col` of `source`, where the combination of `line` and `col` produces
 /// a direct offset `pos`. It is formatted as `"{source}:{line}:{col}"` where
 /// `{source}` is the formatted substitution of `source` and likewise for
 /// `line`/`col`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub struct Loc {
     pub line: usize,
     pub col: usize,
@@ -161,5 +177,14 @@ impl Default for Loc {
             pos: 0,
             source: Rc::new(Source::Unknown)
         }
+    }
+}
+
+impl PartialEq for Loc {
+    fn eq(&self, other: &Self) -> bool {
+        self.line == other.line
+            && self.col == other.col
+            && self.pos == other.pos
+            && self.source.as_ref() == other.source.as_ref()
     }
 }

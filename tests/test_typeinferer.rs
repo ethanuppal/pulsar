@@ -25,13 +25,10 @@ mod tests {
         let program_ast: Vec<_> = parser.into_iter().collect();
         assert_eq!(false, error_manager.borrow().has_errors());
         let mut type_inferer = TypeInferer::new(error_manager.clone());
-        let result = type_inferer.infer(program_ast);
-        if result.is_none() && !error_manager.borrow().has_errors() {
-            panic!("TypeInferer failed without error message");
-        }
+        let annotated_ast_opt = type_inferer.infer(program_ast);
 
         let mut output = String::new();
-        if let Some(annotated_ast) = result {
+        if let Some(annotated_ast) = annotated_ast_opt {
             for node in annotated_ast {
                 output.push_str(node.to_string().as_str());
             }
@@ -62,6 +59,11 @@ mod tests {
 
         assert_snapshot!(typeinferer_output(
             "tests/data/infer3.pl",
+            error_manager.clone()
+        ));
+
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer4.pl",
             error_manager.clone()
         ));
     }

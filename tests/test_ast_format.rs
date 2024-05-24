@@ -18,10 +18,14 @@ mod tests {
         }
     }
 
+    fn dumb_token() -> Token {
+        make_token(TokenType::Identifier, "".into())
+    }
+
     #[test]
     fn test_format_constant_int() {
         assert_snapshot!(
-            Expr { value: ExprValue::ConstantInt(5), ty: Type::make_unknown() }.to_string(),
+            Expr { value: ExprValue::ConstantInt(5), ty: Type::make_unknown(), start: dumb_token()  }.to_string(),
             @"5"
         )
     }
@@ -30,14 +34,16 @@ mod tests {
     fn test_format_bin_op() {
         let left = Box::new(Expr {
             value: ExprValue::ConstantInt(5),
-            ty: Type::make_unknown()
+            ty: Type::make_unknown(),
+            start: dumb_token()
         });
         let right = Box::new(Expr {
             value: ExprValue::ConstantInt(3),
-            ty: Type::make_unknown()
+            ty: Type::make_unknown(),
+            start: dumb_token()
         });
         assert_snapshot!(
-            Expr { value: ExprValue::BinOp(left, make_token(TokenType::Plus, "+"), right), ty: Type::make_unknown() }.to_string(),
+            Expr { value: ExprValue::BinOp(left, make_token(TokenType::Plus, "+"), right), ty: Type::make_unknown(), start: dumb_token() }.to_string(),
             @"(5 + 3)"
         )
     }
@@ -54,7 +60,8 @@ mod tests {
                 hint: None,
                 value: Box::new(Expr {
                     value: ExprValue::ConstantInt(5),
-                    ty: Type::make_unknown()
+                    ty: Type::make_unknown(),
+                    start: dumb_token()
                 })
             },
             ty: StmtType::make_unknown()
@@ -103,7 +110,7 @@ mod tests {
                 ty: TokenType::Identifier,
                 value: "x".into(),
                 loc: Loc::default()
-            }, hint: None, value: Box::new(Expr { value: ExprValue::ConstantInt(5), ty: Type::make_unknown() }) }, ty: StmtType::make_unknown() }.to_string(),
+            }, hint: None, value: Box::new(Expr { value: ExprValue::ConstantInt(5), ty: Type::make_unknown(), start: dumb_token() }) }, ty: StmtType::make_unknown() }.to_string(),
             @"let x = 5"
         )
     }
