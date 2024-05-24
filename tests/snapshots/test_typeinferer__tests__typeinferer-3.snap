@@ -1,0 +1,5 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(\"tests/data/infer3.pl\", error_manager.clone())"
+---
+error[E0010]: Array sizes don't match: 10 != 1

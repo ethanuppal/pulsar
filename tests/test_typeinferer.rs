@@ -25,9 +25,17 @@ mod tests {
         let program_ast: Vec<_> = parser.into_iter().collect();
         assert_eq!(false, error_manager.borrow().has_errors());
         let mut type_inferer = TypeInferer::new(error_manager.clone());
-        type_inferer.infer(program_ast);
+        let result = type_inferer.infer(program_ast);
+        if result.is_none() && !error_manager.borrow().has_errors() {
+            panic!("TypeInferer failed without error message");
+        }
 
         let mut output = String::new();
+        if let Some(annotated_ast) = result {
+            for node in annotated_ast {
+                output.push_str(node.to_string().as_str());
+            }
+        }
         let mut buffer = Vec::new();
         if error_manager.borrow().has_errors() {
             error_manager
@@ -44,6 +52,16 @@ mod tests {
         let error_manager = ErrorManager::with_max_count(5);
         assert_snapshot!(typeinferer_output(
             "tests/data/infer1.pl",
+            error_manager.clone()
+        ));
+
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer2.pl",
+            error_manager.clone()
+        ));
+
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer3.pl",
             error_manager.clone()
         ));
     }

@@ -1,0 +1,10 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(\"tests/data/infer2.pl\", error_manager.clone())"
+---
+func main() -> Unit {
+    let a = 1: Int64
+    let b = 2: Int64
+    let arr: Int64[64] = [a: Int64, b: Int64, ...]: Int64[64]
+    let complex = ((1: Int64 + (2: Int64 * 3: Int64): Int64): Int64 + 4: Int64): Int64
+}

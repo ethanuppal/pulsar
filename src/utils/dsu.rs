@@ -16,13 +16,13 @@ void union_sets(int a, int b) {
     }
 } */
 
-use std::{collections::HashMap, fmt::Debug, hash::Hash};
+use std::{collections::HashMap, fmt::Debug, hash::Hash, iter::Map};
 
 pub trait NodeTrait: Eq + Hash + Clone {}
 
 /// For a node `x`, when the node data is `(p, r)`, `x`'s parent is `p` and
 /// `x`'s rank is `r`.
-struct NodeData<T> {
+pub struct NodeData<T> {
     parent: T,
     rank: usize
 }
@@ -108,5 +108,17 @@ where
             i += 1;
         }
         Ok(())
+    }
+}
+
+impl<'a, T: NodeTrait> IntoIterator for &'a DisjointSets<T> {
+    type Item = (&'a T, &'a T);
+    type IntoIter = Map<
+        std::collections::hash_map::Iter<'a, T, NodeData<T>>,
+        fn((&'a T, &'a NodeData<T>)) -> (&'a T, &'a T)
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.nodes.iter().map(|(node, data)| (node, &data.parent))
     }
 }

@@ -2,6 +2,5 @@ func main() {
     let a = 1
     let b = 2
     let arr: Int[64] = [a, b, ...]
-
     let complex = 1 + 2 * 3 + 4
 }

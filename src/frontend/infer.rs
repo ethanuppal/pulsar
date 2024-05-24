@@ -62,10 +62,11 @@ impl TypeInferer {
         self.env.bind_base(name, TypeCell::new(ty));
     }
 
-    /// Infers the types of nodes and expression in the program `program`.
-    /// Returns `None` on error.
+    /// Infers the types of nodes and expression in the program `program`,
+    /// returning the annotated AST if no error occured.
     pub fn infer(&mut self, mut program: Vec<Node>) -> Option<Vec<Node>> {
         self.constraints.clear();
+
         self.env.push();
         for node in &mut program {
             self.visit_node(node, true)?;
@@ -73,8 +74,13 @@ impl TypeInferer {
         for node in &mut program {
             self.visit_node(node, false)?;
         }
-        self.unify_constraints()?;
         self.env.pop();
+
+        let substitution = self.unify_constraints()?;
+        for (ty, sub_ty) in &substitution {
+            *ty.cell.as_mut() = sub_ty.get();
+        }
+
         Some(program)
     }
 
@@ -278,7 +284,23 @@ impl TypeInferer {
                         (_, ARRAY_TYPE_UNKNOWN_SIZE) => {
                             dsu.union(rhs_r, lhs_r, false)?;
                         }
-                        _ => {}
+                        _ => {
+                            if lhs_size != rhs_size {
+                                self.report(
+                                    ErrorBuilder::new()
+                                        .of_style(Style::Primary)
+                                        .at_level(Level::Error)
+                                        .with_code(ErrorCode::TypeError)
+                                        .without_loc()
+                                        .message(format!(
+                                            "Array sizes don't match: {} != {}",
+                                            lhs_size, rhs_size
+                                        ))
+                                        .build()
+                                );
+                                return None;
+                            }
+                        }
                     }
                     self.unify(dsu, lhs_element_ty, rhs_element_ty)?;
                 }
@@ -291,20 +313,12 @@ impl TypeInferer {
         Some(())
     }
 
-    fn unify_constraints(&mut self) -> Option<()> {
+    fn unify_constraints(&mut self) -> Option<DisjointSets<TypeNode>> {
         let mut dsu = DisjointSets::new();
-        for constraint in &self.constraints {
-            println!("constraint: {} = {}", constraint.lhs, constraint.rhs);
-        }
-        // if true {
-        //     todo!("Need to use Arc<Mutex<T>> so that there's only one of each
-        // canonical type instance. actually how are you gonna do this.")
-        // }
         while !self.constraints.is_empty() {
             let constraint = self.constraints.pop()?;
             self.unify(&mut dsu, constraint.lhs, constraint.rhs)?;
         }
-        println!("dsu:\n{:?}", dsu);
-        Some(())
+        Some(dsu)
     }
 }
