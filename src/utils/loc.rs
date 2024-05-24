@@ -1,5 +1,4 @@
-use std::fmt::Display;
-use std::rc::Rc;
+use std::{fmt::Display, rc::Rc};
 
 /// Different sources of text data.
 #[derive(Clone, Debug)]

@@ -1,7 +1,10 @@
 use crate::utils::id::Id;
-use std::cell::{Ref, RefMut};
-use std::hash::{Hash, Hasher};
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    fmt::Display,
+    hash::{Hash, Hasher},
+    rc::Rc
+};
 
 pub const ARRAY_TYPE_UNKNOWN_SIZE: isize = -1;
 

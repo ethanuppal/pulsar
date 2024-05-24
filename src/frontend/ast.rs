@@ -1,10 +1,9 @@
-use super::token::Token;
-use super::ty::{StmtType, Type, TypeCell};
+use super::{
+    token::Token,
+    ty::{StmtType, Type, TypeCell}
+};
 use crate::utils::format;
-use std::cell::RefCell;
-use std::fmt;
-use std::fmt::Display;
-use std::rc::Rc;
+use std::{cell::RefCell, fmt, fmt::Display, rc::Rc};
 
 pub type Param = (Token, Type);
 

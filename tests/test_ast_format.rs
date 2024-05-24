@@ -1,10 +1,14 @@
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
-    use pulsar::frontend::ast::{Expr, ExprValue, Node, NodeValue};
-    use pulsar::frontend::token::{Token, TokenType};
-    use pulsar::frontend::ty::{StmtType, Type};
-    use pulsar::utils::loc::Loc;
+    use pulsar::{
+        frontend::{
+            ast::{Expr, ExprValue, Node, NodeValue},
+            token::{Token, TokenType},
+            ty::{StmtType, Type}
+        },
+        utils::loc::Loc
+    };
 
     fn make_token(ty: TokenType, value: &str) -> Token {
         Token {

@@ -1,6 +1,5 @@
 use crate::utils::loc::Loc;
-use core::fmt;
-use core::fmt::Debug;
+use core::{fmt, fmt::Debug};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TokenType {

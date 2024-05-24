@@ -1,10 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use proptest::arbitrary::{any, Arbitrary};
-    use proptest::collection::hash_set;
-    use proptest::prelude::*;
-    use pulsar::utils::dsu::{DisjointSets, NodeTrait};
-    use pulsar::utils::CheapClone;
+    use proptest::{
+        arbitrary::{any, Arbitrary},
+        collection::hash_set,
+        prelude::*
+    };
+    use pulsar::utils::{
+        dsu::{DisjointSets, NodeTrait},
+        CheapClone
+    };
     use std::fmt::Display;
 
     #[derive(Clone, Hash, PartialEq, Eq, Debug)]

@@ -10,8 +10,11 @@ use crate::utils::{
     id::Gen,
     CheapClone
 };
-use std::{cell::RefCell, fmt::Debug};
-use std::{fmt::Display, rc::Rc};
+use std::{
+    cell::RefCell,
+    fmt::{Debug, Display},
+    rc::Rc
+};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct TypeNode {

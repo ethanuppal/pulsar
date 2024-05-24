@@ -1,8 +1,10 @@
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
-    use pulsar::frontend::token::{Token, TokenType};
-    use pulsar::utils::loc::{Loc, Source};
+    use pulsar::{
+        frontend::token::{Token, TokenType},
+        utils::loc::{Loc, Source}
+    };
     use std::rc::Rc;
 
     fn arb_token_type() -> impl Strategy<Value = TokenType> {
