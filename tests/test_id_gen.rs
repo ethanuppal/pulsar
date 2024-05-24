@@ -5,10 +5,10 @@ mod tests {
 
     proptest! {
         #[test]
-        fn test_next_uniqueness(name in any::<String>()) {
+        fn test_next_uniqueness(loop_count in 0..1000) {
             let mut ids = std::collections::HashSet::new();
-            for _ in 0..1000 {
-                let id = Gen::next(name.clone());
+            for _ in 0..loop_count {
+                let id = Gen::next("test");
                 assert!(ids.insert(id));
             }
         }

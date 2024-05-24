@@ -5,7 +5,7 @@ use super::{
 };
 use crate::utils::{
     context::{Context, Name},
-    dsu::{DisjointSets, NodeTrait},
+    disjoint_set::{DisjointSets, NodeTrait},
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
     id::Gen,
     CheapClone
@@ -27,7 +27,7 @@ impl TypeNode {
     }
 
     pub fn get(&self) -> Type {
-        self.cell.get()
+        self.cell.clone_out()
     }
 }
 
@@ -141,7 +141,7 @@ impl TypeInferer {
 
 impl TypeInferer {
     fn new_type_var(&self) -> Type {
-        Type::Var(Gen::next("TypeInferer::get_type_var".into()))
+        Type::Var(Gen::next("TypeInferer::get_type_var"))
     }
 
     fn add_constraint(
@@ -176,12 +176,19 @@ impl TypeInferer {
                     return None;
                 }
             }
-            ExprValue::ArrayLiteral(elements, _) => {
+            ExprValue::ArrayLiteral(elements, should_continue) => {
                 let element_ty_var = self.new_type_var();
                 let element_ty_var_cell = TypeCell::new(element_ty_var);
                 *expr.ty.as_mut() = Type::Array(
                     element_ty_var_cell.clone(),
-                    ARRAY_TYPE_UNKNOWN_SIZE
+                    if *should_continue {
+                        ARRAY_TYPE_UNKNOWN_SIZE
+                    } else {
+                        elements
+                            .len()
+                            .try_into()
+                            .unwrap_or_else(|_| panic!("how?"))
+                    }
                 );
                 for element in elements {
                     let element_type = self.visit_expr(element)?;

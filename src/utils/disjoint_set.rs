@@ -1,21 +1,3 @@
-/*
-
-void make_set(int v) {
-    parent[v] = v;
-    rank[v] = 0;
-}
-
-int find_set(int v) {
-    if (v == parent[v])
-        return v;
-    return parent[v] = find_set(parent[v]);
-}
-
-void union_sets(int a, int b) {
-
-    }
-} */
-
 use std::{collections::HashMap, fmt::Debug, hash::Hash, iter::Map};
 
 pub trait NodeTrait: Eq + Hash + Clone {}
@@ -27,7 +9,7 @@ pub struct NodeData<T> {
     rank: usize
 }
 
-/// A disjoint set over cheaply-cloned objects.
+/// A collection of disjoint sets over cheaply-cloned objects.
 pub struct DisjointSets<T: NodeTrait> {
     nodes: HashMap<T, NodeData<T>>
 }

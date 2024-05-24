@@ -30,7 +30,7 @@ mod tests {
         let mut output = String::new();
         if let Some(annotated_ast) = annotated_ast_opt {
             for node in annotated_ast {
-                output.push_str(node.to_string().as_str());
+                output.push_str(&format!("{}\n", node));
             }
         }
         let mut buffer = Vec::new();
@@ -64,6 +64,16 @@ mod tests {
 
         assert_snapshot!(typeinferer_output(
             "tests/data/infer4.pl",
+            error_manager.clone()
+        ));
+
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer5.pl",
+            error_manager.clone()
+        ));
+
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer6.pl",
             error_manager.clone()
         ));
     }

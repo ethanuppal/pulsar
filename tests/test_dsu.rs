@@ -6,7 +6,7 @@ mod tests {
         prelude::*
     };
     use pulsar::utils::{
-        dsu::{DisjointSets, NodeTrait},
+        disjoint_set::{DisjointSets, NodeTrait},
         CheapClone
     };
     use std::fmt::Display;

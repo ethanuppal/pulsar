@@ -1,10 +1,10 @@
-use crate::utils::id::Id;
-use std::{
-    cell::{Ref, RefCell, RefMut},
-    fmt::Display,
-    hash::{Hash, Hasher},
-    rc::Rc
-};
+use crate::utils::{id::Id, mutcell::MutCell};
+use lazy_static::lazy_static;
+use std::{cell::RefCell, fmt::Display, hash::Hash, rc::Rc};
+
+lazy_static! {
+    pub static ref INT64_TYPE_CELL: TypeCell = TypeCell::new(Type::Int64);
+}
 
 pub const ARRAY_TYPE_UNKNOWN_SIZE: isize = -1;
 
@@ -45,8 +45,8 @@ impl Type {
         TypeCell::new(Self::Unknown)
     }
 
-    pub fn refcell_int64() -> TypeCell {
-        TypeCell::new(Type::Int64)
+    pub fn int64_singleton() -> TypeCell {
+        INT64_TYPE_CELL.to_owned()
     }
 }
 
@@ -106,48 +106,4 @@ impl Display for StmtType {
     }
 }
 
-#[derive(Clone)]
-pub struct TypeCell {
-    pointer: Rc<RefCell<Type>>
-}
-
-impl TypeCell {
-    pub fn new(ty: Type) -> Self {
-        Self {
-            pointer: Rc::new(RefCell::new(ty))
-        }
-    }
-
-    pub fn get(&self) -> Type {
-        self.pointer.borrow().clone()
-    }
-
-    pub fn as_ref(&self) -> Ref<Type> {
-        self.pointer.borrow()
-    }
-
-    pub fn as_mut(&self) -> RefMut<Type> {
-        self.pointer.borrow_mut()
-    }
-
-    pub fn raw(&self) -> Rc<RefCell<Type>> {
-        self.pointer.clone()
-    }
-}
-
-impl PartialEq for TypeCell {
-    fn eq(&self, other: &Self) -> bool {
-        self.pointer.borrow().eq(&other.pointer.borrow())
-    }
-}
-impl Eq for TypeCell {}
-impl Hash for TypeCell {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.pointer.borrow().hash(state)
-    }
-}
-impl Display for TypeCell {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.get().fmt(f)
-    }
-}
+pub type TypeCell = MutCell<Type>;
