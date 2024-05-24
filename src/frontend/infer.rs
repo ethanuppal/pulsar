@@ -1,7 +1,7 @@
 use super::{
     ast::{Expr, ExprValue, Node, NodeValue},
     token::{Token, TokenType},
-    ty::{Type, ARRAY_TYPE_UNKNOWN_SIZE}
+    ty::{Type, TypeCell, ARRAY_TYPE_UNKNOWN_SIZE}
 };
 use crate::utils::{
     context::{Context, Name},
@@ -10,42 +10,39 @@ use crate::utils::{
     id::Gen,
     CheapClone
 };
-use std::cell::RefCell;
-use std::hash::{Hash, Hasher};
-use std::rc::Rc;
+use std::{cell::RefCell, fmt::Debug};
+use std::{fmt::Display, rc::Rc};
 
-#[derive(Clone)]
-struct TypeNode {
-    pointer: Rc<RefCell<Type>>
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct TypeNode {
+    cell: TypeCell
 }
 
 impl TypeNode {
-    fn from_currently_unchanging(pointer: Rc<RefCell<Type>>) -> Self {
-        Self { pointer }
+    pub fn from_currently_stable_cell(cell: TypeCell) -> Self {
+        Self { cell }
+    }
+
+    pub fn get(&self) -> Type {
+        self.cell.get()
     }
 }
 
-impl PartialEq for TypeNode {
-    fn eq(&self, other: &Self) -> bool {
-        self.pointer.borrow().eq(&other.pointer.borrow())
-    }
-}
-impl Eq for TypeNode {}
-impl Hash for TypeNode {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.pointer.borrow().hash(state)
-    }
-}
 impl CheapClone for TypeNode {}
+impl Debug for TypeNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.cell.fmt(f)
+    }
+}
 impl NodeTrait for TypeNode {}
 
 pub struct TypeConstraint {
-    pub lhs: Rc<RefCell<Type>>,
-    pub rhs: Rc<RefCell<Type>>
+    pub lhs: TypeCell,
+    pub rhs: TypeCell
 }
 
 pub struct TypeInferer {
-    env: Context<Rc<RefCell<Type>>>,
+    env: Context<TypeCell>,
     constraints: Vec<TypeConstraint>,
     error_manager: Rc<RefCell<ErrorManager>>
 }
@@ -62,29 +59,23 @@ impl TypeInferer {
     /// Establishes a top-level binding for the type `ty` of `name`, useful for
     /// allowing functions to call other functions or external/FFI declarations.
     pub fn bind_top_level(&mut self, name: Name, ty: Type) {
-        self.env.bind_base(name, Rc::new(RefCell::new(ty)));
+        self.env.bind_base(name, TypeCell::new(ty));
     }
 
     /// Infers the types of nodes and expression in the program `program`.
-    /// Returns `false` on error.
-    pub fn infer(&mut self, mut program: Vec<Node>) -> bool {
+    /// Returns `None` on error.
+    pub fn infer(&mut self, mut program: Vec<Node>) -> Option<Vec<Node>> {
         self.constraints.clear();
         self.env.push();
         for node in &mut program {
-            if self.visit_node(node, true).is_none() {
-                return false;
-            }
+            self.visit_node(node, true)?;
         }
         for node in &mut program {
-            if self.visit_node(node, false).is_none() {
-                return false;
-            }
+            self.visit_node(node, false)?;
         }
-        if self.unify_constraints().is_none() {
-            return false;
-        }
+        self.unify_constraints()?;
         self.env.pop();
-        true
+        Some(program)
     }
 
     fn report(&mut self, error: Error) {
@@ -105,6 +96,21 @@ impl TypeInferer {
                 .build()
         );
     }
+
+    fn report_unification_failure(&mut self, lhs: TypeCell, rhs: TypeCell) {
+        self.report(
+            ErrorBuilder::new()
+                .of_style(Style::Primary)
+                .at_level(Level::Error)
+                .with_code(ErrorCode::TypeError)
+                .without_loc() // for now
+                .message(format!(
+                    "Failed to unify types `{}` and `{}`",
+                    lhs, rhs
+                ))
+                .build()
+        );
+    }
 }
 
 impl TypeInferer {
@@ -112,22 +118,20 @@ impl TypeInferer {
         Type::Var(Gen::next("TypeInferer::get_type_var".into()))
     }
 
-    fn add_constraint(
-        &mut self, lhs: Rc<RefCell<Type>>, rhs: Rc<RefCell<Type>>
-    ) {
+    fn add_constraint(&mut self, lhs: TypeCell, rhs: TypeCell) {
         self.constraints.push(TypeConstraint { lhs, rhs });
     }
 
     /// Extracts constraints from the expression `expr` and returns either a
     /// type variable or fully resolved type for it.
-    fn visit_expr(&mut self, expr: &Expr) -> Option<Rc<RefCell<Type>>> {
+    fn visit_expr(&mut self, expr: &Expr) -> Option<TypeCell> {
         match &expr.value {
             ExprValue::ConstantInt(_) => {
-                *expr.ty.borrow_mut() = Type::Int64;
+                *expr.ty.as_mut() = Type::Int64;
             }
             ExprValue::BoundName(name) => {
                 if let Some(name_ty) = self.env.find(name.value.clone()) {
-                    *expr.ty.borrow_mut() = self.new_type_var();
+                    *expr.ty.as_mut() = self.new_type_var();
                     self.add_constraint(expr.ty.clone(), name_ty.clone());
                 } else {
                     self.report_unbound_name(name);
@@ -136,16 +140,15 @@ impl TypeInferer {
             }
             ExprValue::ArrayLiteral(elements, _) => {
                 let element_ty_var = self.new_type_var();
-                let element_ty_unsure =
-                    Rc::new(RefCell::new(element_ty_var.clone()));
-                *expr.ty.borrow_mut() = Type::Array(
-                    Box::new(element_ty_var),
+                let element_ty_var_cell = TypeCell::new(element_ty_var);
+                *expr.ty.as_mut() = Type::Array(
+                    element_ty_var_cell.clone(),
                     ARRAY_TYPE_UNKNOWN_SIZE
                 );
                 for element in elements {
                     let element_type = self.visit_expr(element)?;
                     self.add_constraint(
-                        element_ty_unsure.clone(),
+                        element_ty_var_cell.clone(),
                         element_type
                     );
                 }
@@ -162,7 +165,7 @@ impl TypeInferer {
                         self.add_constraint(expr.ty.clone(), lhs_ty);
                         self.add_constraint(expr.ty.clone(), rhs_ty);
 
-                        *expr.ty.borrow_mut() = Type::Int64;
+                        *expr.ty.as_mut() = Type::Int64;
                     }
                     _ => ()
                 }
@@ -187,14 +190,14 @@ impl TypeInferer {
                 // On top-level pass, bind all functions to their types
                 self.env.bind(
                     name.value.clone(),
-                    Rc::new(RefCell::new(Type::Function {
+                    TypeCell::new(Type::Function {
                         is_pure: *is_pure,
                         args: params
                             .iter()
                             .map(|p| p.1.clone())
                             .collect::<Vec<_>>(),
                         ret: Box::new(ret.clone())
-                    }))
+                    })
                 );
             }
             (
@@ -209,10 +212,8 @@ impl TypeInferer {
             ) => {
                 self.env.push();
                 for (name, ty) in params {
-                    self.env.bind(
-                        name.value.clone(),
-                        Rc::new(RefCell::new(ty.clone()))
-                    );
+                    self.env
+                        .bind(name.value.clone(), TypeCell::new(ty.clone()));
                 }
                 for node in body {
                     self.visit_node(node, false)?;
@@ -240,28 +241,70 @@ impl TypeInferer {
     }
 
     fn unify(
-        &mut self, dsu: &mut DisjointSets<TypeNode>, lhs: Rc<RefCell<Type>>,
-        rhs: Rc<RefCell<Type>>
+        &mut self, dsu: &mut DisjointSets<TypeNode>, lhs: TypeCell,
+        rhs: TypeCell
     ) -> Option<()> {
+        let lhs_tn = TypeNode::from_currently_stable_cell(lhs.clone());
+        let rhs_tn = TypeNode::from_currently_stable_cell(rhs.clone());
+        dsu.add(lhs_tn.clone());
+        dsu.add(rhs_tn.clone());
+        let lhs_r = dsu.find(lhs_tn)?;
+        let rhs_r = dsu.find(rhs_tn)?;
+        if lhs_r != rhs_r {
+            match (lhs_r.get(), rhs_r.get()) {
+                (Type::Var(_), Type::Var(_)) => {
+                    dsu.union(lhs_r, rhs_r, true)?;
+                }
+                (Type::Var(_), _) => {
+                    dsu.union(lhs_r, rhs_r, false)?;
+                }
+                (_, Type::Var(_)) => {
+                    dsu.union(rhs_r, lhs_r, false)?;
+                }
+                // TODO: impl when they are the same type constructor
+                // in which case we need to deal with subterms and unify those
+                // but like we'd need to make ref cells for those ig??
+                (
+                    Type::Array(lhs_element_ty, lhs_size),
+                    Type::Array(rhs_element_ty, rhs_size)
+                ) => {
+                    match (lhs_size, rhs_size) {
+                        (ARRAY_TYPE_UNKNOWN_SIZE, ARRAY_TYPE_UNKNOWN_SIZE) => {
+                            todo!("fail here")
+                        }
+                        (ARRAY_TYPE_UNKNOWN_SIZE, _) => {
+                            dsu.union(lhs_r, rhs_r, false)?;
+                        }
+                        (_, ARRAY_TYPE_UNKNOWN_SIZE) => {
+                            dsu.union(rhs_r, lhs_r, false)?;
+                        }
+                        _ => {}
+                    }
+                    self.unify(dsu, lhs_element_ty, rhs_element_ty)?;
+                }
+                _ => {
+                    self.report_unification_failure(lhs, rhs);
+                    return None;
+                }
+            }
+        }
         Some(())
     }
 
     fn unify_constraints(&mut self) -> Option<()> {
         let mut dsu = DisjointSets::new();
         for constraint in &self.constraints {
-            println!(
-                "constraint: {} = {}",
-                constraint.lhs.borrow(),
-                constraint.rhs.borrow()
-            );
+            println!("constraint: {} = {}", constraint.lhs, constraint.rhs);
         }
-        if true {
-            todo!("Need to use Arc<Mutex<T>> so that there's only one of each canonical type instance. actually how are you gonna do this.")
-        }
+        // if true {
+        //     todo!("Need to use Arc<Mutex<T>> so that there's only one of each
+        // canonical type instance. actually how are you gonna do this.")
+        // }
         while !self.constraints.is_empty() {
             let constraint = self.constraints.pop()?;
             self.unify(&mut dsu, constraint.lhs, constraint.rhs)?;
         }
+        println!("dsu:\n{:?}", dsu);
         Some(())
     }
 }

@@ -44,7 +44,8 @@ mod tests {
         #[test]
         fn test_union(
             values1 in hash_set(any::<CheapCloneInt32>(), 1..50),
-            values2 in hash_set(any::<CheapCloneInt32>(), 1..50)
+            values2 in hash_set(any::<CheapCloneInt32>(), 1..50),
+            union_by_rank in bool::arbitrary()
         ) {
             let mut ds = DisjointSets::new();
             let mut iter1 = values1.iter();
@@ -56,15 +57,15 @@ mod tests {
 
                 for value in iter1 {
                     ds.add(value.clone());
-                    ds.union(first1.clone(), value.clone());
+                    ds.union(first1.clone(), value.clone(), union_by_rank);
                 }
 
                 for value in iter2 {
                     ds.add(value.clone());
-                    ds.union(first2.clone(), value.clone());
+                    ds.union(first2.clone(), value.clone(), union_by_rank);
                 }
 
-                ds.union(first1.clone(), first2.clone());
+                ds.union(first1.clone(), first2.clone(), union_by_rank);
 
                 for value in values1.iter().chain(values2.iter()) {
                     prop_assert_eq!(ds.find(first1.clone()), ds.find(value.clone()));

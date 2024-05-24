@@ -130,6 +130,22 @@ impl Loc {
     pub fn lines(&self, before: usize, after: usize) -> (Vec<String>, usize) {
         self.source.lines(self.pos, before, after)
     }
+
+    pub fn make_invalid() -> Self {
+        Loc {
+            line: 0,
+            col: 0,
+            pos: 0,
+            source: Rc::new(Source::Unknown)
+        }
+    }
+
+    pub fn is_invalid(&self) -> bool {
+        let invalid = Loc::make_invalid();
+        self.line == invalid.line
+            && self.col == invalid.col
+            && self.pos == invalid.pos
+    }
 }
 
 impl Display for Loc {

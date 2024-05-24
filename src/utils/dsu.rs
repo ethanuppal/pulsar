@@ -16,7 +16,7 @@ void union_sets(int a, int b) {
     }
 } */
 
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 pub trait NodeTrait: Eq + Hash + Clone {}
 
@@ -40,8 +40,11 @@ impl<T: NodeTrait> DisjointSets<T> {
         }
     }
 
-    /// Adds a disjoint singleton `{v}`.
+    /// Adds a disjoint singleton `{v}` if `v` has not already been added.`
     pub fn add(&mut self, v: T) {
+        if self.nodes.contains_key(&v) {
+            return;
+        }
         let node_data = NodeData {
             parent: v.clone(),
             rank: 0
@@ -62,22 +65,48 @@ impl<T: NodeTrait> DisjointSets<T> {
     }
 
     /// Merges the sets to which `a` and `b` belong to, returning their new
-    /// canonical representative.
-    pub fn union(&mut self, a: T, b: T) -> Option<T> {
+    /// canonical representative. If `by_rank` is `true`, the union-by-rank
+    /// optimization is used, acheiving near-linear time complexity.
+    /// Otherwise, the canonical representative of `b` is chosen as the new
+    /// canonical representative, which leads to log-linear complexity.
+    pub fn union(&mut self, a: T, b: T, by_rank: bool) -> Option<T> {
         let a = self.find(a)?;
         let b = self.find(b)?;
         if a != b {
-            let rank_a = self.nodes.get(&a)?.rank;
-            let rank_b = self.nodes.get(&b)?.rank;
-            if rank_a > rank_b {
-                self.nodes.get_mut(&b)?.parent = a.clone();
-            } else {
-                self.nodes.get_mut(&a)?.parent = b.clone();
-                if rank_a == rank_b {
-                    self.nodes.get_mut(&b)?.rank += 1;
+            if by_rank {
+                // Union-by-rank
+                let rank_a = self.nodes.get(&a)?.rank;
+                let rank_b = self.nodes.get(&b)?.rank;
+                if rank_a > rank_b {
+                    self.nodes.get_mut(&b)?.parent = a.clone();
+                } else {
+                    self.nodes.get_mut(&a)?.parent = b.clone();
+                    if rank_a == rank_b {
+                        self.nodes.get_mut(&b)?.rank += 1;
+                    }
                 }
+            } else {
+                // Use `b` as new parent
+                self.nodes.get_mut(&a)?.parent = b.clone();
             }
         }
         Some(a)
+    }
+}
+
+impl<T: NodeTrait> Debug for DisjointSets<T>
+where
+    T: Debug
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut i = 0;
+        for (node, data) in &self.nodes {
+            if i > 0 {
+                writeln!(f)?;
+            }
+            write!(f, "{:?} -> {:?}", node, data.parent)?;
+            i += 1;
+        }
+        Ok(())
     }
 }

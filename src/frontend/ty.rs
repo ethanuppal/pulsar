@@ -1,4 +1,6 @@
 use crate::utils::id::Id;
+use std::cell::{Ref, RefMut};
+use std::hash::{Hash, Hasher};
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 pub const ARRAY_TYPE_UNKNOWN_SIZE: isize = -1;
@@ -12,7 +14,7 @@ pub enum Type {
     Int64,
 
     /// A negative size indicates that the size is not yet known.
-    Array(Box<Type>, isize),
+    Array(TypeCell, isize),
 
     Function {
         is_pure: bool,
@@ -36,12 +38,12 @@ impl Type {
         }
     }
 
-    pub fn make_unknown() -> Rc<RefCell<Type>> {
-        Rc::new(RefCell::new(Self::Unknown))
+    pub fn make_unknown() -> TypeCell {
+        TypeCell::new(Self::Unknown)
     }
 
-    pub fn refcell_int64() -> Rc<RefCell<Type>> {
-        Rc::new(RefCell::new(Type::Int64))
+    pub fn refcell_int64() -> TypeCell {
+        TypeCell::new(Type::Int64)
     }
 }
 
@@ -53,10 +55,10 @@ impl Display for Type {
             Self::Var(var) => write!(f, "'t{}", var),
             Self::Name(name) => write!(f, "{}", name),
             Self::Int64 => write!(f, "Int64"),
-            Self::Array(ty, size) => write!(
+            Self::Array(tcell, size) => write!(
                 f,
                 "{}[{}]",
-                ty,
+                tcell,
                 if *size == ARRAY_TYPE_UNKNOWN_SIZE {
                     "?".into()
                 } else {
@@ -98,5 +100,51 @@ impl Display for StmtType {
             Self::Nonterminal => "Nonterminal"
         }
         .fmt(f)
+    }
+}
+
+#[derive(Clone)]
+pub struct TypeCell {
+    pointer: Rc<RefCell<Type>>
+}
+
+impl TypeCell {
+    pub fn new(ty: Type) -> Self {
+        Self {
+            pointer: Rc::new(RefCell::new(ty))
+        }
+    }
+
+    pub fn get(&self) -> Type {
+        self.pointer.borrow().clone()
+    }
+
+    pub fn as_ref(&self) -> Ref<Type> {
+        self.pointer.borrow()
+    }
+
+    pub fn as_mut(&self) -> RefMut<Type> {
+        self.pointer.borrow_mut()
+    }
+
+    pub fn raw(&self) -> Rc<RefCell<Type>> {
+        self.pointer.clone()
+    }
+}
+
+impl PartialEq for TypeCell {
+    fn eq(&self, other: &Self) -> bool {
+        self.pointer.borrow().eq(&other.pointer.borrow())
+    }
+}
+impl Eq for TypeCell {}
+impl Hash for TypeCell {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.pointer.borrow().hash(state)
+    }
+}
+impl Display for TypeCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.get().fmt(f)
     }
 }

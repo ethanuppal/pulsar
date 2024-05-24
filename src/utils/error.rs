@@ -16,7 +16,8 @@ pub enum ErrorCode {
     InvalidTokenForStatement,
     InvalidOperatorSyntax,
     MalformedType,
-    UnboundName
+    UnboundName,
+    TypeError
 }
 
 impl Display for ErrorCode {
@@ -98,14 +99,15 @@ pub struct Error {
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.style == Style::Primary {
-            write!(
-                f,
-                "{}: {}: ",
-                self.level.form_header(self.code).bold(),
-                self.loc.to_string().underline()
-            )?;
+            write!(f, "{}: ", self.level.form_header(self.code).bold(),)?;
+            if !self.loc.is_invalid() {
+                write!(f, "{}: ", self.loc.to_string().underline())?;
+            }
         }
         write!(f, "{}\n", self.message.bold())?;
+        if self.loc.is_invalid() {
+            return Ok(());
+        }
         let (lines, current_line_pos) = self.loc.lines(1, 1);
         for (i, line) in lines.iter().enumerate() {
             if i > 0 {
@@ -226,6 +228,12 @@ impl ErrorBuilder {
     /// Locates the error at the given token `token`.
     pub fn at_token(self, token: &Token) -> Self {
         self.at_region(token.loc.clone(), token.length())
+    }
+
+    /// Identifies the error as having no location.
+    pub fn without_loc(mut self) -> Self {
+        self.error.loc = Loc::make_invalid();
+        self
     }
 
     /// Uses the main error description `message`.

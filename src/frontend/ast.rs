@@ -1,5 +1,5 @@
 use super::token::Token;
-use super::ty::{StmtType, Type};
+use super::ty::{StmtType, Type, TypeCell};
 use crate::utils::format;
 use std::cell::RefCell;
 use std::fmt;
@@ -24,7 +24,7 @@ pub enum ExprValue {
 #[derive(Clone)]
 pub struct Expr {
     pub value: ExprValue,
-    pub ty: Rc<RefCell<Type>>
+    pub ty: TypeCell
 }
 
 impl Display for Expr {
@@ -63,7 +63,7 @@ impl Display for Expr {
             }
         }
 
-        let expr_ty = self.ty.borrow();
+        let expr_ty = self.ty.as_ref();
         if expr_ty.clone().is_known() {
             write!(f, ": {}", expr_ty)?;
         }
@@ -83,7 +83,7 @@ pub enum NodeValue {
     },
     LetBinding {
         name: Token,
-        hint: Option<Rc<RefCell<Type>>>,
+        hint: Option<TypeCell>,
         value: Box<Expr>
     }
 }
@@ -131,7 +131,7 @@ impl Node {
                 value
             } => {
                 let hint_str = if let Some(hint) = hint_opt {
-                    format!(": {}", hint.borrow())
+                    format!(": {}", hint)
                 } else {
                     "".into()
                 };

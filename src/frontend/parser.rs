@@ -2,7 +2,7 @@ use super::{
     ast::{Expr, ExprValue, Node},
     op::{Op, Precedence},
     token::{Token, TokenType},
-    ty::{StmtType, Type}
+    ty::{StmtType, Type, TypeCell}
 };
 use crate::{
     frontend::ast::NodeValue,
@@ -321,7 +321,7 @@ impl Parser {
             );
         }
 
-        let result = Type::Array(Box::new(inner), size as isize);
+        let result = Type::Array(TypeCell::new(inner), size as isize);
         if self.is_at(TokenType::LeftBracket) {
             self.parse_array_type(result)
         } else {
@@ -536,9 +536,9 @@ impl Parser {
         let mut hint = None;
         if self.current().ty == TokenType::Colon {
             self.advance();
-            hint = Some(Rc::new(RefCell::new(
+            hint = Some(TypeCell::new(
                 self.parse_type("let binding type hint".into())?
-            )));
+            ));
         }
 
         expect! { self in TokenType::Assign => "after name in let binding" }?;

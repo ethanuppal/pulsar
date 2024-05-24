@@ -33,7 +33,15 @@ pub fn main() -> Result<(), ()> {
     handle_errors(error_manager.clone())?;
 
     let mut type_inferer = TypeInferer::new(error_manager.clone());
-    type_inferer.infer(program_ast);
+    let result = type_inferer.infer(program_ast);
+    if result.is_none() && !error_manager.borrow().has_errors() {
+        panic!("TypeInferer failed without error message");
+    }
+    if let Some(annotated_ast) = result {
+        for node in annotated_ast {
+            println!("{}", node);
+        }
+    }
     handle_errors(error_manager)?;
 
     Ok(())
