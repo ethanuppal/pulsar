@@ -2,7 +2,7 @@ use super::{
     ast::{Expr, ExprValue, Node},
     op::{Op, Precedence},
     token::{Token, TokenType},
-    ty::Type
+    ty::{StmtType, Type}
 };
 use crate::{
     frontend::ast::NodeValue,
@@ -80,7 +80,7 @@ impl Parser {
     /// Error for when EOF is encountered in the parsing context `context`.
     ///
     /// Requires: `!buffer.is_empty()`.
-    fn error_unexpected_eof(&self, context: &str) -> Error {
+    fn error_unexpected_eof(&self, context: String) -> Error {
         ErrorBuilder::new()
             .of_style(Style::Primary)
             .at_level(Level::Error)
@@ -209,7 +209,7 @@ impl Parser {
 macro_rules! expect {
     ($self:ident in $token_type:expr => $context:expr) => {
         if $self.is_eof() {
-            $self.report($self.error_unexpected_eof($context));
+            $self.report($self.error_unexpected_eof($context.into()));
             None
         } else if $self.current().ty != $token_type {
             $self.report($self.error_expected_token(
@@ -227,7 +227,7 @@ macro_rules! expect {
 macro_rules! expect_n {
     ($self:ident in [$($token_type:expr),*] => $context:expr) => {
         if $self.is_eof() {
-            $self.report($self.error_unexpected_eof($context));
+            $self.report($self.error_unexpected_eof($context.into()));
             None
         } else if ![$($token_type),*].contains(&$self.current().ty) {
             $self.report($self.error_expected_tokens(
@@ -245,14 +245,15 @@ macro_rules! expect_n {
 impl TokenType {
     fn begins_top_level_construct(&self) -> bool {
         match self {
-            Self::Func => true,
+            Self::Func | Self::Pure => true,
             _ => false
         }
     }
 }
 
 impl Parser {
-    /// Advances until EOF or a top-level construct is potentially found.
+    /// Advances until EOF, or when specified by `current_exit`, or when a
+    /// top-level construct is potentially found.
     fn synchronize(&mut self, custom_exit: fn(&Token) -> bool) {
         while !self.is_eof()
             && !custom_exit(self.current())
@@ -267,12 +268,17 @@ impl Parser {
         self.synchronize(|_| false);
     }
 
-    fn parse_primary_type(&mut self) -> Option<Type> {
+    fn parse_primary_type(&mut self, name: Option<&str>) -> Option<Type> {
+        let context = match name {
+            Some(name) => format!("in {}", name),
+            None => "for primary type".into()
+        };
         let type_token = expect! { self in
-            TokenType::Identifier => "for primary type"
+            TokenType::Identifier => context.as_str()
         }?;
         Some(match type_token.value.as_str() {
             "Int64" | "Int" => Type::Int64,
+            "Unit" => Type::Unit,
             other => Type::Name(other.into())
         })
     }
@@ -323,12 +329,15 @@ impl Parser {
         }
     }
 
-    fn parse_type(&mut self) -> Option<Type> {
+    fn parse_type(&mut self, name: Option<&str>) -> Option<Type> {
         if self.is_eof() {
-            self.report(self.error_unexpected_eof("in type"));
+            self.report(self.error_unexpected_eof(match name {
+                Some(name) => format!("in {}", name),
+                None => "in type".into()
+            }));
             return None;
         }
-        let primary = self.parse_primary_type()?;
+        let primary = self.parse_primary_type(name)?;
         if self.is_at(TokenType::LeftBracket) {
             self.parse_array_type(primary)
         } else {
@@ -345,6 +354,7 @@ impl Parser {
         while !self.is_eof() && self.current().ty != TokenType::RightBracket {
             if i > 0 {
                 expect! { self in TokenType::Comma => "between array elements" }?;
+                self.consume_ignored();
             }
             match (self.current_opt().map(|token| token.ty), i) {
                 (Some(TokenType::RightBracket), i) => {
@@ -380,7 +390,7 @@ impl Parser {
 
         Some(Expr {
             value: ExprValue::ArrayLiteral(elements, should_continue),
-            ty: None
+            ty: Type::make_unknown()
         })
     }
 
@@ -393,7 +403,7 @@ impl Parser {
                 value: ExprValue::ConstantInt(
                     i64::from_str_radix(&literal_token.value, 10).unwrap()
                 ),
-                ty: None
+                ty: Type::make_unknown()
             }),
             TokenType::LeftBracket => {
                 self.unget();
@@ -414,13 +424,13 @@ impl Parser {
 
         Some(Expr {
             value: ExprValue::PrefixOp(op_token, Box::new(rhs)),
-            ty: None
+            ty: Type::make_unknown()
         })
     }
 
     fn parse_primary_expr(&mut self) -> Option<Expr> {
         if self.is_eof() {
-            self.report(self.error_unexpected_eof("in expression"));
+            self.report(self.error_unexpected_eof("in expression".into()));
             None
         } else if let Some(prefix_op) = Op::from(self.current().ty) {
             self.parse_prefix_expr(prefix_op)
@@ -487,7 +497,7 @@ impl Parser {
             }
             lhs = Expr {
                 value: ExprValue::BinOp(Box::new(lhs), op_token, Box::new(rhs)),
-                ty: None
+                ty: Type::make_unknown()
             };
         }
         Some(lhs)
@@ -522,7 +532,9 @@ impl Parser {
         let mut hint = None;
         if self.current().ty == TokenType::Colon {
             self.advance();
-            hint = Some(self.parse_type()?);
+            hint = Some(Rc::new(RefCell::new(
+                self.parse_type("let binding type hint".into())?
+            )));
         }
 
         expect! { self in TokenType::Assign => "after name in let binding" }?;
@@ -535,7 +547,7 @@ impl Parser {
                 hint,
                 value: Box::new(value)
             },
-            ty: None
+            ty: StmtType::make_unknown()
         })
     }
 
@@ -582,6 +594,12 @@ impl Parser {
     }
 
     fn parse_func(&mut self) -> Option<Node> {
+        let mut is_pure = false;
+        if self.is_at(TokenType::Pure) {
+            self.advance();
+            is_pure = true;
+        }
+
         expect! { self in
             TokenType::Func => "at start of function declaration"
         }?;
@@ -589,8 +607,30 @@ impl Parser {
         let name =
             expect! { self in TokenType::Identifier => "for function name" }?;
 
-        let open_paren = expect! { self in TokenType::LeftPar => "at start of function parameters" }?;
-        // TODO: params
+        let open_paren = expect! { self in TokenType::LeftPar => format!("at start of function parameterss in `{}`", name.value).as_str() }?;
+
+        self.consume_ignored();
+
+        let mut i = 0;
+        let mut params = vec![];
+        while !self.is_eof() && self.current().ty != TokenType::RightPar {
+            if i > 0 {
+                expect! { self in TokenType::Comma => format!("between function parameters in `{}`", name.value).as_str() }?;
+                self.consume_ignored();
+            }
+            if self.is_at(TokenType::RightPar) {
+                break;
+            }
+
+            let name = expect! { self in TokenType::Identifier => format!("for parameter name in `{}`", name.value).as_str() }?;
+            expect! { self in TokenType::Colon => format!("after parameter name in `{}`", name.value).as_str() }?;
+            let ty = self.parse_type("parameter type".into())?;
+            params.push((name, ty));
+
+            self.consume_ignored();
+            i += 1
+        }
+
         let close_paren = expect! { self in TokenType::RightPar => "at end of function parameters" };
         if close_paren.is_none() {
             self.report(
@@ -602,14 +642,23 @@ impl Parser {
             return None;
         }
 
+        let mut ret = Type::Unit;
+        if self.is_at(TokenType::Arrow) {
+            self.advance();
+            ret = self.parse_type("function return type".into())?;
+        }
+
         let body = self.parse_block("function body")?;
 
         Some(Node {
             value: NodeValue::Function {
                 name: name.clone(),
+                params,
+                ret,
+                is_pure,
                 body
             },
-            ty: None
+            ty: StmtType::make_unknown()
         })
     }
 

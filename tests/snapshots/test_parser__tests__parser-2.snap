@@ -2,8 +2,8 @@
 source: tests/test_parser.rs
 expression: "parser_output(\"tests/data/parser_in1.pl\", error_manager.clone())"
 ---
-func this() {}
-func is() {}
-func a() {}
-func valid() {}
-func program() {}
+func this() -> Unit {}
+func is() -> Unit {}
+func a() -> Unit {}
+func valid() -> Unit {}
+func program() -> Unit {}

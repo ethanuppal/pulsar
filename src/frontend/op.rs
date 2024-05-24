@@ -32,8 +32,4 @@ impl Op {
             _ => None
         }
     }
-
-    pub fn is_operator(ty: TokenType) -> bool {
-        Op::from(ty).is_some()
-    }
 }

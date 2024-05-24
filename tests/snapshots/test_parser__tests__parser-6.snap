@@ -1,0 +1,9 @@
+---
+source: tests/test_parser.rs
+expression: "parser_output(\"tests/data/parser_in5.pl\", error_manager.clone())"
+---
+error[E0003]: tests/data/parser_in5.pl:3:19: Expected one of 'integer', 'float', 'char', 'left-bracket' at start of expression
+   2 │      let input: Int[64] = [...]
+   3 │      let squares = input 
+                          └──── Received 'identifier' here
+   4 │  }

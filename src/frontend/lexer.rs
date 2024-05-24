@@ -182,6 +182,7 @@ impl Iterator for Lexer {
 
         lex! { self in
             | "+" => { TokenType::Plus }
+            | "->" => { TokenType::Arrow }
             | "-" => { TokenType::Minus }
             | "*" => { TokenType::Times }
             | "(" => { TokenType::LeftPar }
@@ -191,13 +192,13 @@ impl Iterator for Lexer {
             | "[" => { TokenType::LeftBracket }
             | "]" => { TokenType::RightBracket }
             | "=" => { TokenType::Assign }
-            | "|>" => { TokenType::Pipeline }
             | ":" => { TokenType::Colon }
             | "..." => { TokenType::Dots }
             | "," => { TokenType::Comma }
             | "\n" => { TokenType::Newline }
             | "func" => { TokenType::Func }
             | "let" => { TokenType::Let }
+            | "pure" => { TokenType::Pure }
             | _ {
                 if self.current().is_numeric() {
                     Some(self.make_number_token())

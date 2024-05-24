@@ -1,11 +1,14 @@
-use super::token::{Name, Token};
+use super::token::Token;
 use super::ty::{StmtType, Type};
 use crate::utils::format;
+use std::cell::RefCell;
 use std::fmt;
 use std::fmt::Display;
+use std::rc::Rc;
 
-pub type Param = (String, Type);
+pub type Param = (Token, Type);
 
+#[derive(Clone)]
 pub enum ExprValue {
     ConstantInt(i64),
 
@@ -17,9 +20,10 @@ pub enum ExprValue {
     BinOp(Box<Expr>, Token, Box<Expr>)
 }
 
+#[derive(Clone)]
 pub struct Expr {
     pub value: ExprValue,
-    pub ty: Option<Type>
+    pub ty: Rc<RefCell<Type>>
 }
 
 impl Display for Expr {
@@ -54,39 +58,60 @@ impl Display for Expr {
                 write!(f, "({} {} {})", lhs, op.value, rhs)?;
             }
         }
-        if let Some(ty) = &self.ty {
-            write!(f, ": {}", ty)?;
+
+        let expr_ty = self.ty.borrow();
+        if expr_ty.clone().is_known() {
+            write!(f, ": {}", expr_ty)?;
         }
+
         Ok(())
     }
 }
 
+#[derive(Clone)]
 pub enum NodeValue {
     Function {
-        name: Name,
+        name: Token,
+        params: Vec<Param>,
+        ret: Type,
+        is_pure: bool,
         body: Vec<Node>
     },
     LetBinding {
-        name: Name,
-        hint: Option<Type>,
+        name: Token,
+        hint: Option<Rc<RefCell<Type>>>,
         value: Box<Expr>
     }
 }
 
+#[derive(Clone)]
 pub struct Node {
     pub value: NodeValue,
-    pub ty: Option<StmtType>
+    pub ty: Rc<RefCell<StmtType>>
 }
 
 impl Node {
     fn pretty(&self, level: usize) -> String {
         let mut result = format::make_indent(level);
         let content = match &self.value {
-            NodeValue::Function { name, body } => {
+            NodeValue::Function {
+                name,
+                params,
+                ret,
+                is_pure,
+                body
+            } => {
                 let insert_newline = if body.is_empty() { "" } else { "\n" };
                 format!(
-                    "func {}() {{{}{}{}{}}}",
+                    "{}func {}({}) -> {} {{{}{}{}{}}}",
+                    if *is_pure { "pure " } else { "" },
                     name.value,
+                    params
+                        .iter()
+                        .map(|(name, ty)| format!("{}: {}", name.value, ty))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    ret,
                     insert_newline,
                     body.iter()
                         .map(|node| { node.pretty(level + 1) })
@@ -102,7 +127,7 @@ impl Node {
                 value
             } => {
                 let hint_str = if let Some(hint) = hint_opt {
-                    format!(": {}", hint)
+                    format!(": {}", hint.borrow())
                 } else {
                     "".into()
                 };

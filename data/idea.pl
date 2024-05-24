@@ -7,6 +7,7 @@ func add(x: Int64, y: Int64) -> Int64 {
 }
 
 func main() {
-    let input: Int64[8]
-    let output = input |> @map square |> @reduce add 0
+    let input: Int64[8] = [...]
+    let squares = @map(square, input)
+    let output = @reduce(add, 0, input)
 }

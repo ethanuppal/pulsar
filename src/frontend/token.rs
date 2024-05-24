@@ -22,11 +22,12 @@ pub enum TokenType {
     RightBrace,
     LeftBracket,
     RightBracket,
-    Pipeline,
     Dots,
     Colon,
     Comma,
+    Arrow,
     Directive,
+    Pure,
     Newline
 }
 
@@ -55,10 +56,11 @@ impl Debug for TokenType {
                 Self::LeftBracket => "left-bracket",
                 Self::RightBracket => "right-bracket",
                 Self::Colon => "colon",
-                Self::Pipeline => "pipeline",
                 Self::Dots => "dots",
                 Self::Comma => "comma",
+                Self::Arrow => "arrow",
                 Self::Directive => "directive",
+                Self::Pure => "pure",
                 Self::Newline => "newline"
             }
         )
@@ -83,9 +85,9 @@ impl fmt::Display for TokenType {
                 Self::RightBracket => "]",
                 Self::Colon => ":",
                 Self::Assign => "=",
-                Self::Pipeline => "|>",
                 Self::Dots => "...",
                 Self::Comma => ",",
+                Self::Arrow => "->",
                 _ => default.as_str()
             }
         )
@@ -128,5 +130,3 @@ impl Debug for Token {
         )
     }
 }
-
-pub type Name = Token;
