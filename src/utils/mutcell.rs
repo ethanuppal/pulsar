@@ -1,11 +1,10 @@
 use std::{
     fmt::{Debug, Display},
     hash::{Hash, Hasher},
-    sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard}
+    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}
 };
 
 /// A mutable shared pointer.
-#[derive(Clone)]
 pub struct MutCell<T> {
     pointer: Arc<RwLock<T>>
 }
@@ -27,6 +26,14 @@ impl<T> MutCell<T> {
 
     pub fn raw(&self) -> Arc<RwLock<T>> {
         self.pointer.clone()
+    }
+}
+
+impl<T> Clone for MutCell<T> {
+    fn clone(&self) -> Self {
+        Self {
+            pointer: self.pointer.clone()
+        }
     }
 }
 

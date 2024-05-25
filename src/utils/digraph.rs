@@ -24,4 +24,8 @@ impl<Node: Hash + Eq, Edge> Digraph<Node, Edge> {
     pub fn out_of(&self, node: Node) -> Option<&Vec<(Edge, Node)>> {
         self.adj.get(&node)
     }
+
+    pub fn nodes(&self) -> Vec<&Node> {
+        self.adj.keys().collect()
+    }
 }

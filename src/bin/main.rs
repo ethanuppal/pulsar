@@ -1,5 +1,6 @@
 use pulsar::{
     frontend::{infer::TypeInferer, lexer::Lexer, parser::Parser},
+    ir::generator::Generator,
     utils::{error::ErrorManager, loc::Source}
 };
 use std::{cell::RefCell, fs, io::stdout, rc::Rc};
@@ -33,12 +34,13 @@ pub fn main() -> Result<(), ()> {
     handle_errors(error_manager.clone())?;
 
     let mut type_inferer = TypeInferer::new(error_manager.clone());
-    if let Some(annotated_ast) = type_inferer.infer(program_ast) {
-        for node in annotated_ast {
-            println!("{}", node);
-        }
-    }
+    let annotated_ast = type_inferer.infer(program_ast).ok_or(())?;
     handle_errors(error_manager)?;
+
+    let generator = Generator::new(annotated_ast);
+    for generated_top_level in generator {
+        println!("{}", generated_top_level);
+    }
 
     Ok(())
 }
