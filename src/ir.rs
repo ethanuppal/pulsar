@@ -10,8 +10,10 @@ pub mod variable;
 
 pub enum Ir {
     Add(Variable, Operand, Operand),
+    Mul(Variable, Operand, Operand),
     Assign(Variable, Operand),
-    GetParam(Variable)
+    GetParam(Variable),
+    Return(Option<Operand>)
 }
 
 impl Display for Ir {
@@ -20,8 +22,20 @@ impl Display for Ir {
             Self::Add(result, lhs, rhs) => {
                 write!(f, "{} = {} + {}", result, lhs, rhs)
             }
+            Self::Mul(result, lhs, rhs) => {
+                write!(f, "{} = {} * {}", result, lhs, rhs)
+            }
             Self::Assign(result, from) => write!(f, "{} = {}", result, from),
-            Self::GetParam(result) => write!(f, "{} = <next param>", result)
+            Self::GetParam(result) => write!(f, "{} = <next param>", result),
+            Self::Return(value_opt) => write!(
+                f,
+                "ret{}",
+                if let Some(value) = value_opt {
+                    format!(" {}", value)
+                } else {
+                    "".into()
+                }
+            )
         }
     }
 }

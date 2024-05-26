@@ -1,5 +1,5 @@
 use pulsar::{
-    frontend::{infer::TypeInferer, lexer::Lexer, parser::Parser},
+    frontend::{lexer::Lexer, parser::Parser, static_analysis::StaticAnalyzer},
     ir::generator::Generator,
     utils::{error::ErrorManager, loc::Source}
 };
@@ -33,8 +33,12 @@ pub fn main() -> Result<(), ()> {
     let program_ast: Vec<_> = parser.into_iter().collect();
     handle_errors(error_manager.clone())?;
 
-    let mut type_inferer = TypeInferer::new(error_manager.clone());
-    let annotated_ast = type_inferer.infer(program_ast).ok_or(())?;
+    let mut type_inferer = StaticAnalyzer::new(error_manager.clone());
+    let annotated_ast =
+        type_inferer.infer(program_ast).ok_or(()).map_err(|()| {
+            let _ = handle_errors(error_manager.clone());
+            ()
+        })?;
     handle_errors(error_manager)?;
 
     let generator = Generator::new(annotated_ast);

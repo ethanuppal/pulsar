@@ -2,7 +2,7 @@ use super::{
     token::Token,
     ty::{StmtType, Type, TypeCell}
 };
-use crate::utils::format;
+use crate::utils::{format, mutcell::MutCell};
 use std::{cell::RefCell, fmt, fmt::Display, rc::Rc};
 
 pub type Param = (Token, Type);
@@ -85,13 +85,19 @@ pub enum NodeValue {
         name: Token,
         hint: Option<TypeCell>,
         value: Box<Expr>
+    },
+    Return {
+        token: Token,
+        value: Option<Box<Expr>>
     }
 }
 
 #[derive(Clone)]
 pub struct Node {
     pub value: NodeValue,
-    pub ty: Rc<RefCell<StmtType>>
+    pub ty: Rc<RefCell<StmtType>>,
+    pub start_token: MutCell<Option<Token>>,
+    pub end_token: MutCell<Option<Token>>
 }
 
 impl Node {
@@ -136,6 +142,19 @@ impl Node {
                     "".into()
                 };
                 format!("let {}{} = {}", name.value, hint_str, value)
+            }
+            NodeValue::Return {
+                token: _,
+                value: value_opt
+            } => {
+                format!(
+                    "return{}",
+                    if let Some(value) = value_opt {
+                        format!(" {}", value.to_string())
+                    } else {
+                        "".into()
+                    }
+                )
             }
         };
         result.push_str(&content);

@@ -11,4 +11,5 @@ func main() -> Unit {
     let sub3 = ((1 - 2) - 3)
     let mul2 = (1 * 2)
     let mul3 = ((1 * 2) * 3)
+    return
 }

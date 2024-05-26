@@ -2,8 +2,12 @@
 source: tests/test_parser.rs
 expression: "parser_output(\"tests/data/parserfail_in1.pl\", error_manager.clone())"
 ---
-func main() -> Unit {}
-func nested() -> Unit {}
+func main() -> Unit {
+    return
+}
+func nested() -> Unit {
+    return
+}
 error[E0006]: tests/data/parserfail_in1.pl:6:5: Invalid token at the start of statement
    5 │  func foo() {
    6 │      fun bad_nested() {

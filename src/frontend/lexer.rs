@@ -198,6 +198,7 @@ impl Iterator for Lexer {
             | "\n" => { TokenType::Newline }
             | "func" => { TokenType::Func }
             | "let" => { TokenType::Let }
+            | "return" => { TokenType::Return }
             | "pure" => { TokenType::Pure }
             | _ {
                 if self.current().is_numeric() {

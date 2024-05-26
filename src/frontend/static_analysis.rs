@@ -1,7 +1,7 @@
 use super::{
     ast::{Expr, ExprValue, Node, NodeValue},
     token::{Token, TokenType},
-    ty::{Type, TypeCell, ARRAY_TYPE_UNKNOWN_SIZE}
+    ty::{StmtType, Type, TypeCell, ARRAY_TYPE_UNKNOWN_SIZE}
 };
 use crate::utils::{
     context::{Context, Name},
@@ -15,6 +15,11 @@ use std::{
     fmt::{Debug, Display},
     rc::Rc
 };
+
+/// A dummy variable bound in the environment for the return type. No valid
+/// identifier contains a space, so we are guaranteed to have no name
+/// collisions.
+const RETURN_ID: &str = " return";
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct TypeNode {
@@ -39,22 +44,22 @@ impl Debug for TypeNode {
 }
 impl NodeTrait for TypeNode {}
 
-pub struct TypeConstraint {
+struct TypeConstraint {
     pub lhs: TypeCell,
     pub rhs: TypeCell,
     pub lhs_ctx: Token,
     pub rhs_ctx: Token
 }
 
-pub struct TypeInferer {
+pub struct StaticAnalyzer {
     env: Context<TypeCell>,
     constraints: Vec<TypeConstraint>,
     error_manager: Rc<RefCell<ErrorManager>>
 }
 
-impl TypeInferer {
-    pub fn new(error_manager: Rc<RefCell<ErrorManager>>) -> TypeInferer {
-        TypeInferer {
+impl StaticAnalyzer {
+    pub fn new(error_manager: Rc<RefCell<ErrorManager>>) -> StaticAnalyzer {
+        StaticAnalyzer {
             env: Context::new(),
             constraints: vec![],
             error_manager
@@ -67,8 +72,9 @@ impl TypeInferer {
         self.env.bind_base(name, TypeCell::new(ty));
     }
 
-    /// Infers the types of nodes and expression in the program `program`,
-    /// returning the annotated AST if no error occured.
+    /// Performs control-flow analysis on funcitions and infers the types of
+    /// nodes and expression in the program `program`, returning the
+    /// annotated AST if no error occured.
     pub fn infer(&mut self, mut program: Vec<Node>) -> Option<Vec<Node>> {
         self.constraints.clear();
 
@@ -91,6 +97,45 @@ impl TypeInferer {
 
     fn report(&mut self, error: Error) {
         self.error_manager.borrow_mut().record(error);
+    }
+
+    fn report_dead_code(
+        &mut self, func_name: &Token, dead_node: &Node, term_node: &Node
+    ) {
+        self.report(
+            ErrorBuilder::new()
+                .of_style(Style::Primary)
+                .at_level(Level::Warning)
+                .without_loc()
+                .message("Statement is never reached".into())
+                .build()
+        );
+        self.report(
+            ErrorBuilder::new()
+                .of_style(Style::Secondary)
+                .at_level(Level::Warning)
+                .without_loc()
+                .message("   ...".into())
+                .explain(format!(
+                    "Returned from function `{}` here",
+                    func_name.value
+                ))
+                .build()
+        );
+    }
+
+    fn report_missing_return(&mut self, func_name: &Token) {
+        self.report(
+            ErrorBuilder::new()
+                .of_style(Style::Primary)
+                .at_level(Level::Error)
+                .at_token(func_name)
+                .message(format!(
+                    "Function `{}` does not return from all paths",
+                    func_name.value
+                ))
+                .build()
+        );
     }
 
     fn report_unbound_name(&mut self, name: &Token) {
@@ -131,7 +176,7 @@ impl TypeInferer {
                     .at_level(Level::Error)
                     .with_code(ErrorCode::TypeError)
                     .at_token(&rhs_ctx)
-                    .message("...".into())
+                    .message("   ...".into())
                     .explain(format!("Type inferred here to be `{}`", rhs))
                     .build()
             );
@@ -139,7 +184,7 @@ impl TypeInferer {
     }
 }
 
-impl TypeInferer {
+impl StaticAnalyzer {
     fn new_type_var(&self) -> Type {
         Type::Var(Gen::next("TypeInferer::get_type_var"))
     }
@@ -259,22 +304,39 @@ impl TypeInferer {
             }
             (
                 NodeValue::Function {
-                    name: _,
+                    name,
                     params,
-                    ret: _,
+                    ret,
                     is_pure: _,
                     body
                 },
                 false
             ) => {
                 self.env.push();
+                self.env.bind(RETURN_ID.into(), TypeCell::new(ret.clone()));
                 for (name, ty) in params {
                     self.env
                         .bind(name.value.clone(), TypeCell::new(ty.clone()));
                 }
+                let mut stmt_ty = StmtType::Nonterminal;
+                let mut warned_dead_code = false;
+                let mut term_node = None;
                 for node in body {
                     self.visit_node(node, false)?;
+                    if *node.ty.borrow() == StmtType::Terminal {
+                        term_node = Some(node);
+                        stmt_ty = StmtType::Terminal;
+                    } else if stmt_ty == StmtType::Terminal && !warned_dead_code
+                    {
+                        self.report_dead_code(name, node, term_node.unwrap());
+                        warned_dead_code = true;
+                    }
                 }
+                if stmt_ty == StmtType::Nonterminal {
+                    self.report_missing_return(name);
+                    return None;
+                }
+                *node.ty.borrow_mut() = stmt_ty;
                 self.env.pop();
             }
             (
@@ -295,10 +357,31 @@ impl TypeInferer {
                     );
                 }
                 self.env.bind(name.value.clone(), value_ty);
+                // TODO: never types
+                *node.ty.borrow_mut() = StmtType::Nonterminal;
+            }
+            (
+                NodeValue::Return {
+                    token,
+                    value: value_opt
+                },
+                false
+            ) => {
+                let value_ty = if let Some(value) = value_opt {
+                    self.visit_expr(value)?
+                } else {
+                    Type::unit_singleton()
+                };
+                self.add_constraint(
+                    value_ty.clone(),
+                    self.env.find(RETURN_ID.into()).unwrap().clone(),
+                    token.clone(),
+                    token.clone()
+                );
+                *node.ty.borrow_mut() = StmtType::Terminal;
             }
             _ => {}
         }
-
         Some(())
     }
 

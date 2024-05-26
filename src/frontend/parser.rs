@@ -6,8 +6,9 @@ use super::{
 };
 use crate::{
     frontend::ast::NodeValue,
-    utils::error::{
-        Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style
+    utils::{
+        error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
+        mutcell::MutCell
     }
 };
 use std::{cell::RefCell, rc::Rc};
@@ -560,7 +561,27 @@ impl Parser {
                 hint,
                 value: Box::new(value)
             },
-            ty: StmtType::make_unknown()
+            ty: StmtType::make_unknown(),
+            start_token: MutCell::new(None),
+            end_token: MutCell::new(None)
+        })
+    }
+
+    fn parse_return(&mut self) -> Option<Node> {
+        let token =
+            expect! { self in TokenType::Return => "return statement" }?;
+
+        let value = if self.is_at(TokenType::Newline) {
+            None
+        } else {
+            Some(Box::new(self.parse_expr()?))
+        };
+
+        Some(Node {
+            value: NodeValue::Return { token, value },
+            ty: StmtType::make_unknown(),
+            start_token: MutCell::new(None),
+            end_token: MutCell::new(None)
         })
     }
 
@@ -620,7 +641,7 @@ impl Parser {
         let name =
             expect! { self in TokenType::Identifier => "for function name" }?;
 
-        let open_paren = expect! { self in TokenType::LeftPar => format!("at start of function parameterss in `{}`", name.value).as_str() }?;
+        let open_paren = expect! { self in TokenType::LeftPar => format!("at start of function parameters in `{}`", name.value).as_str() }?;
 
         self.consume_ignored();
 
@@ -661,7 +682,18 @@ impl Parser {
             ret = self.parse_type("function return type".into())?;
         }
 
-        let body = self.parse_block("function body")?;
+        let mut body = self.parse_block("function body")?;
+        if ret == Type::Unit {
+            body.push(Node {
+                value: NodeValue::Return {
+                    token: name.clone(),
+                    value: None
+                },
+                ty: StmtType::make_unknown(),
+                start_token: MutCell::new(None),
+                end_token: MutCell::new(None)
+            });
+        }
 
         Some(Node {
             value: NodeValue::Function {
@@ -671,20 +703,22 @@ impl Parser {
                 is_pure,
                 body
             },
-            ty: StmtType::make_unknown()
+            ty: StmtType::make_unknown(),
+            start_token: MutCell::new(None),
+            end_token: MutCell::new(None)
         })
     }
 
-    fn end_stmt(&mut self) -> Option<()> {
+    fn end_stmt(&mut self) -> Option<Token> {
         if !self.is_eof() && self.current().ty == TokenType::RightBrace {
-            return Some(());
+            return Some(self.current().clone());
         }
 
-        expect! { self in TokenType::Newline => "after statement" }?;
+        let end = expect! { self in TokenType::Newline => "after statement" }?;
 
         self.consume_ignored();
 
-        Some(())
+        Some(end)
     }
 
     /// Do not call this function directly.
@@ -696,7 +730,7 @@ impl Parser {
 
         let current_ty = self.current().ty;
         match (current_ty, top_level) {
-            (TokenType::Func, true) => {
+            (TokenType::Func, true) | (TokenType::Pure, true) => {
                 if let Some(func) = self.parse_func() {
                     return Some(func);
                 }
@@ -704,6 +738,11 @@ impl Parser {
             (TokenType::Let, false) => {
                 if let Some(let_stmt) = self.parse_let() {
                     return Some(let_stmt);
+                }
+            }
+            (TokenType::Return, false) => {
+                if let Some(return_stmt) = self.parse_return() {
+                    return Some(return_stmt);
                 }
             }
             _ => {
@@ -730,8 +769,11 @@ impl Parser {
     }
 
     fn parse_stmt(&mut self, top_level: bool) -> Option<Node> {
+        let start = self.current_opt().map(|token| token.clone());
         self.parse_stmt_aux(top_level).and_then(|node| {
-            self.end_stmt()?;
+            let end = self.end_stmt()?;
+            *node.start_token.as_mut() = Some(start.unwrap());
+            *node.end_token.as_mut() = Some(end);
             Some(node)
         })
     }

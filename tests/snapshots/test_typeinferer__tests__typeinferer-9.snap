@@ -1,0 +1,13 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(\"tests/data/infer9.pl\", error_manager.clone())"
+---
+func main() -> Unit {
+    return 1: Int64
+    return
+}
+error[E0010]: tests/data/infer9.pl:2:5: Failed to unify types `Int64` and `Unit`
+   1 │  func main() {
+   2 │      return 1
+            └───── Type inferred here to be `Int64`
+   3 │  }

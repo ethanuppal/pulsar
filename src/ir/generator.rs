@@ -50,6 +50,9 @@ impl Generator {
                     TokenType::Plus => {
                         block.as_mut().add(Ir::Add(result, lhs, rhs))
                     }
+                    TokenType::Times => {
+                        block.as_mut().add(Ir::Mul(result, lhs, rhs))
+                    }
                     _ => todo!()
                 }
                 Operand::Variable(result)
@@ -72,6 +75,12 @@ impl Generator {
                 let name_var = Variable::new();
                 self.env.bind(name.value.clone(), name_var);
                 block.as_mut().add(Ir::Assign(name_var, value_operand));
+            }
+            NodeValue::Return { token: _, value } => {
+                let value_operand = value
+                    .as_ref()
+                    .map(|value| self.gen_expr(value.as_ref(), block.clone()));
+                block.as_mut().add(Ir::Return(value_operand));
             }
             _ => {}
         }

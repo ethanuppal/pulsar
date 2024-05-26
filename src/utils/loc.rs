@@ -188,3 +188,11 @@ impl PartialEq for Loc {
             && self.source.as_ref() == other.source.as_ref()
     }
 }
+
+pub trait Region {
+    /// The starting location of this region.
+    fn start() -> Loc;
+
+    /// Must be in the same source and monotonically after [`Region::start`].
+    fn end() -> Loc;
+}

@@ -9,6 +9,7 @@ func main() -> Unit {
     let arr2d: Int64[5][6] = [...]
     let warn: Int64[0] = [...]
     let warn2: Int64[0][4] = [...]
+    return
 }
 warning[W0008]: tests/data/parser_in4.pl:6:19: Array size is zero
    5 │      let arr2d: Int[5][6] = [...]

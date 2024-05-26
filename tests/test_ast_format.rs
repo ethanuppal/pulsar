@@ -7,7 +7,7 @@ mod tests {
             token::{Token, TokenType},
             ty::{StmtType, Type}
         },
-        utils::loc::Loc
+        utils::{loc::Loc, mutcell::MutCell}
     };
 
     fn make_token(ty: TokenType, value: &str) -> Token {
@@ -64,7 +64,9 @@ mod tests {
                     start: dumb_token()
                 })
             },
-            ty: StmtType::make_unknown()
+            ty: StmtType::make_unknown(),
+            start_token: MutCell::new(None),
+            end_token: MutCell::new(None)
         }];
         assert_snapshot!(
             Node {
@@ -77,7 +79,9 @@ mod tests {
                 is_pure: false,
                 params: vec![],
                 ret: Type::Unit,body: body.clone() },
-                ty: StmtType::make_unknown()
+                ty: StmtType::make_unknown(),
+                start_token: MutCell::new(None),
+                end_token: MutCell::new(None)
             }.to_string(),
             @r###"
         func foo() -> Unit {
@@ -98,7 +102,9 @@ mod tests {
                 is_pure: true,
                 body: body.clone()
             },
-            ty: StmtType::make_unknown()
+            ty: StmtType::make_unknown(),
+            start_token: MutCell::new(None),
+            end_token: MutCell::new(None)
         }
         .to_string())
     }
@@ -110,7 +116,11 @@ mod tests {
                 ty: TokenType::Identifier,
                 value: "x".into(),
                 loc: Loc::default()
-            }, hint: None, value: Box::new(Expr { value: ExprValue::ConstantInt(5), ty: Type::make_unknown(), start: dumb_token() }) }, ty: StmtType::make_unknown() }.to_string(),
+            },
+            hint: None,
+            value: Box::new(Expr { value: ExprValue::ConstantInt(5), ty: Type::make_unknown(), start: dumb_token() }) }, ty: StmtType::make_unknown(),
+            start_token: MutCell::new(None),
+            end_token: MutCell::new(None) }.to_string(),
             @"let x = 5"
         )
     }

@@ -1,0 +1,3 @@
+func bad() -> Int {
+    return
+}

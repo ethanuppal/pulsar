@@ -3,6 +3,7 @@ use lazy_static::lazy_static;
 use std::{cell::RefCell, fmt::Display, hash::Hash, rc::Rc};
 
 lazy_static! {
+    pub static ref UNIT_TYPE_CELL: TypeCell = TypeCell::new(Type::Unit);
     pub static ref INT64_TYPE_CELL: TypeCell = TypeCell::new(Type::Int64);
 }
 
@@ -48,6 +49,10 @@ impl Type {
     pub fn int64_singleton() -> TypeCell {
         INT64_TYPE_CELL.to_owned()
     }
+
+    pub fn unit_singleton() -> TypeCell {
+        UNIT_TYPE_CELL.to_owned()
+    }
 }
 
 impl Display for Type {
@@ -82,7 +87,7 @@ impl Display for Type {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum StmtType {
     Unknown,
     Terminal,

@@ -8,4 +8,5 @@ func main() -> Unit {
     let par1 = ((1 + 2) * 3)
     let par2 = (1 + (2 * 3))
     let par3 = (1 * (2 + 3))
+    return
 }

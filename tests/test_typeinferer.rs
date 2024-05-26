@@ -2,7 +2,9 @@
 mod tests {
     use insta::assert_snapshot;
     use pulsar::{
-        frontend::{infer::TypeInferer, lexer::Lexer, parser::Parser},
+        frontend::{
+            lexer::Lexer, parser::Parser, static_analysis::StaticAnalyzer
+        },
         utils::{error::ErrorManager, loc::Source}
     };
     use std::{cell::RefCell, fs, rc::Rc};
@@ -24,7 +26,7 @@ mod tests {
         let parser = Parser::new(tokens, error_manager.clone());
         let program_ast: Vec<_> = parser.into_iter().collect();
         assert_eq!(false, error_manager.borrow().has_errors());
-        let mut type_inferer = TypeInferer::new(error_manager.clone());
+        let mut type_inferer = StaticAnalyzer::new(error_manager.clone());
         let annotated_ast_opt = type_inferer.infer(program_ast);
 
         let mut output = String::new();
@@ -74,6 +76,26 @@ mod tests {
 
         assert_snapshot!(typeinferer_output(
             "tests/data/infer6.pl",
+            error_manager.clone()
+        ));
+
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer7.pl",
+            error_manager.clone()
+        ));
+
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer8.pl",
+            error_manager.clone()
+        ));
+
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer9.pl",
+            error_manager.clone()
+        ));
+
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer10.pl",
             error_manager.clone()
         ));
     }
