@@ -1,7 +1,10 @@
 ---
 source: tests/test_typeinferer.rs
-expression: "typeinferer_output(\"tests/data/infer8.pl\", error_manager.clone())"
+expression: "typeinferer_output(\"tests/data/infer8.plsr\", error_manager.clone())"
 ---
-error[E0000]: tests/data/infer8.pl:1:6: Function `does_not_return` does not return from all paths
+error[E0004]: tests/data/infer8.plsr:1:6: Function `does_not_return` does not return from all paths
+     │  
    1 │  func does_not_return() -> Int {
-   2 │
+   2 │      
+     │  
+Suggestion: Consider adding a `return` statement at the end of the function

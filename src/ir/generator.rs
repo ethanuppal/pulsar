@@ -1,11 +1,12 @@
 use super::{
     basic_block::BasicBlockCell, control_flow_graph::ControlFlowGraph,
-    operand::Operand, variable::Variable, Ir
+    label::LabelName, operand::Operand, variable::Variable, Ir
 };
 use crate::{
     frontend::{
         ast::{Expr, ExprValue, Node, NodeValue, Param},
-        token::{Token, TokenType}
+        token::{Token, TokenType},
+        ty::Type
     },
     utils::context::Context
 };
@@ -59,6 +60,61 @@ impl Generator {
             }
             ExprValue::BoundName(name) => {
                 Operand::Variable(*self.env.find(name.value.clone()).unwrap())
+            }
+            ExprValue::ArrayLiteral(elements, _) => {
+                let (element_type, element_count) =
+                    expr.ty.as_ref().as_array_type();
+                let element_size = element_type.as_ref().size();
+                let element_count = element_count as usize;
+
+                let result = Variable::new();
+                block
+                    .as_mut()
+                    .add(Ir::LocalAlloc(result, element_size * element_count));
+                let mut i = 0;
+                for element in elements {
+                    let element_operand = self.gen_expr(element, block.clone());
+                    block.as_mut().add(Ir::Store {
+                        result,
+                        value: element_operand,
+                        index: i
+                    });
+                    i += 1;
+                }
+                for i in elements.len()..element_count {
+                    block.as_mut().add(Ir::Store {
+                        result,
+                        value: Operand::Constant(0),
+                        index: i
+                    });
+                }
+                Operand::Variable(result)
+            }
+            ExprValue::HardwareMap(_, parallel_factor, f, arr) => {
+                let (element_type, element_count) =
+                    expr.ty.as_ref().as_array_type();
+                let element_size = element_type.as_ref().size();
+                let element_count = element_count as usize;
+
+                let arr_operand = self.gen_expr(arr, block.clone());
+
+                let result = Variable::new();
+                block
+                    .as_mut()
+                    .add(Ir::LocalAlloc(result, element_size * element_count));
+
+                block.as_mut().add(Ir::Map {
+                    result,
+                    parallel_factor: *parallel_factor,
+                    f: LabelName::Native(
+                        f.value.clone(),
+                        vec![Type::Int64],
+                        Box::new(Type::Int64)
+                    ),
+                    input: arr_operand
+                });
+
+                Operand::Variable(result)
             }
             _ => todo!()
         }

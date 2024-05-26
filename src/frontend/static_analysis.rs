@@ -8,13 +8,10 @@ use crate::utils::{
     disjoint_set::{DisjointSets, NodeTrait},
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
     id::Gen,
+    loc::Region,
     CheapClone
 };
-use std::{
-    cell::RefCell,
-    fmt::{Debug, Display},
-    rc::Rc
-};
+use std::{cell::RefCell, fmt::Debug, iter::zip, rc::Rc};
 
 /// A dummy variable bound in the environment for the return type. No valid
 /// identifier contains a space, so we are guaranteed to have no name
@@ -39,11 +36,12 @@ impl TypeNode {
 impl CheapClone for TypeNode {}
 impl Debug for TypeNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.cell.fmt(f)
+        write!(f, "{:?}", self.cell.as_ref())
     }
 }
 impl NodeTrait for TypeNode {}
 
+#[derive(Debug)]
 struct TypeConstraint {
     pub lhs: TypeCell,
     pub rhs: TypeCell,
@@ -89,6 +87,23 @@ impl StaticAnalyzer {
 
         let substitution = self.unify_constraints()?;
         for (ty, sub_ty) in &substitution {
+            match *sub_ty.cell.as_ref() {
+                Type::Var(_) => {
+                    self.report_ambiguous_type(
+                        sub_ty.cell.clone(),
+                        "Type variable not resolved (bug?)".into()
+                    );
+                    return None;
+                }
+                Type::Array(_, ARRAY_TYPE_UNKNOWN_SIZE) => {
+                    self.report_ambiguous_type(
+                        sub_ty.cell.clone(),
+                        "Array size not resolved".into()
+                    );
+                    return None;
+                }
+                _ => {}
+            }
             *ty.cell.as_mut() = sub_ty.get();
         }
 
@@ -106,7 +121,7 @@ impl StaticAnalyzer {
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Warning)
-                .without_loc()
+                .at_region(dead_node.start(), 1)
                 .message("Statement is never reached".into())
                 .build()
         );
@@ -114,7 +129,7 @@ impl StaticAnalyzer {
             ErrorBuilder::new()
                 .of_style(Style::Secondary)
                 .at_level(Level::Warning)
-                .without_loc()
+                .at_region(term_node.start(), 1)
                 .message("   ...".into())
                 .explain(format!(
                     "Returned from function `{}` here",
@@ -129,11 +144,13 @@ impl StaticAnalyzer {
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
+                .with_code(ErrorCode::InvalidTopLevelConstruct)
                 .at_token(func_name)
                 .message(format!(
                     "Function `{}` does not return from all paths",
                     func_name.value
                 ))
+                .fix("Consider adding a `return` statement at the end of the function".into())
                 .build()
         );
     }
@@ -153,22 +170,37 @@ impl StaticAnalyzer {
         );
     }
 
-    fn report_unification_failure(
-        &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Token, rhs_ctx: Token
+    fn report_ambiguous_type(
+        &mut self, ty: TypeCell, /* expr: &Expr, */ explain: String
     ) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::TypeError)
-                .at_token(&lhs_ctx)
-                .message(format!(
-                    "Failed to unify types `{}` and `{}`",
-                    lhs, rhs
-                ))
-                .explain(format!("Type inferred here to be `{}`", lhs))
+                // .at_token(&expr.start)
+                .without_loc()
+                .message(format!("Ambiguous type `{}`", ty))
+                .explain(explain)
                 .build()
         );
+    }
+
+    fn report_unification_failure(
+        &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Token,
+        rhs_ctx: Token, fix: Option<String>
+    ) {
+        let mut builder = ErrorBuilder::new()
+            .of_style(Style::Primary)
+            .at_level(Level::Error)
+            .with_code(ErrorCode::TypeError)
+            .at_token(&lhs_ctx)
+            .message(format!("Failed to unify types `{}` and `{}`", lhs, rhs))
+            .explain(format!("Type inferred here to be `{}`", lhs));
+        if let Some(fix) = fix {
+            builder = builder.fix(fix);
+        }
+        self.report(builder.build());
         if lhs_ctx.loc != rhs_ctx.loc {
             self.report(
                 ErrorBuilder::new()
@@ -270,6 +302,43 @@ impl StaticAnalyzer {
                         *expr.ty.as_mut() = Type::Int64;
                     }
                     _ => ()
+                }
+            }
+            ExprValue::HardwareMap(map_token, _, f, arr) => {
+                *expr.ty.as_mut() = self.new_type_var();
+                let arr_ty = self.visit_expr(arr)?;
+                if let Some(f_type) = self.env.find(f.value.clone()) {
+                    // f : pure (Int64) -> Int64
+                    self.add_constraint(
+                        f_type.clone(),
+                        TypeCell::new(Type::Function {
+                            is_pure: true,
+                            args: vec![Type::Int64],
+                            ret: Box::new(Type::Int64)
+                        }),
+                        f.clone(),
+                        map_token.clone()
+                    );
+                    // arr_ty = Int64[?]
+                    self.add_constraint(
+                        arr_ty.clone(),
+                        TypeCell::new(Type::Array(
+                            Type::int64_singleton(),
+                            ARRAY_TYPE_UNKNOWN_SIZE
+                        )),
+                        arr.start.clone(),
+                        map_token.clone()
+                    );
+                    // expr.ty = arr_ty
+                    self.add_constraint(
+                        expr.ty.clone(),
+                        arr_ty,
+                        map_token.clone(),
+                        arr.start.clone()
+                    );
+                } else {
+                    self.report_unbound_name(f);
+                    return None;
                 }
             }
         };
@@ -385,6 +454,7 @@ impl StaticAnalyzer {
         Some(())
     }
 
+    /// Whenever possible, pass `lhs` as the type to be unified into `rhs`.
     fn unify(
         &mut self, dsu: &mut DisjointSets<TypeNode>, lhs: TypeCell,
         rhs: TypeCell, lhs_ctx: Token, rhs_ctx: Token
@@ -413,42 +483,58 @@ impl StaticAnalyzer {
                     dsu.union(rhs_r, lhs_r, false)
                         .ok_or_else(|| "dsu union failed".to_string())?;
                 }
-                // TODO: impl when they are the same type constructor
-                // in which case we need to deal with subterms and unify those
-                // but like we'd need to make ref cells for those ig??
                 (
                     Type::Array(lhs_element_ty, lhs_size),
                     Type::Array(rhs_element_ty, rhs_size)
-                ) => {
-                    match (lhs_size, rhs_size) {
-                        (ARRAY_TYPE_UNKNOWN_SIZE, ARRAY_TYPE_UNKNOWN_SIZE) => {
-                            todo!("fail here")
-                        }
-                        (ARRAY_TYPE_UNKNOWN_SIZE, _) => {
-                            dsu.union(lhs_r, rhs_r, false).ok_or_else(
-                                || "dsu union failed".to_string()
-                            )?;
-                        }
-                        (_, ARRAY_TYPE_UNKNOWN_SIZE) => {
-                            dsu.union(rhs_r, lhs_r, false).ok_or_else(
-                                || "dsu union failed".to_string()
-                            )?;
-                        }
-                        _ => {
-                            if lhs_size != rhs_size {
-                                self.report(
-                                    ErrorBuilder::new()
-                                        .of_style(Style::Primary)
-                                        .at_level(Level::Error)
-                                        .with_code(ErrorCode::TypeError)
-                                        .at_token(&lhs_ctx)
-                                        .message(format!(
-                                            "Array sizes don't match: {} != {}",
-                                            lhs_size, rhs_size
-                                        ))
-                                        .build()
-                                );
-                                self.report(
+                ) => match (lhs_size, rhs_size) {
+                    (ARRAY_TYPE_UNKNOWN_SIZE, ARRAY_TYPE_UNKNOWN_SIZE) => {
+                        dsu.union(lhs_r, rhs_r, true)
+                            .ok_or_else(|| "dsu union failed".to_string())?;
+                        self.unify(
+                            dsu,
+                            lhs_element_ty,
+                            rhs_element_ty,
+                            lhs_ctx,
+                            rhs_ctx
+                        )?;
+                    }
+                    (ARRAY_TYPE_UNKNOWN_SIZE, _) => {
+                        dsu.union(lhs_r, rhs_r, false)
+                            .ok_or_else(|| "dsu union failed".to_string())?;
+                        self.unify(
+                            dsu,
+                            lhs_element_ty,
+                            rhs_element_ty,
+                            lhs_ctx,
+                            rhs_ctx
+                        )?;
+                    }
+                    (_, ARRAY_TYPE_UNKNOWN_SIZE) => {
+                        dsu.union(rhs_r, lhs_r, false)
+                            .ok_or_else(|| "dsu union failed".to_string())?;
+                        self.unify(
+                            dsu,
+                            rhs_element_ty,
+                            lhs_element_ty,
+                            lhs_ctx,
+                            rhs_ctx
+                        )?;
+                    }
+                    _ => {
+                        if lhs_size != rhs_size {
+                            self.report(
+                                ErrorBuilder::new()
+                                    .of_style(Style::Primary)
+                                    .at_level(Level::Error)
+                                    .with_code(ErrorCode::TypeError)
+                                    .at_token(&lhs_ctx)
+                                    .message(format!(
+                                        "Array sizes don't match: {} != {}",
+                                        lhs_size, rhs_size
+                                    ))
+                                    .build()
+                            );
+                            self.report(
                                     ErrorBuilder::new()
                                         .of_style(Style::Secondary)
                                         .at_level(Level::Error)
@@ -459,20 +545,53 @@ impl StaticAnalyzer {
                                         .build()
                                 );
 
-                                return Err("array type error".into());
-                            }
+                            return Err("array type error".into());
                         }
+                    }
+                },
+                (
+                    Type::Function {
+                        is_pure: lhs_is_pure,
+                        args: lhs_args,
+                        ret: lhs_ret
+                    },
+                    Type::Function {
+                        is_pure: rhs_is_pure,
+                        args: rhs_args,
+                        ret: rhs_ret
+                    }
+                ) => {
+                    if !lhs_is_pure && rhs_is_pure {
+                        self.report_unification_failure(
+                            lhs,
+                            rhs,
+                            lhs_ctx.clone(),
+                            lhs_ctx.clone(),
+                            Some("Try marking the function as `pure`".into())
+                        );
+                        return Err("unification failure".into());
+                    }
+                    for (lhs_arg, rhs_arg) in zip(lhs_args, rhs_args) {
+                        self.unify(
+                            dsu,
+                            TypeCell::new(lhs_arg),
+                            TypeCell::new(rhs_arg),
+                            lhs_ctx.clone(),
+                            rhs_ctx.clone()
+                        )?;
                     }
                     self.unify(
                         dsu,
-                        lhs_element_ty,
-                        rhs_element_ty,
+                        TypeCell::new(*lhs_ret),
+                        TypeCell::new(*rhs_ret),
                         lhs_ctx,
                         rhs_ctx
                     )?;
                 }
                 _ => {
-                    self.report_unification_failure(lhs, rhs, lhs_ctx, rhs_ctx);
+                    self.report_unification_failure(
+                        lhs, rhs, lhs_ctx, rhs_ctx, None
+                    );
                     return Err("unification failure".into());
                 }
             }
@@ -498,6 +617,7 @@ impl StaticAnalyzer {
                     }
                 });
         }
+        dsu.collapse();
         Some(dsu)
     }
 }

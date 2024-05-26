@@ -4,6 +4,7 @@ pub trait NodeTrait: Eq + Hash + Clone {}
 
 /// For a node `x`, when the node data is `(p, r)`, `x`'s parent is `p` and
 /// `x`'s rank is `r`.
+#[derive(Clone)]
 pub struct NodeData<T> {
     parent: T,
     rank: usize
@@ -73,6 +74,14 @@ impl<T: NodeTrait> DisjointSets<T> {
             }
         }
         Some(a)
+    }
+
+    /// Optimizes `find` and `union` access for all nodes.
+    pub fn collapse(&mut self) {
+        let keys = self.nodes.keys().cloned().collect::<Vec<_>>();
+        for key in keys {
+            self.find(key.clone());
+        }
     }
 }
 

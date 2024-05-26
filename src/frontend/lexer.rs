@@ -191,6 +191,8 @@ impl Iterator for Lexer {
             | "}" => { TokenType::RightBrace }
             | "[" => { TokenType::LeftBracket }
             | "]" => { TokenType::RightBracket }
+            | "<" => { TokenType::LeftAngle }
+            | ">" => { TokenType::RightAngle }
             | "=" => { TokenType::Assign }
             | ":" => { TokenType::Colon }
             | "..." => { TokenType::Dots }
@@ -200,6 +202,7 @@ impl Iterator for Lexer {
             | "let" => { TokenType::Let }
             | "return" => { TokenType::Return }
             | "pure" => { TokenType::Pure }
+            | "@map" => { TokenType::HardwareMap }
             | _ {
                 if self.current().is_numeric() {
                     Some(self.make_number_token())

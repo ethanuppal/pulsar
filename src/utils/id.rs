@@ -16,7 +16,7 @@ lazy_static! {
 impl Gen {
     /// Returns an identifier unique among all [`Gen::next`] calls with the same
     /// argument `name`.
-    pub fn next(name: &'static str) -> i64 {
+    pub fn next(name: &'static str) -> Id {
         let mut id_map = GEN_SINGLETON.id_map.lock().unwrap();
         if let Some(id) = id_map.get_mut(&name) {
             let result = *id;

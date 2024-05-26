@@ -31,15 +31,15 @@ mod tests {
     fn test_lexer() {
         let error_manager = ErrorManager::with_max_count(5);
         assert_snapshot!(lexer_output(
-            "tests/data/lexer_in1.pl",
+            "tests/data/lexer_in1.plsr",
             error_manager.clone()
         ));
         assert_snapshot!(lexer_output(
-            "tests/data/lexer_in2.pl",
+            "tests/data/lexer_in2.plsr",
             error_manager.clone()
         ));
         assert_snapshot!(lexer_output(
-            "tests/data/lexer_in3.pl",
+            "tests/data/lexer_in3.plsr",
             error_manager.clone()
         ));
     }

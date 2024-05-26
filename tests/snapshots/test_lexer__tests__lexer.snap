@@ -1,17 +1,17 @@
 ---
 source: tests/test_lexer.rs
-expression: "lexer_output(\"tests/data/lexer_in1.pl\", error_manager.clone())"
+expression: "lexer_output(\"tests/data/lexer_in1.plsr\", error_manager.clone())"
 ---
-(func, ty = func, loc = tests/data/lexer_in1.pl:1:1)
-(main, ty = identifier, loc = tests/data/lexer_in1.pl:1:6)
-((, ty = left-par, loc = tests/data/lexer_in1.pl:1:10)
-(), ty = right-par, loc = tests/data/lexer_in1.pl:1:11)
-({, ty = left-brace, loc = tests/data/lexer_in1.pl:1:13)
-(\n, ty = newline, loc = tests/data/lexer_in1.pl:1:14)
-(this, ty = identifier, loc = tests/data/lexer_in1.pl:2:5)
-(is, ty = identifier, loc = tests/data/lexer_in1.pl:2:10)
-(a, ty = identifier, loc = tests/data/lexer_in1.pl:2:13)
-(test, ty = identifier, loc = tests/data/lexer_in1.pl:2:15)
-(\n, ty = newline, loc = tests/data/lexer_in1.pl:2:19)
-(}, ty = right-brace, loc = tests/data/lexer_in1.pl:3:1)
-(\n, ty = newline, loc = tests/data/lexer_in1.pl:3:2)
+(func, ty = func, loc = tests/data/lexer_in1.plsr:1:1)
+(main, ty = identifier, loc = tests/data/lexer_in1.plsr:1:6)
+((, ty = left-par, loc = tests/data/lexer_in1.plsr:1:10)
+(), ty = right-par, loc = tests/data/lexer_in1.plsr:1:11)
+({, ty = left-brace, loc = tests/data/lexer_in1.plsr:1:13)
+(\n, ty = newline, loc = tests/data/lexer_in1.plsr:1:14)
+(this, ty = identifier, loc = tests/data/lexer_in1.plsr:2:5)
+(is, ty = identifier, loc = tests/data/lexer_in1.plsr:2:10)
+(a, ty = identifier, loc = tests/data/lexer_in1.plsr:2:13)
+(test, ty = identifier, loc = tests/data/lexer_in1.plsr:2:15)
+(\n, ty = newline, loc = tests/data/lexer_in1.plsr:2:19)
+(}, ty = right-brace, loc = tests/data/lexer_in1.plsr:3:1)
+(\n, ty = newline, loc = tests/data/lexer_in1.plsr:3:2)

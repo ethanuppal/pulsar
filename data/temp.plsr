@@ -1,0 +1,7 @@
+pure func square(value: Int) -> Int {
+    return value * value
+}
+
+func sum_squares(input: Int[4]) -> Int {
+    let squares = @map<4>(square, input)
+}

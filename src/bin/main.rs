@@ -17,7 +17,7 @@ fn handle_errors(error_manager: Rc<RefCell<ErrorManager>>) -> Result<(), ()> {
 }
 
 pub fn main() -> Result<(), ()> {
-    let filename = "data/test.pl";
+    let filename = "data/test.plsr";
     let source = Source::file(
         filename.into(),
         fs::read_to_string(filename).expect("Could not read file")

@@ -108,6 +108,7 @@ impl Display for Error {
         if self.loc.is_invalid() {
             return Ok(());
         }
+        writeln!(f, "{}", "     │  ".dimmed())?;
         let (lines, current_line_pos) = self.loc.lines(1, 1);
         for (i, line) in lines.iter().enumerate() {
             if i > 0 {
@@ -147,7 +148,6 @@ impl Display for Error {
                     fn create_error_pointer(length: usize) -> String {
                         match length {
                             0 => "".into(),
-                            1 => "│".into(),
                             n => format!("└{}", "─".repeat(n - 1))
                         }
                     }
@@ -165,8 +165,9 @@ impl Display for Error {
                 write!(f, "{}", line)?;
             }
         }
+        write!(f, "\n{}", "     │  ".dimmed())?;
         if let Some(fix) = &self.fix {
-            write!(f, "\n{}", fix.bold())?;
+            write!(f, "\nSuggestion: {}", fix.bold())?;
         }
         Ok(())
     }

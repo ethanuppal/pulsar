@@ -50,52 +50,62 @@ mod tests {
     fn test_typeinferer() {
         let error_manager = ErrorManager::with_max_count(5);
         assert_snapshot!(typeinferer_output(
-            "tests/data/infer1.pl",
+            "tests/data/infer1.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(typeinferer_output(
-            "tests/data/infer2.pl",
+            "tests/data/infer2.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(typeinferer_output(
-            "tests/data/infer3.pl",
+            "tests/data/infer3.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(typeinferer_output(
-            "tests/data/infer4.pl",
+            "tests/data/infer4.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(typeinferer_output(
-            "tests/data/infer5.pl",
+            "tests/data/infer5.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(typeinferer_output(
-            "tests/data/infer6.pl",
+            "tests/data/infer6.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(typeinferer_output(
-            "tests/data/infer7.pl",
+            "tests/data/infer7.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(typeinferer_output(
-            "tests/data/infer8.pl",
+            "tests/data/infer8.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(typeinferer_output(
-            "tests/data/infer9.pl",
+            "tests/data/infer9.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(typeinferer_output(
-            "tests/data/infer10.pl",
+            "tests/data/infer10.plsr",
+            error_manager.clone()
+        ));
+
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer11.plsr",
+            error_manager.clone()
+        ));
+
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer12.plsr",
             error_manager.clone()
         ));
     }

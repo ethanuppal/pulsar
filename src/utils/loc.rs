@@ -191,8 +191,8 @@ impl PartialEq for Loc {
 
 pub trait Region {
     /// The starting location of this region.
-    fn start() -> Loc;
+    fn start(&self) -> Loc;
 
     /// Must be in the same source and monotonically after [`Region::start`].
-    fn end() -> Loc;
+    fn end(&self) -> Loc;
 }

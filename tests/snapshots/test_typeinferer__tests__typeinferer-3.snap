@@ -1,18 +1,22 @@
 ---
 source: tests/test_typeinferer.rs
-expression: "typeinferer_output(\"tests/data/infer3.pl\", error_manager.clone())"
+expression: "typeinferer_output(\"tests/data/infer3.plsr\", error_manager.clone())"
 ---
 func main() -> Unit {
     let big: Int64[10] = [...]: Int64[1]
     let small: Int64[1] = big: Int64[1]
     return
 }
-error[E0010]: tests/data/infer3.pl:2:9: Array sizes don't match: 10 != 1
+error[E0010]: tests/data/infer3.plsr:2:9: Array sizes don't match: 10 != 1
+     │  
    1 │  func main() {
    2 │      let big: Int[10] = [...]
    3 │      let small: Int[1] = big
+     │  
 ...
+     │  
    1 │  func main() {
    2 │      let big: Int[10] = [...]
-                               │ Inferred to have size 1 here based on environment
+                               └ Inferred to have size 1 here based on environment
    3 │      let small: Int[1] = big
+     │

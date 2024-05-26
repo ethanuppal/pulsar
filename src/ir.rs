@@ -1,10 +1,11 @@
-use self::{operand::Operand, variable::Variable};
+use self::{label::LabelName, operand::Operand, variable::Variable};
 use std::fmt::Display;
 
 pub mod basic_block;
 pub mod branch_condition;
 pub mod control_flow_graph;
 pub mod generator;
+pub mod label;
 pub mod operand;
 pub mod variable;
 
@@ -13,7 +14,19 @@ pub enum Ir {
     Mul(Variable, Operand, Operand),
     Assign(Variable, Operand),
     GetParam(Variable),
-    Return(Option<Operand>)
+    Return(Option<Operand>),
+    LocalAlloc(Variable, usize),
+    Store {
+        result: Variable,
+        value: Operand,
+        index: usize
+    },
+    Map {
+        result: Variable,
+        parallel_factor: usize,
+        f: LabelName,
+        input: Operand
+    }
 }
 
 impl Display for Ir {
@@ -35,7 +48,29 @@ impl Display for Ir {
                 } else {
                     "".into()
                 }
-            )
+            ),
+            Self::LocalAlloc(result, size) => {
+                write!(f, "{} = <{} bytes>", result, size)
+            }
+            Self::Store {
+                result,
+                value,
+                index
+            } => {
+                write!(f, "{}[{}] = {}", result, index, value)
+            }
+            Self::Map {
+                result,
+                parallel_factor,
+                f: fun,
+                input
+            } => {
+                write!(
+                    f,
+                    "{} = @map<{}>({}, {})",
+                    result, parallel_factor, fun, input
+                )
+            }
         }
     }
 }

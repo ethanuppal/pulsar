@@ -3,7 +3,7 @@ use pulsar::utils::{error::*, loc::*};
 pub fn main() {
     let code = "import std\n\nfunc main() {\n    std::print(1)\n}\n";
     let source = Source::File {
-        name: "main.pl".into(),
+        name: "main.plsr".into(),
         contents: code.into()
     };
     let loc = Loc {

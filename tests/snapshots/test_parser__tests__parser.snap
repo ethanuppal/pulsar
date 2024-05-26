@@ -1,6 +1,6 @@
 ---
 source: tests/test_parser.rs
-expression: "parser_output(\"tests/data/parserfail_in1.pl\", error_manager.clone())"
+expression: "parser_output(\"tests/data/parserfail_in1.plsr\", error_manager.clone())"
 ---
 func main() -> Unit {
     return
@@ -8,35 +8,47 @@ func main() -> Unit {
 func nested() -> Unit {
     return
 }
-error[E0006]: tests/data/parserfail_in1.pl:6:5: Invalid token at the start of statement
+error[E0006]: tests/data/parserfail_in1.plsr:6:5: Invalid token at the start of statement
+     │  
    5 │  func foo() {
    6 │      fun bad_nested() {
    7 │  
+     │  
 
-error[E0005]: tests/data/parserfail_in1.pl:12:5: Unexpected top-level construct
+error[E0005]: tests/data/parserfail_in1.plsr:12:5: Unexpected top-level construct
+     │  
   11 │  func foo() {
   12 │      func nested() {
   13 │          
-Did you mean to place it at the top level?
+     │  
+Suggestion: Did you mean to place it at the top level?
 
-error[E0003]: tests/data/parserfail_in1.pl:12:5: Expected 'right-brace' at end of function body
+error[E0003]: tests/data/parserfail_in1.plsr:12:5: Expected 'right-brace' at end of function body
+     │  
   11 │  func foo() {
   12 │      func nested() {
             └─── Received 'func' here
   13 │          
+     │  
    ...
+     │  
   10 │  
   11 │  func foo() { 
-                   │ function body opened here
+                   └ function body opened here
   12 │      func nested() {
+     │  
 
-error[E0004]: tests/data/parserfail_in1.pl:15:1: Unexpected right-brace at top level
+error[E0004]: tests/data/parserfail_in1.plsr:15:1: Unexpected right-brace at top level
+     │  
   14 │      }
   15 │  } 
   16 │  
-Allowed constructs at top level include functions and imports
+     │  
+Suggestion: Allowed constructs at top level include functions and imports
 
-error[E0003]: tests/data/parserfail_in1.pl:19:1: Expected 'identifier' for parameter name in `missing_close`
+error[E0003]: tests/data/parserfail_in1.plsr:19:1: Expected 'identifier' for parameter name in `missing_close`
+     │  
   18 │  
   19 │  func missing_close_2() {
         └─── Received 'func' here
+     │

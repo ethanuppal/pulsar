@@ -9,7 +9,7 @@ lazy_static! {
 
 pub const ARRAY_TYPE_UNKNOWN_SIZE: isize = -1;
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub enum Type {
     Unknown,
     Unit,
@@ -53,6 +53,58 @@ impl Type {
     pub fn unit_singleton() -> TypeCell {
         UNIT_TYPE_CELL.to_owned()
     }
+
+    /// The number of bytes to store one instance of a value of the current
+    /// type.
+    pub fn size(&self) -> usize {
+        match &self {
+            Type::Unknown => panic!("Type::Unknown does not have a size"),
+            Type::Unit => 0,
+            Type::Var(_) => {
+                panic!("Type::Var should have been resolved by type inference")
+            }
+            Type::Name(_) => todo!("Need to figure out user-defined types"),
+            Type::Int64 => 8,
+            Type::Array(element_type, element_count) => {
+                element_type.as_ref().size() * (*element_count as usize)
+            }
+            Type::Function {
+                is_pure: _,
+                args: _,
+                ret: _
+            } => 8
+        }
+    }
+
+    pub fn as_array_type(&self) -> (TypeCell, isize) {
+        match &self {
+            Self::Array(element_type, size) => (element_type.clone(), *size),
+            _ => panic!(
+                "{}",
+                format!(
+                    "Type::as_array_type called on non-array type `{}`",
+                    &self
+                )
+            )
+        }
+    }
+
+    pub fn mangle(&self) -> String {
+        match &self {
+            Type::Unknown | Type::Var(_) => panic!(),
+            Type::Unit => "u".into(),
+            Type::Name(name) => format!("{}{}", name.len(), name),
+            Type::Int64 => "q".into(),
+            Type::Array(element_type, count) => {
+                format!("A{}{}", count, element_type)
+            }
+            Type::Function {
+                is_pure: _,
+                args: _,
+                ret: _
+            } => todo!()
+        }
+    }
 }
 
 impl Display for Type {
@@ -75,13 +127,13 @@ impl Display for Type {
             ),
             Self::Function { is_pure, args, ret } => write!(
                 f,
-                "({}) -> {}{}",
+                "{}({}) -> {}",
+                if *is_pure { "pure " } else { "" },
                 args.iter()
                     .map(|ty| ty.to_string())
                     .collect::<Vec<_>>()
                     .join(", "),
                 ret,
-                if *is_pure { " pure" } else { "" }
             )
         }
     }

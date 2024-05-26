@@ -445,7 +445,7 @@ impl Parser {
             None
         } else if let Some(prefix_op) = Op::from(self.current().ty) {
             self.parse_prefix_expr(prefix_op, self.current().clone())
-        } else if self.current().ty == TokenType::LeftPar {
+        } else if self.is_at(TokenType::LeftPar) {
             let open_paren = self.take();
             let expr = self.parse_expr()?;
             let closing_paren = expect! { self in
@@ -460,6 +460,28 @@ impl Parser {
             } else {
                 Some(expr)
             }
+        } else if self.is_at(TokenType::HardwareMap) {
+            let map_token = expect! { self in TokenType::HardwareMap => "at start of hardware map" }?;
+            expect! { self in TokenType::LeftAngle => "in hardware map expression" }?;
+            let parallel_factor_token = expect! { self in TokenType::Integer => "in hardware map expression" }?;
+            expect! { self in TokenType::RightAngle => "in hardware map expression" }?;
+            expect! { self in TokenType::LeftPar => "in hardware map expression" }?;
+            let f = expect! { self in TokenType::Identifier => "in hardware map expression" }?;
+            expect! { self in TokenType::Comma => "in hardware map expression" }?;
+            let arr = self.parse_expr()?;
+            expect! { self in TokenType::RightPar => "in hardware map expression" }?;
+            // TODO: check for negatives
+            Some(Expr {
+                value: ExprValue::HardwareMap(
+                    map_token.clone(),
+                    usize::from_str_radix(&parallel_factor_token.value, 10)
+                        .unwrap(),
+                    f,
+                    Box::new(arr)
+                ),
+                start: map_token,
+                ty: Type::make_unknown()
+            })
         } else {
             self.parse_literal_expr()
         }

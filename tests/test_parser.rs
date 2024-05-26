@@ -42,42 +42,42 @@ mod tests {
     fn test_parser() {
         let error_manager = ErrorManager::with_max_count(5);
         assert_snapshot!(parser_output(
-            "tests/data/parserfail_in1.pl",
+            "tests/data/parserfail_in1.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(parser_output(
-            "tests/data/parser_in1.pl",
+            "tests/data/parser_in1.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(parser_output(
-            "tests/data/parser_in2.pl",
+            "tests/data/parser_in2.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(parser_output(
-            "tests/data/parser_in3.pl",
+            "tests/data/parser_in3.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(parser_output(
-            "tests/data/parser_in4.pl",
+            "tests/data/parser_in4.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(parser_output(
-            "tests/data/parser_in5.pl",
+            "tests/data/parser_in5.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(parser_output(
-            "tests/data/parser_in6.pl",
+            "tests/data/parser_in6.plsr",
             error_manager.clone()
         ));
 
         assert_snapshot!(parser_output(
-            "tests/data/parser_in7.pl",
+            "tests/data/parser_in7.plsr",
             error_manager.clone()
         ));
     }

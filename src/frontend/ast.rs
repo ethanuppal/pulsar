@@ -1,9 +1,17 @@
 use super::{
-    token::Token,
+    token::{Token, TokenType},
     ty::{StmtType, Type, TypeCell}
 };
-use crate::utils::{format, mutcell::MutCell};
-use std::{cell::RefCell, fmt, fmt::Display, rc::Rc};
+use crate::utils::{
+    format,
+    loc::{Loc, Region},
+    mutcell::MutCell
+};
+use std::{
+    cell::RefCell,
+    fmt::{self, Display},
+    rc::Rc
+};
 
 pub type Param = (Token, Type);
 
@@ -17,7 +25,12 @@ pub enum ExprValue {
     /// `should_continue`.
     ArrayLiteral(Vec<Expr>, bool),
     PrefixOp(Token, Box<Expr>),
-    BinOp(Box<Expr>, Token, Box<Expr>)
+    BinOp(Box<Expr>, Token, Box<Expr>),
+
+    /// `HardwareMap(map_token, parallel_factor, f, arr)` is an array produced
+    /// by applying `f` elementwise to `arr` using a hardware parallelism
+    /// factor of `parallel_factor`.
+    HardwareMap(Token, usize, Token, Box<Expr>)
 }
 
 #[derive(Clone)]
@@ -60,6 +73,9 @@ impl Display for Expr {
             }
             ExprValue::BinOp(lhs, op, rhs) => {
                 write!(f, "({} {} {})", lhs, op.value, rhs)?;
+            }
+            ExprValue::HardwareMap(_, parallel_factor, fun, arr) => {
+                write!(f, "@map<{}>({}, {})", parallel_factor, fun.value, arr)?;
             }
         }
 
@@ -165,5 +181,23 @@ impl Node {
 impl Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.pretty(0).fmt(f)
+    }
+}
+
+impl Region for Node {
+    fn start(&self) -> Loc {
+        self.start_token.clone_out().unwrap().loc
+    }
+
+    fn end(&self) -> Loc {
+        let end_token = self.end_token.clone_out().unwrap();
+        let mut loc = end_token.loc;
+        // tokens are always on one line
+        if end_token.ty != TokenType::Newline {
+            let length = end_token.value.len();
+            loc.pos += length;
+            loc.col += length;
+        }
+        loc
     }
 }
