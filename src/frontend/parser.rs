@@ -53,6 +53,14 @@ impl Parser {
             .unwrap_or_default()
     }
 
+    fn next_is(&self, ty: TokenType) -> bool {
+        if self.pos + 1 < self.buffer.len() {
+            self.buffer[self.pos + 1].ty == ty
+        } else {
+            false
+        }
+    }
+
     fn advance(&mut self) {
         self.pos += 1
     }
@@ -439,6 +447,50 @@ impl Parser {
         })
     }
 
+    fn parse_call_expr(&mut self) -> Option<Expr> {
+        let name = expect! { self in TokenType::Identifier => "at start of call expression" }?;
+        let open_par =
+            expect! { self in TokenType::LeftPar => "in call expression" }?;
+
+        let mut args = vec![];
+        let mut i = 0;
+        while !self.is_eof() && self.current().ty != TokenType::RightPar {
+            if i > 0 {
+                expect! { self in TokenType::Comma => "between array elements" }?;
+                self.consume_ignored();
+            }
+            if self.is_at(TokenType::RightPar) {
+                break;
+            }
+
+            let arg_opt = self.parse_expr();
+            if let Some(arg) = arg_opt {
+                args.push(arg);
+            } else {
+                self.synchronize(|token| token.ty == TokenType::RightPar);
+                return None;
+            }
+
+            i += 1;
+        }
+
+        let closing_paren = expect! { self in
+            TokenType::RightPar => "at end of call expression"
+        };
+        if closing_paren.is_none() {
+            self.report(
+                self.error_refback(&open_par, "Parentheses opened here".into())
+            );
+            None
+        } else {
+            Some(Expr {
+                value: ExprValue::Call(name.clone(), args),
+                ty: Type::make_unknown(),
+                start: name
+            })
+        }
+    }
+
     fn parse_primary_expr(&mut self) -> Option<Expr> {
         if self.is_eof() {
             self.report(self.error_unexpected_eof("in expression".into()));
@@ -482,6 +534,11 @@ impl Parser {
                 start: map_token,
                 ty: Type::make_unknown()
             })
+        } else if self.is_at(TokenType::Identifier)
+            && self.next_is(TokenType::LeftPar)
+        {
+            // TODO: allow calling expressions and more complex names with `::`
+            self.parse_call_expr()
         } else {
             self.parse_literal_expr()
         }
@@ -650,10 +707,9 @@ impl Parser {
     }
 
     fn parse_func(&mut self) -> Option<Node> {
-        let mut is_pure = false;
+        let mut pure_token = None;
         if self.is_at(TokenType::Pure) {
-            self.advance();
-            is_pure = true;
+            pure_token = Some(self.take());
         }
 
         expect! { self in
@@ -722,7 +778,7 @@ impl Parser {
                 name: name.clone(),
                 params,
                 ret,
-                is_pure,
+                pure_token,
                 body
             },
             ty: StmtType::make_unknown(),

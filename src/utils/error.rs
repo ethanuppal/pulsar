@@ -7,7 +7,7 @@ use std::{cell::RefCell, fmt::Display, io, rc::Rc};
 #[repr(i32)]
 #[derive(Clone, Copy)]
 pub enum ErrorCode {
-    Unknown,
+    UnknownError,
     UnrecognizedCharacter,
     UnexpectedEOF,
     UnexpectedToken,
@@ -17,7 +17,7 @@ pub enum ErrorCode {
     InvalidOperatorSyntax,
     MalformedType,
     UnboundName,
-    TypeError
+    StaticAnalysisIssue
 }
 
 impl Display for ErrorCode {
@@ -28,7 +28,7 @@ impl Display for ErrorCode {
 
 impl Default for ErrorCode {
     fn default() -> Self {
-        Self::Unknown
+        Self::UnknownError
     }
 }
 

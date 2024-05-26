@@ -1,6 +1,10 @@
 use super::{
-    basic_block::BasicBlockCell, control_flow_graph::ControlFlowGraph,
-    label::LabelName, operand::Operand, variable::Variable, Ir
+    basic_block::BasicBlockCell,
+    control_flow_graph::ControlFlowGraph,
+    label::{Label, LabelName},
+    operand::Operand,
+    variable::Variable,
+    Ir
 };
 use crate::{
     frontend::{
@@ -13,14 +17,14 @@ use crate::{
 use std::fmt::Display;
 
 pub enum GeneratedTopLevel {
-    Function { name: Token, cfg: ControlFlowGraph }
+    Function { name: Label, cfg: ControlFlowGraph }
 }
 
 impl Display for GeneratedTopLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             Self::Function { name, cfg } => {
-                writeln!(f, "func {}:", name.value)?;
+                writeln!(f, "{}:", name)?;
                 write!(f, "{}", cfg)
             }
         }
@@ -60,6 +64,26 @@ impl Generator {
             }
             ExprValue::BoundName(name) => {
                 Operand::Variable(*self.env.find(name.value.clone()).unwrap())
+            }
+            ExprValue::Call(name, args) => {
+                let mut arg_operands = vec![];
+                let mut arg_tys = vec![];
+                for arg in args {
+                    arg_tys.push(arg.ty.clone_out());
+                    let arg_operand = self.gen_expr(arg, block.clone());
+                    arg_operands.push(arg_operand);
+                }
+                let result = Variable::new();
+                block.as_mut().add(Ir::Call(
+                    result,
+                    LabelName::Native(
+                        name.value.clone(),
+                        arg_tys,
+                        Box::new(expr.ty.clone_out())
+                    ),
+                    arg_operands
+                ));
+                Operand::Variable(result)
             }
             ExprValue::ArrayLiteral(elements, _) => {
                 let (element_type, element_count) =
@@ -143,7 +167,8 @@ impl Generator {
     }
 
     fn gen_func(
-        &mut self, name: &Token, params: &Vec<Param>, body: &Vec<Node>
+        &mut self, name: &Token, params: &Vec<Param>, ret: Type,
+        body: &Vec<Node>
     ) -> GeneratedTopLevel {
         self.env.push();
         let cfg = ControlFlowGraph::new();
@@ -158,7 +183,15 @@ impl Generator {
         }
         self.env.pop();
         GeneratedTopLevel::Function {
-            name: name.clone(),
+            name: Label {
+                name: LabelName::Native(
+                    name.value.clone(),
+                    params.iter().map(|(_, ty)| ty.clone()).collect(),
+                    Box::new(ret)
+                ),
+                is_external: false,
+                is_global: false
+            },
             cfg
         }
     }
@@ -172,10 +205,10 @@ impl Iterator for Generator {
             NodeValue::Function {
                 name,
                 params,
-                ret: _,
-                is_pure: _,
+                ret,
+                pure_token: _,
                 body
-            } => Some(self.gen_func(&name, &params, &body)),
+            } => Some(self.gen_func(&name, &params, ret, &body)),
             _ => None
         }
     }

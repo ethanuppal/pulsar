@@ -109,4 +109,31 @@ mod tests {
             error_manager.clone()
         ));
     }
+
+    #[test]
+    fn test_infer13() {
+        let error_manager = ErrorManager::with_max_count(5);
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer13.plsr",
+            error_manager
+        ));
+    }
+
+    #[test]
+    fn test_infer14() {
+        let error_manager = ErrorManager::with_max_count(5);
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer14.plsr",
+            error_manager
+        ));
+    }
+
+    #[test]
+    fn test_infer15() {
+        let error_manager = ErrorManager::with_max_count(5);
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer15.plsr",
+            error_manager
+        ));
+    }
 }

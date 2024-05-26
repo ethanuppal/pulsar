@@ -8,7 +8,7 @@ pure func add(x: Int, y: Int) -> Int {
 
 func main() {
     let input: Int[8] = [...]
-    let squares = @map(square, input)
+    let squares = map(square, input)
     let sum = @reduce(add, 0, squares)
 }
 

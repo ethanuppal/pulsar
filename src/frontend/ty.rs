@@ -1,6 +1,6 @@
 use crate::utils::{id::Id, mutcell::MutCell};
 use lazy_static::lazy_static;
-use std::{cell::RefCell, fmt::Display, hash::Hash, rc::Rc};
+use std::{fmt::Display, hash::Hash};
 
 lazy_static! {
     pub static ref UNIT_TYPE_CELL: TypeCell = TypeCell::new(Type::Unit);
@@ -140,22 +140,14 @@ impl Display for Type {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub enum StmtType {
-    Unknown,
+pub enum StmtTermination {
     Terminal,
     Nonterminal
 }
 
-impl StmtType {
-    pub fn make_unknown() -> Rc<RefCell<StmtType>> {
-        Rc::new(RefCell::new(Self::Unknown))
-    }
-}
-
-impl Display for StmtType {
+impl Display for StmtTermination {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Unknown => "?",
             Self::Terminal => "Terminal",
             Self::Nonterminal => "Nonterminal"
         }
@@ -163,4 +155,37 @@ impl Display for StmtType {
     }
 }
 
+#[derive(Clone, PartialEq, Eq)]
+pub struct StmtType {
+    pub termination: StmtTermination,
+    pub is_pure: bool,
+    is_unknown: bool
+}
+
+impl StmtType {
+    pub fn from(termination: StmtTermination, is_pure: bool) -> StmtType {
+        StmtType {
+            termination,
+            is_pure,
+            is_unknown: false
+        }
+    }
+
+    pub fn make_unknown() -> StmtTypeCell {
+        StmtTypeCell::new(StmtType {
+            termination: StmtTermination::Nonterminal,
+            is_pure: false,
+            is_unknown: true
+        })
+    }
+}
+
+impl Display for StmtType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", if self.is_pure { "Pure" } else { "Impure" })?;
+        write!(f, "{}", self.termination)
+    }
+}
+
 pub type TypeCell = MutCell<Type>;
+pub type StmtTypeCell = MutCell<StmtType>;

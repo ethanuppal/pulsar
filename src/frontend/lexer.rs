@@ -202,7 +202,7 @@ impl Iterator for Lexer {
             | "let" => { TokenType::Let }
             | "return" => { TokenType::Return }
             | "pure" => { TokenType::Pure }
-            | "@map" => { TokenType::HardwareMap }
+            | "map" => { TokenType::HardwareMap }
             | _ {
                 if self.current().is_numeric() {
                     Some(self.make_number_token())

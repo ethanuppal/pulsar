@@ -3,5 +3,16 @@ pure func square(value: Int) -> Int {
 }
 
 func sum_squares(input: Int[4]) -> Int {
-    let squares = @map<4>(square, input)
+    let squares = map<4>(square, input)
 }
+
+// other test
+
+pure func multiply(x: Int, y: Int) -> Int {
+    return x * y
+}
+
+pure func square(value: Int) -> Int {
+    return multiply(value, value)
+}
+

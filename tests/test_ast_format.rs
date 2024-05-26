@@ -76,7 +76,7 @@ mod tests {
                     value: "foo".into(),
                     loc: Loc::default()
                 },
-                is_pure: false,
+                pure_token: None,
                 params: vec![],
                 ret: Type::Unit,body: body.clone() },
                 ty: StmtType::make_unknown(),
@@ -99,7 +99,7 @@ mod tests {
                 },
                 params: vec![],
                 ret: Type::Unit,
-                is_pure: true,
+                pure_token: Some(make_token(TokenType::Pure, "pure")),
                 body: body.clone()
             },
             ty: StmtType::make_unknown(),

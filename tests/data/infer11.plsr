@@ -3,6 +3,6 @@ func square(value: Int) -> Int {
 }
 
 func sum_squares(input: Int[4]) -> Int {
-    let squares = @map<1>(square, input)
+    let squares = map<1>(square, input)
     return 0
 }

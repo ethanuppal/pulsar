@@ -6,6 +6,6 @@ pure func square(value: Int64) -> Int64 {
     return (value: Int64 * value: Int64): Int64
 }
 func sum_squares(input: Int64[4]) -> Int64 {
-    let squares = @map<1>(square, input: Int64[4]): Int64[4]
+    let squares = map<1>(square, input: Int64[4]): Int64[4]
     return 0: Int64
 }

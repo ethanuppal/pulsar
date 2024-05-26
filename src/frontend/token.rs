@@ -49,7 +49,7 @@ impl Debug for TokenType {
                 Self::Func => "func",
                 Self::Let => "let",
                 Self::Return => "return",
-                Self::HardwareMap => "@map",
+                Self::HardwareMap => "map",
                 Self::Plus => "plus",
                 Self::Minus => "minus",
                 Self::Times => "times",

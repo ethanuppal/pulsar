@@ -1,29 +1,30 @@
 use super::{
     token::{Token, TokenType},
-    ty::{StmtType, Type, TypeCell}
+    ty::{StmtTypeCell, Type, TypeCell}
 };
 use crate::utils::{
     format,
     loc::{Loc, Region},
     mutcell::MutCell
 };
-use std::{
-    cell::RefCell,
-    fmt::{self, Display},
-    rc::Rc
-};
+use std::fmt::{self, Display};
 
 pub type Param = (Token, Type);
 
 #[derive(Clone)]
 pub enum ExprValue {
     ConstantInt(i64),
+    /// TODO: Support `::`s
     BoundName(Token),
+
+    /// TODO: Call an `expr` or some sort of chaining of `::`
+    Call(Token, Vec<Expr>),
 
     /// `ArrayLiteral(elements, should_continue)` is an array literal beginning
     /// with `elements` and filling the remainder of the array with zeros if
     /// `should_continue`.
     ArrayLiteral(Vec<Expr>, bool),
+
     PrefixOp(Token, Box<Expr>),
     BinOp(Box<Expr>, Token, Box<Expr>),
 
@@ -48,6 +49,17 @@ impl Display for Expr {
             }
             ExprValue::BoundName(name) => {
                 write!(f, "{}", name.value)?;
+            }
+            ExprValue::Call(name, args) => {
+                write!(
+                    f,
+                    "{}({})",
+                    name.value,
+                    args.iter()
+                        .map(|arg| arg.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )?;
             }
             ExprValue::ArrayLiteral(elements, should_continue) => {
                 write!(
@@ -75,7 +87,7 @@ impl Display for Expr {
                 write!(f, "({} {} {})", lhs, op.value, rhs)?;
             }
             ExprValue::HardwareMap(_, parallel_factor, fun, arr) => {
-                write!(f, "@map<{}>({}, {})", parallel_factor, fun.value, arr)?;
+                write!(f, "map<{}>({}, {})", parallel_factor, fun.value, arr)?;
             }
         }
 
@@ -94,7 +106,7 @@ pub enum NodeValue {
         name: Token,
         params: Vec<Param>,
         ret: Type,
-        is_pure: bool,
+        pure_token: Option<Token>,
         body: Vec<Node>
     },
     LetBinding {
@@ -111,7 +123,7 @@ pub enum NodeValue {
 #[derive(Clone)]
 pub struct Node {
     pub value: NodeValue,
-    pub ty: Rc<RefCell<StmtType>>,
+    pub ty: StmtTypeCell,
     pub start_token: MutCell<Option<Token>>,
     pub end_token: MutCell<Option<Token>>
 }
@@ -124,13 +136,13 @@ impl Node {
                 name,
                 params,
                 ret,
-                is_pure,
+                pure_token,
                 body
             } => {
                 let insert_newline = if body.is_empty() { "" } else { "\n" };
                 format!(
                     "{}func {}({}) -> {} {{{}{}{}{}}}",
-                    if *is_pure { "pure " } else { "" },
+                    if pure_token.is_some() { "pure " } else { "" },
                     name.value,
                     params
                         .iter()
@@ -175,6 +187,10 @@ impl Node {
         };
         result.push_str(&content);
         result
+    }
+
+    pub fn is_phantom(&self) -> bool {
+        self.start_token.as_ref().is_none() || self.end_token.as_ref().is_none()
     }
 }
 

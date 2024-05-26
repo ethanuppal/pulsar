@@ -1,0 +1,7 @@
+pure func multiply(x: Int, y: Int) -> Int {
+    return x * y
+}
+
+pure func square(value: Int) -> Int {
+    return multiply(value, value)
+}

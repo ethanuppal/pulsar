@@ -1,7 +1,10 @@
 use super::{
     ast::{Expr, ExprValue, Node, NodeValue},
     token::{Token, TokenType},
-    ty::{StmtType, Type, TypeCell, ARRAY_TYPE_UNKNOWN_SIZE}
+    ty::{
+        StmtTermination, StmtType, StmtTypeCell, Type, TypeCell,
+        ARRAY_TYPE_UNKNOWN_SIZE
+    }
 };
 use crate::utils::{
     context::{Context, Name},
@@ -114,13 +117,14 @@ impl StaticAnalyzer {
         self.error_manager.borrow_mut().record(error);
     }
 
-    fn report_dead_code(
+    fn warn_dead_code(
         &mut self, func_name: &Token, dead_node: &Node, term_node: &Node
     ) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Warning)
+                .with_code(ErrorCode::StaticAnalysisIssue)
                 .at_region(dead_node.start(), 1)
                 .message("Statement is never reached".into())
                 .build()
@@ -177,11 +181,54 @@ impl StaticAnalyzer {
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
-                .with_code(ErrorCode::TypeError)
+                .with_code(ErrorCode::StaticAnalysisIssue)
                 // .at_token(&expr.start)
                 .without_loc()
                 .message(format!("Ambiguous type `{}`", ty))
                 .explain(explain)
+                .build()
+        );
+    }
+
+    fn report_failed_purity_derivation(
+        &mut self, pure_token: &Token, name: &Token, impure_node: &Node
+    ) {
+        self.report(
+            ErrorBuilder::new()
+                .of_style(Style::Primary)
+                .at_level(Level::Error)
+                .with_code(ErrorCode::StaticAnalysisIssue)
+                .at_region(impure_node.start(), 1)
+                .message(format!(
+                    "Impure statement in `pure` function `{}`",
+                    name.value
+                ))
+                .build()
+        );
+        self.report(
+            ErrorBuilder::new()
+                .of_style(Style::Secondary)
+                .at_level(Level::Error)
+                .with_code(ErrorCode::StaticAnalysisIssue)
+                .at_token(pure_token)
+                .message("   ...".into())
+                .explain("Function declared pure here".into())
+                .fix("Consider marking called functions with `pure`".into())
+                .build()
+        );
+    }
+
+    fn report_called_non_function(&mut self, name: &Token) {
+        self.report(
+            ErrorBuilder::new()
+                .of_style(Style::Primary)
+                .at_level(Level::Error)
+                .with_code(ErrorCode::StaticAnalysisIssue)
+                .at_token(name)
+                .message(format!(
+                    "Cannot call non-function value `{}`",
+                    name.value
+                ))
                 .build()
         );
     }
@@ -193,7 +240,7 @@ impl StaticAnalyzer {
         let mut builder = ErrorBuilder::new()
             .of_style(Style::Primary)
             .at_level(Level::Error)
-            .with_code(ErrorCode::TypeError)
+            .with_code(ErrorCode::StaticAnalysisIssue)
             .at_token(&lhs_ctx)
             .message(format!("Failed to unify types `{}` and `{}`", lhs, rhs))
             .explain(format!("Type inferred here to be `{}`", lhs));
@@ -206,7 +253,7 @@ impl StaticAnalyzer {
                 ErrorBuilder::new()
                     .of_style(Style::Secondary)
                     .at_level(Level::Error)
-                    .with_code(ErrorCode::TypeError)
+                    .with_code(ErrorCode::StaticAnalysisIssue)
                     .at_token(&rhs_ctx)
                     .message("   ...".into())
                     .explain(format!("Type inferred here to be `{}`", rhs))
@@ -233,8 +280,10 @@ impl StaticAnalyzer {
     }
 
     /// Extracts constraints from the expression `expr` and returns either a
-    /// type variable or fully resolved type for it.
-    fn visit_expr(&mut self, expr: &Expr) -> Option<TypeCell> {
+    /// type variable or fully resolved type for it, along with a derivation of
+    /// purity.
+    fn visit_expr(&mut self, expr: &Expr) -> Option<(TypeCell, bool)> {
+        let mut expr_is_pure = true;
         match &expr.value {
             ExprValue::ConstantInt(_) => {
                 *expr.ty.as_mut() = Type::Int64;
@@ -248,6 +297,48 @@ impl StaticAnalyzer {
                         expr.start.clone(),
                         name.clone()
                     );
+                } else {
+                    self.report_unbound_name(name);
+                    return None;
+                }
+            }
+            ExprValue::Call(name, args) => {
+                if let Some(name_ty) = self.env.find(name.value.clone()) {
+                    // Not sure if I need to clone here
+                    match name_ty.clone_out() {
+                        Type::Function {
+                            is_pure,
+                            args: param_tys,
+                            ret
+                        } => {
+                            expr_is_pure &= is_pure;
+
+                            *expr.ty.as_mut() = self.new_type_var();
+                            self.add_constraint(
+                                expr.ty.clone(),
+                                TypeCell::new((*ret).clone()),
+                                expr.start.clone(),
+                                name.clone()
+                            );
+
+                            for (arg, param_ty) in zip(args, param_tys) {
+                                let (arg_ty, arg_is_pure) =
+                                    self.visit_expr(arg)?;
+                                expr_is_pure &= arg_is_pure;
+                                self.add_constraint(
+                                    arg_ty,
+                                    TypeCell::new(param_ty),
+                                    arg.start.clone(),
+                                    name.clone() /* TODO: store the param
+                                                  * tokens? */
+                                )
+                            }
+                        }
+                        _ => {
+                            self.report_called_non_function(name);
+                            return None;
+                        }
+                    }
                 } else {
                     self.report_unbound_name(name);
                     return None;
@@ -268,7 +359,9 @@ impl StaticAnalyzer {
                     }
                 );
                 for element in elements {
-                    let element_type = self.visit_expr(element)?;
+                    let (element_type, element_is_pure) =
+                        self.visit_expr(element)?;
+                    expr_is_pure &= element_is_pure;
                     self.add_constraint(
                         element_ty_var_cell.clone(),
                         element_type,
@@ -283,8 +376,9 @@ impl StaticAnalyzer {
                 // i don't know how to deal with e.g. operator overloading here
                 match bop.ty {
                     TokenType::Plus | TokenType::Minus | TokenType::Times => {
-                        let lhs_ty = self.visit_expr(lhs)?;
-                        let rhs_ty = self.visit_expr(rhs)?;
+                        let (lhs_ty, lhs_is_pure) = self.visit_expr(lhs)?;
+                        let (rhs_ty, rhs_is_pure) = self.visit_expr(rhs)?;
+                        expr_is_pure &= lhs_is_pure && rhs_is_pure;
 
                         self.add_constraint(
                             expr.ty.clone(),
@@ -306,7 +400,8 @@ impl StaticAnalyzer {
             }
             ExprValue::HardwareMap(map_token, _, f, arr) => {
                 *expr.ty.as_mut() = self.new_type_var();
-                let arr_ty = self.visit_expr(arr)?;
+                let (arr_ty, arr_is_pure) = self.visit_expr(arr)?;
+                expr_is_pure &= arr_is_pure;
                 if let Some(f_type) = self.env.find(f.value.clone()) {
                     // f : pure (Int64) -> Int64
                     self.add_constraint(
@@ -343,17 +438,19 @@ impl StaticAnalyzer {
             }
         };
 
-        Some(expr.ty.clone())
+        Some((expr.ty.clone(), expr_is_pure))
     }
 
-    fn visit_node(&mut self, node: &Node, top_level_pass: bool) -> Option<()> {
+    fn visit_node(
+        &mut self, node: &Node, top_level_pass: bool
+    ) -> Option<StmtTypeCell> {
         match (&node.value, top_level_pass) {
             (
                 NodeValue::Function {
                     name,
                     params,
                     ret,
-                    is_pure,
+                    pure_token,
                     body: _
                 },
                 true
@@ -362,7 +459,7 @@ impl StaticAnalyzer {
                 self.env.bind(
                     name.value.clone(),
                     TypeCell::new(Type::Function {
-                        is_pure: *is_pure,
+                        is_pure: pure_token.is_some(),
                         args: params
                             .iter()
                             .map(|p| p.1.clone())
@@ -370,13 +467,18 @@ impl StaticAnalyzer {
                         ret: Box::new(ret.clone())
                     })
                 );
+                // since we don't know termination, assume nonterminal
+                *node.ty.as_mut() = StmtType::from(
+                    StmtTermination::Nonterminal,
+                    pure_token.is_some()
+                );
             }
             (
                 NodeValue::Function {
                     name,
                     params,
                     ret,
-                    is_pure: _,
+                    pure_token,
                     body
                 },
                 false
@@ -387,25 +489,43 @@ impl StaticAnalyzer {
                     self.env
                         .bind(name.value.clone(), TypeCell::new(ty.clone()));
                 }
-                let mut stmt_ty = StmtType::Nonterminal;
+
+                let func_ty = node.ty.clone();
                 let mut warned_dead_code = false;
                 let mut term_node = None;
                 for node in body {
-                    self.visit_node(node, false)?;
-                    if *node.ty.borrow() == StmtType::Terminal {
-                        term_node = Some(node);
-                        stmt_ty = StmtType::Terminal;
-                    } else if stmt_ty == StmtType::Terminal && !warned_dead_code
+                    let node_ty = self.visit_node(node, false)?;
+                    let mut just_found_term = false;
+                    if node_ty.as_ref().termination == StmtTermination::Terminal
+                        && term_node.is_none()
                     {
-                        self.report_dead_code(name, node, term_node.unwrap());
+                        term_node = Some(node);
+                        func_ty.as_mut().termination =
+                            StmtTermination::Terminal;
+                        just_found_term = true;
+                    }
+                    if func_ty.as_ref().termination == StmtTermination::Terminal
+                        && !warned_dead_code
+                        && !just_found_term
+                        && !node.is_phantom()
+                    {
+                        self.warn_dead_code(name, node, term_node.unwrap());
                         warned_dead_code = true;
                     }
+                    if !node_ty.as_ref().is_pure && pure_token.is_some() {
+                        self.report_failed_purity_derivation(
+                            &pure_token.clone().unwrap(),
+                            name,
+                            node
+                        );
+                        return None;
+                    }
                 }
-                if stmt_ty == StmtType::Nonterminal {
+                if func_ty.as_ref().termination == StmtTermination::Nonterminal
+                {
                     self.report_missing_return(name);
                     return None;
                 }
-                *node.ty.borrow_mut() = stmt_ty;
                 self.env.pop();
             }
             (
@@ -416,7 +536,7 @@ impl StaticAnalyzer {
                 },
                 false
             ) => {
-                let value_ty = self.visit_expr(&value)?;
+                let (value_ty, expr_is_pure) = self.visit_expr(&value)?;
                 if let Some(hint) = hint_opt {
                     self.add_constraint(
                         hint.clone(),
@@ -427,7 +547,8 @@ impl StaticAnalyzer {
                 }
                 self.env.bind(name.value.clone(), value_ty);
                 // TODO: never types
-                *node.ty.borrow_mut() = StmtType::Nonterminal;
+                *node.ty.as_mut() =
+                    StmtType::from(StmtTermination::Nonterminal, expr_is_pure);
             }
             (
                 NodeValue::Return {
@@ -436,22 +557,24 @@ impl StaticAnalyzer {
                 },
                 false
             ) => {
-                let value_ty = if let Some(value) = value_opt {
-                    self.visit_expr(value)?
-                } else {
-                    Type::unit_singleton()
-                };
+                let ((value_ty, value_is_pure), value_start) =
+                    if let Some(value) = value_opt {
+                        (self.visit_expr(value)?, value.start.clone())
+                    } else {
+                        ((Type::unit_singleton(), true), token.clone())
+                    };
                 self.add_constraint(
                     value_ty.clone(),
                     self.env.find(RETURN_ID.into()).unwrap().clone(),
-                    token.clone(),
+                    value_start,
                     token.clone()
                 );
-                *node.ty.borrow_mut() = StmtType::Terminal;
+                *node.ty.as_mut() =
+                    StmtType::from(StmtTermination::Terminal, value_is_pure);
             }
             _ => {}
         }
-        Some(())
+        Some(node.ty.clone())
     }
 
     /// Whenever possible, pass `lhs` as the type to be unified into `rhs`.
@@ -526,7 +649,7 @@ impl StaticAnalyzer {
                                 ErrorBuilder::new()
                                     .of_style(Style::Primary)
                                     .at_level(Level::Error)
-                                    .with_code(ErrorCode::TypeError)
+                                    .with_code(ErrorCode::StaticAnalysisIssue)
                                     .at_token(&lhs_ctx)
                                     .message(format!(
                                         "Array sizes don't match: {} != {}",
@@ -538,7 +661,7 @@ impl StaticAnalyzer {
                                     ErrorBuilder::new()
                                         .of_style(Style::Secondary)
                                         .at_level(Level::Error)
-                                        .with_code(ErrorCode::TypeError)
+                                        .with_code(ErrorCode::StaticAnalysisIssue)
                                         .at_token(&rhs_ctx)
                                         .message("...".into())
                                         .explain(format!("Inferred to have size {} here based on environment", rhs_size))

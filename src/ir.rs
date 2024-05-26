@@ -26,7 +26,8 @@ pub enum Ir {
         parallel_factor: usize,
         f: LabelName,
         input: Operand
-    }
+    },
+    Call(Variable, LabelName, Vec<Operand>)
 }
 
 impl Display for Ir {
@@ -67,8 +68,20 @@ impl Display for Ir {
             } => {
                 write!(
                     f,
-                    "{} = @map<{}>({}, {})",
+                    "{} = map<{}>({}, {})",
                     result, parallel_factor, fun, input
+                )
+            }
+            Self::Call(result, name, args) => {
+                write!(
+                    f,
+                    "{} = {}({})",
+                    result,
+                    name,
+                    args.iter()
+                        .map(|arg| arg.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )
             }
         }
