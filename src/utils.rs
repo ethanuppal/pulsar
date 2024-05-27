@@ -3,9 +3,9 @@
 
 use std::ops::Deref;
 
-pub mod context;
 pub mod digraph;
 pub mod disjoint_set;
+pub mod environment;
 pub mod error;
 pub mod format;
 pub mod id;

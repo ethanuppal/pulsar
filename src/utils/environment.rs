@@ -1,20 +1,18 @@
-use std::collections::HashMap;
-
-pub type Name = String;
+use std::{collections::HashMap, hash::Hash};
 
 /// A set of bindings between names and values.
-pub type Scope<T> = HashMap<Name, T>;
+pub type Scope<Name, T> = HashMap<Name, T>;
 
 /// A scoped set of bindings between names and values.
-pub struct Context<T> {
-    scopes: Vec<Scope<T>>
+pub struct Environment<Name: Eq + Hash, T> {
+    scopes: Vec<Scope<Name, T>>
 }
 
-impl<T> Context<T> {
+impl<Name: Eq + Hash, T> Environment<Name, T> {
     /// Constructs a new context with a base scope that further scopes can be
     /// pushed and popped on top of.
     pub fn new() -> Self {
-        Context {
+        Environment {
             scopes: vec![Scope::new()]
         }
     }
@@ -38,19 +36,19 @@ impl<T> Context<T> {
     /// Binds `name` to `value` in the top scope, returning
     /// `Some(previous_value)` if `previous_value` had previously been bound to
     /// `name`, or `None`.
-    pub fn bind(&mut self, name: String, value: T) -> Option<T> {
+    pub fn bind(&mut self, name: Name, value: T) -> Option<T> {
         self.scopes.last_mut().unwrap().insert(name, value)
     }
 
     /// Binds `name` to `value` in the base scope.
     ///
     /// @see [`Context::bind`]
-    pub fn bind_base(&mut self, name: String, value: T) -> Option<T> {
+    pub fn bind_base(&mut self, name: Name, value: T) -> Option<T> {
         self.scopes.first_mut().unwrap().insert(name, value)
     }
 
     /// Finds the bound value for `name` in the highest scope possible.
-    pub fn find(&self, name: String) -> Option<&T> {
+    pub fn find(&self, name: Name) -> Option<&T> {
         for scope in self.scopes.iter().rev() {
             if let Some(value) = scope.get(&name) {
                 return Some(value);

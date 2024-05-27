@@ -2,14 +2,14 @@ use crate::frontend::ty::Type;
 use std::fmt::{Display, Formatter};
 
 pub enum LabelName {
-    Native(String, Vec<Type>, Box<Type>)
+    Native(String)
 }
 
 impl LabelName {
-    fn mangle(&self) -> String {
+    pub fn mangle(&self, args: &Vec<Type>, ret: &Box<Type>) -> String {
         let mut result = String::new();
         match &self {
-            Self::Native(name, args, ret) => {
+            Self::Native(name) => {
                 result.push_str("_pulsar");
                 result.push_str(&format!("_S{}", name));
                 for arg in args {
@@ -25,7 +25,7 @@ impl LabelName {
 impl Display for LabelName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Self::Native(name, _, _) => {
+            Self::Native(name) => {
                 write!(f, "@native({})", name)?;
             }
         }
@@ -33,21 +33,36 @@ impl Display for LabelName {
     }
 }
 
+pub enum LabelVisibility {
+    Public,
+    Private,
+    External
+}
+
+impl Display for LabelVisibility {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            LabelVisibility::Public => "public",
+            LabelVisibility::Private => "private",
+            LabelVisibility::External => "external"
+        }
+        .fmt(f)
+    }
+}
+
 pub struct Label {
     pub name: LabelName,
-    pub is_external: bool,
-    pub is_global: bool
+    pub visibility: LabelVisibility
+}
+
+impl Label {
+    pub fn from(name: LabelName, visibility: LabelVisibility) -> Label {
+        Label { name, visibility }
+    }
 }
 
 impl Display for Label {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.is_external {
-            write!(f, "extern ")?;
-        } else if self.is_global {
-            write!(f, "public ")?;
-        } else {
-            write!(f, "private ")?;
-        }
-        write!(f, "{}", self.name)
+        write!(f, "{} {}", self.visibility, self.name)
     }
 }

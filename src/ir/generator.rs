@@ -1,7 +1,7 @@
 use super::{
     basic_block::BasicBlockCell,
     control_flow_graph::ControlFlowGraph,
-    label::{Label, LabelName},
+    label::{Label, LabelName, LabelVisibility},
     operand::Operand,
     variable::Variable,
     Ir
@@ -12,19 +12,41 @@ use crate::{
         token::{Token, TokenType},
         ty::Type
     },
-    utils::context::Context
+    utils::environment::Environment
 };
 use std::fmt::Display;
 
 pub enum GeneratedTopLevel {
-    Function { name: Label, cfg: ControlFlowGraph }
+    Function {
+        label: Label,
+        args: Vec<Type>,
+        ret: Box<Type>,
+        is_pure: bool,
+        cfg: ControlFlowGraph
+    }
 }
 
 impl Display for GeneratedTopLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Self::Function { name, cfg } => {
-                writeln!(f, "{}:", name)?;
+            Self::Function {
+                label,
+                args,
+                ret,
+                is_pure,
+                cfg
+            } => {
+                writeln!(
+                    f,
+                    "{} {}({}) -> {}:",
+                    if *is_pure { "pure " } else { "" },
+                    label,
+                    args.iter()
+                        .map(|ty| ty.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    ret
+                )?;
                 write!(f, "{}", cfg)
             }
         }
@@ -33,14 +55,14 @@ impl Display for GeneratedTopLevel {
 
 pub struct Generator {
     program: Box<dyn Iterator<Item = Node>>,
-    env: Context<Variable>
+    env: Environment<String, Variable>
 }
 
 impl Generator {
     pub fn new(program: Vec<Node>) -> Self {
         Self {
             program: Box::new(program.into_iter()),
-            env: Context::new()
+            env: Environment::new()
         }
     }
 
@@ -76,11 +98,7 @@ impl Generator {
                 let result = Variable::new();
                 block.as_mut().add(Ir::Call(
                     result,
-                    LabelName::Native(
-                        name.value.clone(),
-                        arg_tys,
-                        Box::new(expr.ty.clone_out())
-                    ),
+                    LabelName::Native(name.value.clone()),
                     arg_operands
                 ));
                 Operand::Variable(result)
@@ -130,11 +148,7 @@ impl Generator {
                 block.as_mut().add(Ir::Map {
                     result,
                     parallel_factor: *parallel_factor,
-                    f: LabelName::Native(
-                        f.value.clone(),
-                        vec![Type::Int64],
-                        Box::new(Type::Int64)
-                    ),
+                    f: LabelName::Native(f.value.clone()),
                     input: arr_operand
                 });
 
@@ -167,7 +181,7 @@ impl Generator {
     }
 
     fn gen_func(
-        &mut self, name: &Token, params: &Vec<Param>, ret: Type,
+        &mut self, name: &Token, params: &Vec<Param>, ret: Type, is_pure: bool,
         body: &Vec<Node>
     ) -> GeneratedTopLevel {
         self.env.push();
@@ -183,15 +197,13 @@ impl Generator {
         }
         self.env.pop();
         GeneratedTopLevel::Function {
-            name: Label {
-                name: LabelName::Native(
-                    name.value.clone(),
-                    params.iter().map(|(_, ty)| ty.clone()).collect(),
-                    Box::new(ret)
-                ),
-                is_external: false,
-                is_global: false
-            },
+            label: Label::from(
+                LabelName::Native(name.value.clone()),
+                LabelVisibility::Private
+            ),
+            args: params.iter().map(|(_, ty)| ty.clone()).collect(),
+            ret: Box::new(ret),
+            is_pure,
             cfg
         }
     }
@@ -206,9 +218,15 @@ impl Iterator for Generator {
                 name,
                 params,
                 ret,
-                pure_token: _,
+                pure_token,
                 body
-            } => Some(self.gen_func(&name, &params, ret, &body)),
+            } => Some(self.gen_func(
+                &name,
+                &params,
+                ret,
+                pure_token.is_some(),
+                &body
+            )),
             _ => None
         }
     }

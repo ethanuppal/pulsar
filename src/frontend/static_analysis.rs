@@ -7,8 +7,8 @@ use super::{
     }
 };
 use crate::utils::{
-    context::{Context, Name},
     disjoint_set::{DisjointSets, NodeTrait},
+    environment::Environment,
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
     id::Gen,
     loc::Region,
@@ -53,7 +53,7 @@ struct TypeConstraint {
 }
 
 pub struct StaticAnalyzer {
-    env: Context<TypeCell>,
+    env: Environment<String, TypeCell>,
     constraints: Vec<TypeConstraint>,
     error_manager: Rc<RefCell<ErrorManager>>
 }
@@ -61,7 +61,7 @@ pub struct StaticAnalyzer {
 impl StaticAnalyzer {
     pub fn new(error_manager: Rc<RefCell<ErrorManager>>) -> StaticAnalyzer {
         StaticAnalyzer {
-            env: Context::new(),
+            env: Environment::new(),
             constraints: vec![],
             error_manager
         }
@@ -69,7 +69,7 @@ impl StaticAnalyzer {
 
     /// Establishes a top-level binding for the type `ty` of `name`, useful for
     /// allowing functions to call other functions or external/FFI declarations.
-    pub fn bind_top_level(&mut self, name: Name, ty: Type) {
+    pub fn bind_top_level(&mut self, name: String, ty: Type) {
         self.env.bind_base(name, TypeCell::new(ty));
     }
 

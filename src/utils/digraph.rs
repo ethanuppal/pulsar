@@ -1,4 +1,7 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash
+};
 
 pub struct Digraph<Node: Hash + Eq, Edge> {
     adj: HashMap<Node, Vec<(Edge, Node)>>
@@ -27,5 +30,32 @@ impl<Node: Hash + Eq, Edge> Digraph<Node, Edge> {
 
     pub fn nodes(&self) -> Vec<&Node> {
         self.adj.keys().collect()
+    }
+}
+
+impl<Node: Hash + Eq + Clone, Edge> Digraph<Node, Edge> {
+    /// Conducts a depth-first search (DFS) starting from `start`, calling `f`
+    /// on each node encountered in DFS order. This function performs multiple
+    /// `clone()`s of the nodes, which is still performant when nodes are
+    /// smart pointers such as `Rc`.
+    ///
+    /// Requires: `start` is in the graph.
+    pub fn dfs<F>(&self, mut f: F, start: Node)
+    where
+        F: FnMut(Node) {
+        assert!(self.adj.contains_key(&start));
+
+        let mut visited = HashSet::new();
+        let mut stack = vec![];
+
+        stack.push(start);
+        while !stack.is_empty() {
+            let node = stack.pop().unwrap();
+            visited.insert(node.clone());
+            f(node.clone());
+            for (_, next) in self.out_of(node).unwrap() {
+                stack.push(next.clone());
+            }
+        }
     }
 }

@@ -42,6 +42,13 @@ impl ControlFlowGraph {
             .add_edge(dest.clone(), condition, block.clone());
         self.out_graph.add_edge(block, condition, dest);
     }
+
+    pub fn blocks(&self) -> Vec<BasicBlockCell> {
+        let mut result = vec![];
+        self.out_graph
+            .dfs(|node| result.push(node), self.entry.clone());
+        result
+    }
 }
 
 impl Display for ControlFlowGraph {

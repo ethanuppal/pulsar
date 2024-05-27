@@ -39,4 +39,4 @@ docs:
 
 .PHONY: cloc
 cloc:
-	@cloc --include-lang rust --by-file .
+	@cloc --include-lang=rust --by-file --exclude-dir=target .

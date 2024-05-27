@@ -8,6 +8,11 @@ name = "main"
 path = "src/bin/main.rs"
 
 [dependencies]
+calyx-backend = "0.7.1"
+calyx-frontend = "0.7.1"
+calyx-ir = "0.7.1"
+calyx-opt = "0.7.1"
+calyx-utils = "0.7.1"
 colored = "2"
 lazy_static = "1.4.0"
 

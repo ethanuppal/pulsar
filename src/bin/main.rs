@@ -1,4 +1,8 @@
 use pulsar::{
+    backend::{
+        calyx_backend::{CalyxBackend, CalyxBackendInput},
+        PulsarBackend
+    },
     frontend::{lexer::Lexer, parser::Parser, static_analysis::StaticAnalyzer},
     ir::generator::Generator,
     utils::{error::ErrorManager, loc::Source}
@@ -37,14 +41,23 @@ pub fn main() -> Result<(), ()> {
     let annotated_ast =
         type_inferer.infer(program_ast).ok_or(()).map_err(|()| {
             let _ = handle_errors(error_manager.clone());
-            ()
         })?;
     handle_errors(error_manager)?;
 
     let generator = Generator::new(annotated_ast);
-    for generated_top_level in generator {
-        println!("{}", generated_top_level);
-    }
+    let generated_code: Vec<_> = generator.into_iter().collect();
+
+    let mut calyx_backend = CalyxBackend::new();
+    calyx_backend
+        .run(
+            generated_code,
+            CalyxBackendInput {
+                output_file: calyx_utils::OutputFile::Stdout
+            }
+        )
+        .map_err(|err| {
+            println!("{:?}\n", err);
+        })?;
 
     Ok(())
 }

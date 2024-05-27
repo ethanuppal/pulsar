@@ -27,6 +27,10 @@ impl BasicBlock {
     pub fn add(&mut self, ir: Ir) {
         self.contents.push(ir);
     }
+
+    pub fn branch_condition(&self) -> BranchCondition {
+        self.branch_condition.clone_out()
+    }
 }
 
 impl PartialEq for BasicBlock {
@@ -50,6 +54,15 @@ impl Display for BasicBlock {
             writeln!(f, "  {}", instr)?;
         }
         write!(f, "  branch {}", self.branch_condition)
+    }
+}
+
+impl<'a> IntoIterator for &'a BasicBlock {
+    type Item = &'a Ir;
+    type IntoIter = std::slice::Iter<'a, Ir>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.contents.iter()
     }
 }
 
