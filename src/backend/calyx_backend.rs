@@ -32,6 +32,7 @@ pub struct CalyxBackend {
     sig: HashMap<String, Vec<calyx_ir::PortDef<u64>>>,
     env: Environment<Variable, RRC<calyx_ir::Cell>>,
     call_env: Environment<String, RRC<calyx_ir::Cell>>,
+    ret_cell: Option<RRC<calyx_ir::Cell>>,
     param_env: usize,
     temp_count: usize
 }
@@ -131,17 +132,42 @@ impl CalyxBackend {
             (cell_name, cell.clone())
         } else {
             let mut port_defs = self.sig.get(call.mangle()).unwrap().clone();
+            let mut go_attr = calyx_ir::Attributes::default();
+            go_attr.insert(calyx_ir::Attribute::Num(calyx_ir::NumAttr::Go), 1);
+            let mut done_attr = calyx_ir::Attributes::default();
+            done_attr
+                .insert(calyx_ir::Attribute::Num(calyx_ir::NumAttr::Done), 1);
+            let mut clk_attr = calyx_ir::Attributes::default();
+            clk_attr
+                .insert(calyx_ir::Attribute::Bool(calyx_ir::BoolAttr::Clk), 1);
+            let mut reset_attr = calyx_ir::Attributes::default();
+            reset_attr.insert(
+                calyx_ir::Attribute::Bool(calyx_ir::BoolAttr::Reset),
+                1
+            );
             port_defs.push(calyx_ir::PortDef::new(
                 "go",
                 1,
                 calyx_ir::Direction::Input,
-                calyx_ir::Attributes::default()
+                go_attr
             ));
             port_defs.push(calyx_ir::PortDef::new(
                 "done",
                 1,
                 calyx_ir::Direction::Output,
-                calyx_ir::Attributes::default()
+                done_attr
+            ));
+            port_defs.push(calyx_ir::PortDef::new(
+                "clk",
+                1,
+                calyx_ir::Direction::Input,
+                clk_attr
+            ));
+            port_defs.push(calyx_ir::PortDef::new(
+                "reset",
+                1,
+                calyx_ir::Direction::Input,
+                reset_attr
             ));
             let cell = cell_from_signature(
                 cell_name.clone().into(),
@@ -241,9 +267,12 @@ impl CalyxBackend {
                         value_cell = temp_cell;
                     }
 
+                    let ret_cell = self.ret_cell.clone().unwrap();
+                    let signal_out = builder.add_constant(1, 1);
                     let assignments = build_assignments!(builder;
-                        func["ret"] = ? value_cell["out"];
-                        return_group["done"] = ? value_cell["done"];
+                        ret_cell["in"] = ? value_cell["out"];
+                        ret_cell["write_en"] = ? signal_out["out"];
+                        return_group["done"] = ? ret_cell["done"];
                     )
                     .to_vec();
                     return_group.borrow_mut().assignments.extend(assignments);
@@ -339,6 +368,18 @@ impl CalyxBackend {
             attributes: calyx_ir::Attributes::default()
         };
 
+        if **ret != Type::Unit {
+            let func = builder.component.signature.clone();
+            self.ret_cell = Some(self.cell_for_temp(&mut builder));
+            let ret_cell = self.ret_cell.clone().unwrap();
+            let always: Vec<calyx_ir::Assignment<calyx_ir::Nothing>> =
+                build_assignments!(builder;
+                    func["ret"] = ? ret_cell["out"];
+                )
+                .to_vec();
+            builder.add_continuous_assignments(always);
+        }
+
         // for block in cfg.blocks() {
         //     self.emit_block(block);
         // }
@@ -369,6 +410,7 @@ impl PulsarBackend for CalyxBackend {
             env: Environment::new(),
             call_env: Environment::new(),
             sig: HashMap::new(),
+            ret_cell: None,
             param_env: 0,
             temp_count: 0
         }
@@ -413,12 +455,12 @@ impl PulsarBackend for CalyxBackend {
         }
 
         // Debug print
-        calyx_ir::Printer::write_context(
-            &calyx_ctx,
-            false,
-            &mut std::io::stdout()
-        )
-        .unwrap();
+        // calyx_ir::Printer::write_context(
+        //     &calyx_ctx,
+        //     false,
+        //     &mut input.output_file.get_write()
+        // )
+        // .unwrap();
 
         calyx_ctx.entrypoint = calyx_ctx
             .components
@@ -444,8 +486,8 @@ impl PulsarBackend for CalyxBackend {
         )?;
 
         // Emit to Verilog
-        // let backend = calyx_backend::VerilogBackend;
-        // backend.run(calyx_ctx, input.output_file)?;
+        let backend = calyx_backend::VerilogBackend;
+        backend.run(calyx_ctx, input.output_file)?;
         Ok(())
     }
 }
