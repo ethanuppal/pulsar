@@ -27,7 +27,7 @@ pub enum Ir {
         f: LabelName,
         input: Operand
     },
-    Call(Variable, LabelName, Vec<Operand>)
+    Call(Option<Variable>, LabelName, Vec<Operand>)
 }
 
 impl Display for Ir {
@@ -63,20 +63,24 @@ impl Display for Ir {
             Self::Map {
                 result,
                 parallel_factor,
-                f: fun,
+                f: func,
                 input
             } => {
                 write!(
                     f,
                     "{} = map<{}>({}, {})",
-                    result, parallel_factor, fun, input
+                    result, parallel_factor, func, input
                 )
             }
-            Self::Call(result, name, args) => {
+            Self::Call(result_opt, name, args) => {
                 write!(
                     f,
-                    "{} = {}({})",
-                    result,
+                    "{}{}({})",
+                    if let Some(result) = result_opt {
+                        format!("{} = ", result)
+                    } else {
+                        "".into()
+                    },
                     name,
                     args.iter()
                         .map(|arg| arg.to_string())

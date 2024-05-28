@@ -43,6 +43,10 @@ impl ControlFlowGraph {
         self.out_graph.add_edge(block, condition, dest);
     }
 
+    pub fn size(&self) -> usize {
+        self.out_graph.node_count()
+    }
+
     pub fn blocks(&self) -> Vec<BasicBlockCell> {
         let mut result = vec![];
         self.out_graph

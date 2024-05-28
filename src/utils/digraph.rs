@@ -31,6 +31,10 @@ impl<Node: Hash + Eq, Edge> Digraph<Node, Edge> {
     pub fn nodes(&self) -> Vec<&Node> {
         self.adj.keys().collect()
     }
+
+    pub fn node_count(&self) -> usize {
+        self.adj.len()
+    }
 }
 
 impl<Node: Hash + Eq + Clone, Edge> Digraph<Node, Edge> {

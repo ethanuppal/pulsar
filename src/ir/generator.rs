@@ -95,13 +95,23 @@ impl Generator {
                     let arg_operand = self.gen_expr(arg, block.clone());
                     arg_operands.push(arg_operand);
                 }
-                let result = Variable::new();
+                let result_opt = if expr.ty.clone_out() == Type::Unit {
+                    None
+                } else {
+                    Some(Variable::new())
+                };
                 block.as_mut().add(Ir::Call(
-                    result,
-                    LabelName::Native(name.value.clone()),
+                    result_opt,
+                    LabelName::from_native(
+                        name.value.clone(),
+                        &arg_tys,
+                        &Box::new(expr.ty.clone_out())
+                    ),
                     arg_operands
                 ));
-                Operand::Variable(result)
+                result_opt.map_or(Operand::Constant(0), |result| {
+                    Operand::Variable(result)
+                })
             }
             ExprValue::ArrayLiteral(elements, _) => {
                 let (element_type, element_count) =
@@ -148,7 +158,11 @@ impl Generator {
                 block.as_mut().add(Ir::Map {
                     result,
                     parallel_factor: *parallel_factor,
-                    f: LabelName::Native(f.value.clone()),
+                    f: LabelName::from_native(
+                        f.value.clone(),
+                        &vec![Type::Int64],
+                        &Box::new(Type::Int64)
+                    ),
                     input: arr_operand
                 });
 
@@ -196,13 +210,15 @@ impl Generator {
             self.gen_node(node, entry.clone());
         }
         self.env.pop();
+        let arg_tys = params.iter().map(|(_, ty)| ty.clone()).collect();
+        let ret_ty = Box::new(ret);
         GeneratedTopLevel::Function {
             label: Label::from(
-                LabelName::Native(name.value.clone()),
+                LabelName::from_native(name.value.clone(), &arg_tys, &ret_ty),
                 LabelVisibility::Private
             ),
-            args: params.iter().map(|(_, ty)| ty.clone()).collect(),
-            ret: Box::new(ret),
+            args: arg_tys,
+            ret: ret_ty,
             is_pure,
             cfg
         }

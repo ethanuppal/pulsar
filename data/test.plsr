@@ -1,3 +1,7 @@
+func inc(x: Int) -> Int {
+    return x + 1
+}
+
 func main(x: Int) -> Int {
-    return x
+    return inc(x)
 }

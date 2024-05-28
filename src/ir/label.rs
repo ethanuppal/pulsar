@@ -1,34 +1,43 @@
 use crate::frontend::ty::Type;
 use std::fmt::{Display, Formatter};
 
-pub enum LabelName {
-    Native(String)
+pub struct LabelName {
+    unmangled: String,
+    mangled: String,
+    is_native: bool
 }
 
 impl LabelName {
-    pub fn mangle(&self, args: &Vec<Type>, ret: &Box<Type>) -> String {
-        let mut result = String::new();
-        match &self {
-            Self::Native(name) => {
-                result.push_str("_pulsar");
-                result.push_str(&format!("_S{}", name));
-                for arg in args {
-                    result.push_str(&format!("_{}", arg.mangle()));
-                }
-                result.push_str(&format!("_{}", ret.mangle()));
-            }
+    pub fn from_native(
+        value: String, args: &Vec<Type>, ret: &Box<Type>
+    ) -> Self {
+        let mut mangled = String::new();
+        mangled.push_str("_pulsar");
+        mangled.push_str(&format!("_S{}", value));
+        for arg in args {
+            mangled.push_str(&format!("_{}", arg.mangle()));
         }
-        result
+        mangled.push_str(&format!("_{}", ret.mangle()));
+        Self {
+            unmangled: value,
+            mangled,
+            is_native: true
+        }
+    }
+
+    pub fn mangle(&self) -> &String {
+        &self.mangled
     }
 }
 
 impl Display for LabelName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            Self::Native(name) => {
-                write!(f, "@native({})", name)?;
-            }
+        if self.is_native {
+            write!(f, "@native({})", self.unmangled)?;
+        } else {
+            self.mangled.fmt(f)?;
         }
+
         Ok(())
     }
 }
