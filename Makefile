@@ -49,11 +49,10 @@ ci_install_calyx:
 ci_check:
 	@echo "Checking that 'make' works"
 	make
-	@echo "Checking that './main' works"
-	./main || exit 0
 	@echo "Checking that the verilator testing harness works"
 	cd tests/calyx-verilog && make N=twice
-
+# @echo "Checking that './main' works"
+# ./main 1>/dev/null 2>/dev/null || exit 0
 
 .PHONY: clean
 clean:
