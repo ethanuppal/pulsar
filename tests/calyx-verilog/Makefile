@@ -30,5 +30,6 @@ test:
 	make clean
 
 .PHONY: clean
+clean:
 	find $(BUILD_DIR) -type f ! -name '.gitkeep' -delete
 	rm -rf obj_dir
