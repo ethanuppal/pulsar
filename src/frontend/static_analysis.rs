@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use super::{
     ast::{Expr, ExprValue, Node, NodeValue},
     token::{Token, TokenType},
@@ -14,7 +15,9 @@ use crate::utils::{
     loc::Region,
     CheapClone
 };
-use std::{cell::RefCell, fmt::Debug, iter::zip, rc::Rc};
+use std::{
+    cell::RefCell, collections::VecDeque, fmt::Debug, iter::zip, rc::Rc
+};
 
 /// A dummy variable bound in the environment for the return type. No valid
 /// identifier contains a space, so we are guaranteed to have no name
@@ -45,16 +48,18 @@ impl Debug for TypeNode {
 impl NodeTrait for TypeNode {}
 
 #[derive(Debug)]
-struct TypeConstraint {
-    pub lhs: TypeCell,
-    pub rhs: TypeCell,
-    pub lhs_ctx: Token,
-    pub rhs_ctx: Token
+enum TypeConstraint {
+    Equality {
+        lhs: TypeCell,
+        rhs: TypeCell,
+        lhs_ctx: Token,
+        rhs_ctx: Token
+    }
 }
 
 pub struct StaticAnalyzer {
     env: Environment<String, TypeCell>,
-    constraints: Vec<TypeConstraint>,
+    constraints: VecDeque<TypeConstraint>,
     error_manager: Rc<RefCell<ErrorManager>>
 }
 
@@ -62,7 +67,7 @@ impl StaticAnalyzer {
     pub fn new(error_manager: Rc<RefCell<ErrorManager>>) -> StaticAnalyzer {
         StaticAnalyzer {
             env: Environment::new(),
-            constraints: vec![],
+            constraints: VecDeque::new(),
             error_manager
         }
     }
@@ -233,6 +238,19 @@ impl StaticAnalyzer {
         );
     }
 
+    fn report_invalid_operation(&mut self, explain: String, ctx: &Token) {
+        self.report(
+            ErrorBuilder::new()
+                .of_style(Style::Primary)
+                .at_level(Level::Error)
+                .with_code(ErrorCode::StaticAnalysisIssue)
+                .at_token(ctx)
+                .message("Invalid operation".into())
+                .explain(explain)
+                .build()
+        );
+    }
+
     fn report_unification_failure(
         &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Token,
         rhs_ctx: Token, fix: Option<String>
@@ -271,7 +289,7 @@ impl StaticAnalyzer {
     fn add_constraint(
         &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Token, rhs_ctx: Token
     ) {
-        self.constraints.push(TypeConstraint {
+        self.constraints.push_back(TypeConstraint::Equality {
             lhs,
             rhs,
             lhs_ctx,
@@ -343,6 +361,39 @@ impl StaticAnalyzer {
                     self.report_unbound_name(name);
                     return None;
                 }
+            }
+            ExprValue::Subscript(array, index) => {
+                *expr.ty.as_mut() = self.new_type_var();
+                let (array_ty, array_is_pure) = self.visit_expr(&array)?;
+                let (index_ty, index_is_pure) = self.visit_expr(&index)?;
+                expr_is_pure &= array_is_pure && index_is_pure;
+                self.add_constraint(
+                    index_ty,
+                    Type::int64_singleton(),
+                    index.start.clone(),
+                    array.start.clone()
+                );
+                self.add_constraint(
+                    TypeCell::new(Type::Array(
+                        expr.ty.clone(),
+                        ARRAY_TYPE_UNKNOWN_SIZE
+                    )),
+                    array_ty,
+                    expr.start.clone(),
+                    expr.start.clone()
+                );
+                // match array_ty.clone_out() {
+                //     Type::Array(element_type, _) => {
+
+                //     }
+                //     _ => {
+                //         self.report_invalid_operation(
+                //             "Subscript used on non-array type".into(),
+                //             &index.start
+                //         );
+                //         return None;
+                //     }
+                // }
             }
             ExprValue::ArrayLiteral(elements, should_continue) => {
                 let element_ty_var = self.new_type_var();
@@ -725,20 +776,25 @@ impl StaticAnalyzer {
     fn unify_constraints(&mut self) -> Option<DisjointSets<TypeNode>> {
         let mut dsu = DisjointSets::new();
         while !self.constraints.is_empty() {
-            let constraint = self.constraints.pop()?;
-            let _ = self
-                .unify(
-                    &mut dsu,
-                    constraint.lhs,
-                    constraint.rhs,
-                    constraint.lhs_ctx,
-                    constraint.rhs_ctx
-                )
-                .map_err(|_| {
-                    if !self.error_manager.borrow().has_errors() {
-                        panic!("TypeInferer failed without error message");
-                    }
-                });
+            let constraint = self.constraints.pop_front()?;
+            match constraint {
+                TypeConstraint::Equality {
+                    lhs,
+                    rhs,
+                    lhs_ctx,
+                    rhs_ctx
+                } => {
+                    let _ = self
+                        .unify(&mut dsu, lhs, rhs, lhs_ctx, rhs_ctx)
+                        .map_err(|_| {
+                            if !self.error_manager.borrow().has_errors() {
+                                panic!(
+                                    "TypeInferer failed without error message"
+                                );
+                            }
+                        });
+                }
+            }
         }
         dsu.collapse();
         Some(dsu)

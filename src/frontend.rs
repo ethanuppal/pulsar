@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 //! This crate defines the lexer, parser, and abstract syntax tree for pulsar.
 
 pub mod ast;

@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use std::{collections::HashMap, hash::Hash};
 
 /// A set of bindings between names and values.

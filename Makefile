@@ -6,7 +6,7 @@ BUILD	:= debug
 build:
 	@echo '[INFO] Building project'
 	@cargo build
-	@echo './target/$(BUILD)/main "$$@"' > ./main
+	@echo '$(PWD)/target/$(BUILD)/main "$$@"' > ./main
 	@chmod u+x ./main
 
 .PHONY: test
@@ -26,6 +26,35 @@ deps:
 	@cargo install cargo-nextest
 	@curl -LsSf https://insta.rs/install.sh | sh
 	@cargo install cargo-llvm-cov
+	@if [ "$(shell uname -s)" = "Linux" ]; then \
+		echo '[INFO] Installing Verilator on Ubuntu'; \
+		sudo apt-get install -y verilator; \
+	elif [ "$(shell uname -s)" = "Darwin" ]; then \
+		echo '[INFO] Installing Verilator on macOS'; \
+		brew install verilator; \
+	fi
+
+.PHONY: ci_install_calyx
+ci_install_calyx:
+	@echo '[INFO] Installing calyx'
+	if [ ! -d "$(HOME)/calyx" ]; then \
+		cd $(HOME) && git clone https://github.com/calyxir/calyx.git; \
+	fi
+	cd $(HOME)/calyx && cargo build
+	cd $(HOME)/calyx && ./target/debug/calyx --help
+	cd $(HOME)/calyx && python -m pip install flit
+	cd $(HOME)/calyx && cd calyx-py && flit install -s && cd -
+	cd $(HOME)/calyx && flit -f fud/pyproject.toml install -s --deps production
+	fud config --create global.root $(HOME)/calyx
+
+.PHONY: ci_check
+ci_check:
+	@echo "Checking that 'make' works"
+	make
+	@echo "Checking that the verilator testing harness works"
+	cd tests/calyx-verilog && make N=twice
+# @echo "Checking that './main' works"
+# ./main 1>/dev/null 2>/dev/null || exit 0
 
 .PHONY: clean
 clean:

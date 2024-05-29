@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use pulsar::{
     backend::{
         calyx_backend::{CalyxBackend, CalyxBackendInput},
@@ -7,7 +8,7 @@ use pulsar::{
     ir::generator::Generator,
     utils::{error::ErrorManager, loc::Source}
 };
-use std::{cell::RefCell, fs, io::stdout, rc::Rc};
+use std::{cell::RefCell, env, fs, io::stdout, process::Command, rc::Rc};
 
 fn handle_errors(error_manager: Rc<RefCell<ErrorManager>>) -> Result<(), ()> {
     if error_manager.borrow().has_errors() {
@@ -21,9 +22,11 @@ fn handle_errors(error_manager: Rc<RefCell<ErrorManager>>) -> Result<(), ()> {
 }
 
 pub fn main() -> Result<(), ()> {
-    let filename = "data/test.plsr";
+    let mut args = env::args();
+    args.next(); // ignore program path
+    let filename = args.next().unwrap_or("data/test.plsr".into());
     let source = Source::file(
-        filename.into(),
+        filename.clone(),
         fs::read_to_string(filename).expect("Could not read file")
     );
 
@@ -47,12 +50,22 @@ pub fn main() -> Result<(), ()> {
     let generator = Generator::new(annotated_ast);
     let generated_code: Vec<_> = generator.into_iter().collect();
 
+    let command_output = Command::new("fud")
+        .args(&["c", "global.root"])
+        .output()
+        .expect("'fud' is not installed and/or misconfigured");
+    let calyx_root = String::from_utf8_lossy(&command_output.stdout)
+        .trim()
+        .to_string();
+
     let mut calyx_backend = CalyxBackend::new();
     calyx_backend
         .run(
             generated_code,
             CalyxBackendInput {
-                output_file: calyx_utils::OutputFile::Stdout
+                lib_path: calyx_root,
+                calyx_output: calyx_utils::OutputFile::Stderr,
+                verilog_output: calyx_utils::OutputFile::Stdout
             }
         )
         .map_err(|err| {

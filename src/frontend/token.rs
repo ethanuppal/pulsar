@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use crate::utils::loc::Loc;
 use core::{fmt, fmt::Debug};
 

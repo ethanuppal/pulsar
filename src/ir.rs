@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use self::{label::LabelName, operand::Operand, variable::Variable};
 use std::fmt::Display;
 
@@ -15,12 +16,28 @@ pub enum Ir {
     Assign(Variable, Operand),
     GetParam(Variable),
     Return(Option<Operand>),
-    LocalAlloc(Variable, usize),
+
+    /// `LocalAlloc(result, size, count)` allocates an array of `count`
+    /// elements, each of `size` bytes, and stores a pointer to the array in
+    /// `result`.
+    LocalAlloc(Variable, usize, usize),
+
+    /// `Store { result, value, index }` loads `value` into index `index` of
+    /// `result`.
     Store {
         result: Variable,
         value: Operand,
-        index: usize
+        index: Operand
     },
+
+    /// `Load { result, value, index }` loads the value at index `index` of
+    /// `value` into `result`.
+    Load {
+        result: Variable,
+        value: Operand,
+        index: Operand
+    },
+
     Map {
         result: Variable,
         parallel_factor: usize,
@@ -50,8 +67,8 @@ impl Display for Ir {
                     "".into()
                 }
             ),
-            Self::LocalAlloc(result, size) => {
-                write!(f, "{} = <{} bytes>", result, size)
+            Self::LocalAlloc(result, size, count) => {
+                write!(f, "{} = <{} * ({} bytes)>", result, count, size)
             }
             Self::Store {
                 result,
@@ -59,6 +76,13 @@ impl Display for Ir {
                 index
             } => {
                 write!(f, "{}[{}] = {}", result, index, value)
+            }
+            Self::Load {
+                result,
+                value,
+                index
+            } => {
+                write!(f, "{} = {}[{}]", result, index, value)
             }
             Self::Map {
                 result,

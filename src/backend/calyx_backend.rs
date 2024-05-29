@@ -14,7 +14,11 @@ use crate::{
 };
 use calyx_backend::Backend;
 use calyx_ir::{build_assignments, RRC};
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    str::FromStr
+};
 
 // This file contains many examples of BAD software engineering.
 //
@@ -38,8 +42,12 @@ pub struct CalyxBackend {
 }
 
 impl CalyxBackend {
-    fn stdlib_context() -> calyx_ir::Context {
-        let ws = calyx_frontend::Workspace::from_compile_lib().unwrap();
+    fn stdlib_context(lib_path: String) -> calyx_ir::Context {
+        let ws = calyx_frontend::Workspace::construct(
+            &Some(PathBuf::from_str("src/backend/import.futil").unwrap()),
+            Path::new(&lib_path)
+        )
+        .unwrap();
         calyx_ir::Context {
             components: vec![],
             lib: ws.lib,
@@ -63,6 +71,22 @@ impl CalyxBackend {
             self.env.bind(var, cell.clone());
             cell
         }
+    }
+
+    // TODO: support larger nested arrays
+    // but arbitrary pointer access needs to be restricted in static analyzer
+    // when targeting hardware
+    fn make_cell_for_pointer(
+        &mut self, builder: &mut calyx_ir::Builder, var: Variable,
+        cell_size: usize, length: usize
+    ) -> RRC<calyx_ir::Cell> {
+        let cell = builder.add_primitive(
+            var.to_string(),
+            "comb_mem_d1",
+            &vec![cell_size as u64, length as u64, 64]
+        );
+        self.env.bind(var, cell.clone());
+        cell
     }
 
     /// Builds a constant if the operand is a constant. See
@@ -215,12 +239,47 @@ impl CalyxBackend {
                 add_group.borrow_mut().assignments.extend(assignments);
                 seq.stmts.push(calyx_ir::Control::enable(add_group));
             }
-            Ir::Mul(_, _, _) => todo!(),
-            Ir::Assign(result, value) => {
-                let value_cell = self.cell_for_operand(builder, value);
+            Ir::Mul(result, lhs, rhs) => {
+                let lhs_cell = self.cell_for_operand(builder, lhs);
+                let rhs_cell = self.cell_for_operand(builder, rhs);
                 let result_cell = self.cell_for_var(builder, *result);
                 let signal_out = builder.add_constant(1, 1);
-                let assign_group = builder.add_group("add");
+                let mult =
+                    builder.add_primitive("mult", "std_mult_pipe", &vec![64]);
+
+                let mult_group = builder.add_group("multiply");
+                let mult_assignments = build_assignments!(builder;
+                    mult["left"] = ? lhs_cell["out"];
+                    mult["right"] = ? rhs_cell["out"];
+                    mult["go"] = ? signal_out["out"];
+                    mult_group["done"] = ? mult["done"];
+                )
+                .to_vec();
+                mult_group.borrow_mut().assignments.extend(mult_assignments);
+                seq.stmts.push(calyx_ir::Control::enable(mult_group));
+
+                let use_mult_group = builder.add_group("use_multiply");
+                let use_mult_assignments = build_assignments!(builder;
+                    result_cell["in"] = ? mult["out"];
+                    result_cell["write_en"] = ? signal_out["out"];
+                    use_mult_group["done"] = ? result_cell["done"];
+                )
+                .to_vec();
+                use_mult_group
+                    .borrow_mut()
+                    .assignments
+                    .extend(use_mult_assignments);
+                seq.stmts.push(calyx_ir::Control::enable(use_mult_group));
+            }
+            Ir::Assign(result, value) => {
+                let value_cell = self.cell_for_operand(builder, value);
+                if value_cell.borrow().is_primitive("comb_mem_d1".into()) {
+                    self.env.bind(*result, value_cell.clone());
+                    return;
+                }
+                let result_cell = self.cell_for_var(builder, *result);
+                let signal_out = builder.add_constant(1, 1);
+                let assign_group = builder.add_group("assign");
                 let assignments = build_assignments!(builder;
                     result_cell["in"] = ? value_cell["out"];
                     result_cell["write_en"] = ? signal_out["out"];
@@ -278,15 +337,52 @@ impl CalyxBackend {
                     return_group.borrow_mut().assignments.extend(assignments);
                     seq.stmts.push(calyx_ir::Control::enable(return_group));
                 } else {
-                    todo!("I haven't figured out return fully yet")
+                    // todo!("I haven't figured out return fully yet")
                 }
             }
-            Ir::LocalAlloc(_, _) => todo!(),
+            Ir::LocalAlloc(result, size, count) => {
+                self.make_cell_for_pointer(builder, *result, *size * 8, *count);
+            }
             Ir::Store {
                 result,
                 value,
                 index
-            } => todo!(),
+            } => {
+                let store_group = builder.add_group("store");
+                let result_cell = self.cell_for_var(builder, *result);
+                let value_cell = self.cell_for_operand(builder, value);
+                let index_cell = self.cell_for_operand(builder, index);
+                let signal_out = builder.add_constant(1, 1);
+                let assignments = build_assignments!(builder;
+                    result_cell["addr0"] = ? index_cell["out"];
+                    result_cell["write_data"] = ? value_cell["out"];
+                    result_cell["write_en"] = ? signal_out["out"];
+                    store_group["done"] = ? result_cell["done"];
+                )
+                .to_vec();
+                store_group.borrow_mut().assignments.extend(assignments);
+                seq.stmts.push(calyx_ir::Control::enable(store_group));
+            }
+            Ir::Load {
+                result,
+                value,
+                index
+            } => {
+                let load_group = builder.add_group("load");
+                let result_cell = self.cell_for_var(builder, *result);
+                let value_cell = self.cell_for_operand(builder, value);
+                let index_cell = self.cell_for_operand(builder, index);
+                let signal_out = builder.add_constant(1, 1);
+                let assignments = build_assignments!(builder;
+                    value_cell["addr0"] = ? index_cell["out"];
+                    result_cell["in"] = ? value_cell["read_data"];
+                    result_cell["write_en"] = ? signal_out["out"];
+                    load_group["done"] = ? result_cell["done"];
+                )
+                .to_vec();
+                load_group.borrow_mut().assignments.extend(assignments);
+                seq.stmts.push(calyx_ir::Control::enable(load_group));
+            }
             Ir::Map {
                 result,
                 parallel_factor,
@@ -398,7 +494,9 @@ impl CalyxBackend {
 }
 
 pub struct CalyxBackendInput {
-    pub output_file: calyx_utils::OutputFile
+    pub lib_path: String,
+    pub calyx_output: calyx_utils::OutputFile,
+    pub verilog_output: calyx_utils::OutputFile
 }
 
 impl PulsarBackend for CalyxBackend {
@@ -419,7 +517,7 @@ impl PulsarBackend for CalyxBackend {
     fn run(
         &mut self, code: Vec<GeneratedTopLevel>, input: Self::ExtraInput
     ) -> Result<(), Self::Error> {
-        let mut calyx_ctx = CalyxBackend::stdlib_context();
+        let mut calyx_ctx = CalyxBackend::stdlib_context(input.lib_path);
 
         // Create a calyx program from the IR
         // - Step 1: load signatures
@@ -455,12 +553,12 @@ impl PulsarBackend for CalyxBackend {
         }
 
         // Debug print
-        // calyx_ir::Printer::write_context(
-        //     &calyx_ctx,
-        //     false,
-        //     &mut input.output_file.get_write()
-        // )
-        // .unwrap();
+        calyx_ir::Printer::write_context(
+            &calyx_ctx,
+            false,
+            &mut input.calyx_output.get_write()
+        )
+        .unwrap();
 
         calyx_ctx.entrypoint = calyx_ctx
             .components
@@ -487,7 +585,7 @@ impl PulsarBackend for CalyxBackend {
 
         // Emit to Verilog
         let backend = calyx_backend::VerilogBackend;
-        backend.run(calyx_ctx, input.output_file)?;
+        backend.run(calyx_ctx, input.verilog_output)?;
         Ok(())
     }
 }

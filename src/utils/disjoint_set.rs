@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use std::{collections::HashMap, fmt::Debug, hash::Hash, iter::Map};
 
 pub trait NodeTrait: Eq + Hash + Clone {}

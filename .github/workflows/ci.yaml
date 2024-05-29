@@ -21,6 +21,10 @@ jobs:
       uses: Swatinem/rust-cache@v2.7.3
     - name: Install Dependencies
       run: make deps
+    - name: Install Calyx
+      run: make ci_install_calyx
+    - name: Check Setup
+      run: make ci_check
     - name: Build
       run: make build
     - name: Test

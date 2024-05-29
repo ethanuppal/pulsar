@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use std::{fmt::Display, rc::Rc};
 
 /// Different sources of text data.
