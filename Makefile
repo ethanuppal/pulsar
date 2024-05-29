@@ -34,6 +34,16 @@ deps:
 		brew install verilator; \
 	fi
 
+.PHONY: ci_check
+ci_check:
+	@echo "Checking that 'make' works"
+	make
+	@echo "Checking that './main' works"
+	./main
+	@echo "Checking that the verilator testing harness works"
+	cd tests/calyx-verilog && make N=twice
+
+
 .PHONY: clean
 clean:
 	@echo '[INFO] Removing build files'
