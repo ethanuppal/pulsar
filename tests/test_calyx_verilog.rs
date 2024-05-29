@@ -30,4 +30,9 @@ mod tests {
     fn test_twice() {
         test_runner("twice");
     }
+
+    #[test]
+    fn test_square() {
+        test_runner("square");
+    }
 }
