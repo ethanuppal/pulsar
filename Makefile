@@ -40,7 +40,7 @@ ci_install_calyx:
 	cd $(HOME) && git clone https://github.com/calyxir/calyx.git
 	cd $(HOME)/calyx && cargo build
 	cd $(HOME)/calyx && ./target/debug/calyx --help
-	cd $(HOME)/calyx && pip3 install flit
+	cd $(HOME)/calyx && python -m pip install flit
 	cd $(HOME)/calyx && cd calyx-py && flit install -s && cd -
 	cd $(HOME)/calyx && flit -f fud/pyproject.toml install -s --deps production
 	fud config --create global.root $(HOME)/calyx
