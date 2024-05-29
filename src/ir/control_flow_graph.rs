@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use super::basic_block::{BasicBlock, BasicBlockCell};
 use crate::utils::digraph::Digraph;
 use std::fmt::Display;

@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use super::{
     token::{Token, TokenType},
     ty::{StmtTypeCell, Type, TypeCell}
@@ -19,6 +20,8 @@ pub enum ExprValue {
 
     /// TODO: Call an `expr` or some sort of chaining of `::`
     Call(Token, Vec<Expr>),
+
+    Subscript(Box<Expr>, Box<Expr>),
 
     /// `ArrayLiteral(elements, should_continue)` is an array literal beginning
     /// with `elements` and filling the remainder of the array with zeros if
@@ -60,6 +63,9 @@ impl Display for Expr {
                         .collect::<Vec<_>>()
                         .join(", ")
                 )?;
+            }
+            ExprValue::Subscript(array, index) => {
+                write!(f, "{}[{}]", array, index)?;
             }
             ExprValue::ArrayLiteral(elements, should_continue) => {
                 write!(

@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use std::{
     fmt::{Debug, Display},
     hash::{Hash, Hasher},

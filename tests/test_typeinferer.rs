@@ -136,4 +136,13 @@ mod tests {
             error_manager
         ));
     }
+
+    #[test]
+    fn test_infer16() {
+        let error_manager = ErrorManager::with_max_count(5);
+        assert_snapshot!(typeinferer_output(
+            "tests/data/infer16.plsr",
+            error_manager
+        ));
+    }
 }

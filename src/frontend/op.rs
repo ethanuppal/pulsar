@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use super::token::TokenType;
 
 /// A precedence value must be strictly nonnegative.

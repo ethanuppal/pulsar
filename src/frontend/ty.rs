@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use crate::utils::{id::Id, mutcell::MutCell};
 use lazy_static::lazy_static;
 use std::{fmt::Display, hash::Hash};

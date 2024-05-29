@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use lazy_static::lazy_static;
 use std::{collections::HashMap, sync::Mutex};
 

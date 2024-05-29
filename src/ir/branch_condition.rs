@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use super::operand::Operand;
 use std::fmt::Display;
 

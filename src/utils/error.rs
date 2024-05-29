@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use crate::frontend::token::Token;
 
 use super::loc::Loc;

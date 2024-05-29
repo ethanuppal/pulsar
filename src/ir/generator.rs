@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use super::{
     basic_block::BasicBlockCell,
     control_flow_graph::ControlFlowGraph,
@@ -113,6 +114,17 @@ impl Generator {
                     Operand::Variable(result)
                 })
             }
+            ExprValue::Subscript(array, index) => {
+                let array_operand = self.gen_expr(&array, block.clone());
+                let index_operand = self.gen_expr(&index, block.clone());
+                let result = Variable::new();
+                block.as_mut().add(Ir::Load {
+                    result,
+                    value: array_operand,
+                    index: index_operand
+                });
+                Operand::Variable(result)
+            }
             ExprValue::ArrayLiteral(elements, _) => {
                 let (element_type, element_count) =
                     expr.ty.as_ref().as_array_type();
@@ -120,16 +132,18 @@ impl Generator {
                 let element_count = element_count as usize;
 
                 let result = Variable::new();
-                block
-                    .as_mut()
-                    .add(Ir::LocalAlloc(result, element_size * element_count));
+                block.as_mut().add(Ir::LocalAlloc(
+                    result,
+                    element_size,
+                    element_count
+                ));
                 let mut i = 0;
                 for element in elements {
                     let element_operand = self.gen_expr(element, block.clone());
                     block.as_mut().add(Ir::Store {
                         result,
                         value: element_operand,
-                        index: i
+                        index: Operand::Constant(i)
                     });
                     i += 1;
                 }
@@ -137,7 +151,7 @@ impl Generator {
                     block.as_mut().add(Ir::Store {
                         result,
                         value: Operand::Constant(0),
-                        index: i
+                        index: Operand::Constant(i as i64)
                     });
                 }
                 Operand::Variable(result)
@@ -151,9 +165,11 @@ impl Generator {
                 let arr_operand = self.gen_expr(arr, block.clone());
 
                 let result = Variable::new();
-                block
-                    .as_mut()
-                    .add(Ir::LocalAlloc(result, element_size * element_count));
+                block.as_mut().add(Ir::LocalAlloc(
+                    result,
+                    element_size,
+                    element_count
+                ));
 
                 block.as_mut().add(Ir::Map {
                     result,

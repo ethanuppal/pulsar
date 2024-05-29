@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use pulsar::utils::{error::*, loc::*};
 
 pub fn main() {

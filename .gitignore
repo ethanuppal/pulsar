@@ -1,3 +1,5 @@
 /target
 main
 a.out
+tests/calyx-verilog/build/*
+!tests/calyx-verilog/build/.gitkeep

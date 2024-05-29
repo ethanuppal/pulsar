@@ -1,5 +1,4 @@
-// use super::token::Token;
-
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use super::token::{Token, TokenType};
 use crate::utils::{
     error::{ErrorBuilder, ErrorCode, ErrorManager, Level, Style},

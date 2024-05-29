@@ -1,3 +1,4 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use super::variable::Variable;
 use std::fmt::Display;
 
