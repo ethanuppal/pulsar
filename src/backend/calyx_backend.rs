@@ -310,7 +310,6 @@ impl CalyxBackend {
                 // matter right now
                 if let Some(value) = value_opt {
                     let return_group = builder.add_group("return");
-                    let func = builder.component.signature.clone();
                     let mut value_cell = self.cell_for_operand(builder, value);
 
                     // We need to use the done port (doesn't exist on constants)

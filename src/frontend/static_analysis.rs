@@ -238,18 +238,18 @@ impl StaticAnalyzer {
         );
     }
 
-    fn report_invalid_operation(&mut self, explain: String, ctx: &Token) {
-        self.report(
-            ErrorBuilder::new()
-                .of_style(Style::Primary)
-                .at_level(Level::Error)
-                .with_code(ErrorCode::StaticAnalysisIssue)
-                .at_token(ctx)
-                .message("Invalid operation".into())
-                .explain(explain)
-                .build()
-        );
-    }
+    // fn report_invalid_operation(&mut self, explain: String, ctx: &Token) {
+    //     self.report(
+    //         ErrorBuilder::new()
+    //             .of_style(Style::Primary)
+    //             .at_level(Level::Error)
+    //             .with_code(ErrorCode::StaticAnalysisIssue)
+    //             .at_token(ctx)
+    //             .message("Invalid operation".into())
+    //             .explain(explain)
+    //             .build()
+    //     );
+    // }
 
     fn report_unification_failure(
         &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Token,
