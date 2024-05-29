@@ -35,4 +35,9 @@ mod tests {
     fn test_square() {
         test_runner("square");
     }
+
+    #[test]
+    fn test_map() {
+        test_runner("map");
+    }
 }

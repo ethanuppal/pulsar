@@ -125,10 +125,11 @@ impl CalyxBackend {
         self.sig.insert(label.name.mangle().clone(), comp_ports);
     }
 
-    /// A component for a call to `call` with `arg_count` arguments,
-    /// instantiated as a cell a single time in the current component.
+    /// A component for a call to `call` instantiated as a cell a single time in
+    /// the current component.
     fn cell_for_call(
-        &mut self, builder: &mut calyx_ir::Builder, call: &LabelName
+        &mut self, builder: &mut calyx_ir::Builder, call: &LabelName,
+        unique: bool
     ) -> (String, RRC<calyx_ir::Cell>) {
         // For some reason, this is private https://github.com/calyxir/calyx/blob/main/calyx-ir/src/builder.rs#L361
         fn cell_from_signature(
@@ -152,7 +153,9 @@ impl CalyxBackend {
         }
 
         let cell_name = format!("call{}", call.mangle());
-        if let Some(cell) = self.call_env.find(cell_name.clone()) {
+        if let Some(cell) =
+            self.call_env.find(cell_name.clone()).filter(|_| !unique)
+        {
             (cell_name, cell.clone())
         } else {
             let mut port_defs = self.sig.get(call.mangle()).unwrap().clone();
@@ -207,6 +210,8 @@ impl CalyxBackend {
         }
     }
 
+    /// A unique cell that is only used for a single instruction and does not
+    /// need to be referenced elsewhere.
     fn cell_for_temp(
         &mut self, builder: &mut calyx_ir::Builder
     ) -> RRC<calyx_ir::Cell> {
@@ -252,24 +257,13 @@ impl CalyxBackend {
                     mult["left"] = ? lhs_cell["out"];
                     mult["right"] = ? rhs_cell["out"];
                     mult["go"] = ? signal_out["out"];
-                    mult_group["done"] = ? mult["done"];
+                    result_cell["in"] = ? mult["out"];
+                    result_cell["write_en"] = ? mult["done"];
+                    mult_group["done"] = ? result_cell["done"];
                 )
                 .to_vec();
                 mult_group.borrow_mut().assignments.extend(mult_assignments);
                 seq.stmts.push(calyx_ir::Control::enable(mult_group));
-
-                let use_mult_group = builder.add_group("use_multiply");
-                let use_mult_assignments = build_assignments!(builder;
-                    result_cell["in"] = ? mult["out"];
-                    result_cell["write_en"] = ? signal_out["out"];
-                    use_mult_group["done"] = ? result_cell["done"];
-                )
-                .to_vec();
-                use_mult_group
-                    .borrow_mut()
-                    .assignments
-                    .extend(use_mult_assignments);
-                seq.stmts.push(calyx_ir::Control::enable(use_mult_group));
             }
             Ir::Assign(result, value) => {
                 let value_cell = self.cell_for_operand(builder, value);
@@ -386,10 +380,80 @@ impl CalyxBackend {
                 result,
                 parallel_factor,
                 f,
-                input
-            } => todo!(),
+                input,
+                length
+            } => {
+                assert!(length % parallel_factor == 0, "parallel_factor must divide length. figure out a better place to assert this, probably in the type checker fix");
+                let index_cell = self.cell_for_temp(builder);
+                let signal_out = builder.add_constant(1, 1);
+
+                let init_group = builder.add_group("init");
+                let zero = builder.add_constant(0, 64);
+                let init_assignments = build_assignments!(builder;
+                    index_cell["in"] = ? zero["out"];
+                    index_cell["write_en"] = ? signal_out["out"];
+                    init_group["done"] = ? index_cell["done"];
+                )
+                .to_vec();
+                init_group.borrow_mut().assignments.extend(init_assignments);
+
+                let cond_group = builder.add_comb_group("cond");
+                let array_size_cell = builder.add_constant(*length as u64, 64);
+                let lt_cell = builder.add_primitive("lt", "std_lt", &vec![64]);
+                let cond_assignments = build_assignments!(builder;
+                    lt_cell["left"] = ? index_cell["out"];
+                    lt_cell["right"] = ? array_size_cell["out"];
+                )
+                .to_vec();
+                cond_group.borrow_mut().assignments.extend(cond_assignments);
+
+                let update_group = builder.add_group("update");
+                let input_cell = self.cell_for_operand(builder, input); // also a memory
+                let result_cell = self.cell_for_var(builder, *result);
+                let (_, call_cell) = self.cell_for_call(builder, f, true);
+                let update_assignments = build_assignments!(builder;
+                    input_cell["addr0"] = ? index_cell["out"];
+                    call_cell["arg0"] = ? input_cell["read_data"];
+                    call_cell["go"] = ? signal_out["out"];
+                    result_cell["addr0"] = ? index_cell["out"];
+                    result_cell["write_data"] = ? call_cell["ret"];
+                    result_cell["write_en"] = ? call_cell["done"];
+                    update_group["done"] = ? result_cell["done"];
+
+                )
+                .to_vec();
+                update_group
+                    .borrow_mut()
+                    .assignments
+                    .extend(update_assignments);
+
+                let incr_group = builder.add_group("incr");
+                let adder =
+                    builder.add_primitive("adder", "std_add", &vec![64]);
+                let one = builder.add_constant(1, 64);
+                let incr_assignments = build_assignments!(builder;
+                    adder["left"] = ? index_cell["out"];
+                    adder["right"] = ? one["out"];
+                    index_cell["in"] = ? adder["out"];
+                    index_cell["write_en"] = ? signal_out["out"];
+                    incr_group["done"] = ? index_cell["done"];
+                )
+                .to_vec();
+                incr_group.borrow_mut().assignments.extend(incr_assignments);
+
+                seq.stmts.push(calyx_ir::Control::enable(init_group));
+                seq.stmts.push(calyx_ir::Control::while_(
+                    lt_cell.borrow().get("out"),
+                    Some(cond_group),
+                    Box::new(calyx_ir::Control::seq(vec![
+                        calyx_ir::Control::enable(update_group),
+                        calyx_ir::Control::enable(incr_group),
+                    ]))
+                ));
+            }
             Ir::Call(result_opt, func_name, args) => {
-                let (_, call_cell) = self.cell_for_call(builder, func_name);
+                let (_, call_cell) =
+                    self.cell_for_call(builder, func_name, false);
                 let signal_out = builder.add_constant(1, 1);
                 let call_group = builder.add_group("call");
                 for (i, arg) in args.iter().enumerate() {
@@ -451,7 +515,7 @@ impl CalyxBackend {
             comp_name,
             self.sig.get(label.name.mangle()).unwrap().clone(),
             true,
-            is_pure,
+            false,
             None
         );
 

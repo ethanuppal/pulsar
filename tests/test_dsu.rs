@@ -48,7 +48,7 @@ mod tests {
         #[test]
         fn test_union(
             values1 in hash_set(any::<CheapCloneInt32>(), 1..50),
-            values2 in hash_set(any::<CheapCloneInt32>(), 1..50),
+            values2 in hash_set(any::<CheapCloneInt32>(), 100..150),
             union_by_rank in bool::arbitrary()
         ) {
             let mut ds = DisjointSets::new();

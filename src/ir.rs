@@ -42,7 +42,8 @@ pub enum Ir {
         result: Variable,
         parallel_factor: usize,
         f: LabelName,
-        input: Operand
+        input: Operand,
+        length: usize
     },
     Call(Option<Variable>, LabelName, Vec<Operand>)
 }
@@ -88,7 +89,8 @@ impl Display for Ir {
                 result,
                 parallel_factor,
                 f: func,
-                input
+                input,
+                length: _
             } => {
                 write!(
                     f,

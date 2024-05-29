@@ -1,5 +1,7 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 #ifdef PULSAR_VERILATOR_TEST
+    #include <iostream>
+
 void PulsarMain::cycle() {
     mod->clk = !mod->clk;
     mod->eval();
@@ -32,6 +34,9 @@ int main(int argc, char** argv) {
     PulsarMain main;
     main.mod = mod;
     int exit_code = test(main);
+    if (exit_code == 0) {
+        std::cout << "test passed!" << '\n';
+    }
     delete mod;
     exit(exit_code);
 }
