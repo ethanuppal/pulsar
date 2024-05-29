@@ -26,15 +26,13 @@ deps:
 	@cargo install cargo-nextest
 	@curl -LsSf https://insta.rs/install.sh | sh
 	@cargo install cargo-llvm-cov
-	UNAME_S := $(shell uname -s)
-    ifeq ($(UNAME_S),Linux)
-        @echo '[INFO] Installing Verilator on Ubuntu'
-        @sudo apt-get install -y verilator
-    endif
-    ifeq ($(UNAME_S),Darwin)
-        @echo '[INFO] Installing Verilator on macOS'
-        @brew install verilator
-    endif
+	@if [ "$(shell uname -s)" = "Linux" ]; then \
+		echo '[INFO] Installing Verilator on Ubuntu'; \
+		sudo apt-get install -y verilator; \
+	elif [ "$(shell uname -s)" = "Darwin" ]; then \
+		echo '[INFO] Installing Verilator on macOS'; \
+		brew install verilator; \
+	fi
 
 .PHONY: clean
 clean:
