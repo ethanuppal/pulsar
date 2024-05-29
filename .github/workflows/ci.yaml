@@ -21,6 +21,8 @@ jobs:
       uses: Swatinem/rust-cache@v2.7.3
     - name: Install Dependencies
       run: make deps
+    - name: Check Verilator Install
+      run: cd tests/calyx-verilog && make N=twice
     - name: Build
       run: make build
     - name: Test
