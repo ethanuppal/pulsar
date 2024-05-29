@@ -37,7 +37,9 @@ deps:
 .PHONY: ci_install_calyx
 ci_install_calyx:
 	@echo '[INFO] Installing calyx'
-	cd $(HOME) && git clone https://github.com/calyxir/calyx.git
+	if [ ! -d "$(HOME)/calyx" ]; then \
+		cd $(HOME) && git clone https://github.com/calyxir/calyx.git; \
+	fi
 	cd $(HOME)/calyx && cargo build
 	cd $(HOME)/calyx && ./target/debug/calyx --help
 	cd $(HOME)/calyx && python -m pip install flit
