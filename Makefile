@@ -34,6 +34,17 @@ deps:
 		brew install verilator; \
 	fi
 
+.PHONY: ci_install_calyx
+ci_install_calyx:
+	@echo '[INFO] Installing calyx'
+	cd $(HOME) && git clone https://github.com/calyxir/calyx.git
+	cd $(HOME)/calyx && cargo build
+	cd $(HOME)/calyx && ./target/debug/calyx --help
+	cd $(HOME)/calyx && pip3 install flit
+	cd $(HOME)/calyx && cd calyx-py && flit install -s && cd -
+	cd $(HOME)/calyx && flit -f fud/pyproject.toml install -s --deps production
+	fud config --create global.root $(HOME)/calyx
+
 .PHONY: ci_check
 ci_check:
 	@echo "Checking that 'make' works"
