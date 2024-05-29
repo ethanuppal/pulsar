@@ -27,12 +27,8 @@ mod tests {
     }
 
     #[test]
-    fn test_twice() {
+    fn test_verilator_harnesses() {
         test_runner("twice");
-    }
-
-    #[test]
-    fn test_square() {
         test_runner("square");
     }
 }
