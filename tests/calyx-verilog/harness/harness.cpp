@@ -3,7 +3,9 @@
     #include <iostream>
 
 void PulsarMain::cycle() {
-    mod->clk = !mod->clk;
+    mod->clk = 0;
+    mod->eval();
+    mod->clk = 1;
     mod->eval();
 }
 void PulsarMain::pump() {
@@ -23,7 +25,7 @@ void PulsarMain::go() {
         cycle();
     }
     mod->go = 0;
-    pump();
+    cycle();
 }
 
 int test(PulsarMain main);
