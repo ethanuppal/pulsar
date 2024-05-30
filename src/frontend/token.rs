@@ -1,5 +1,5 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use crate::utils::loc::Loc;
+use crate::utils::loc::{Loc, RegionProvider};
 use core::{fmt, fmt::Debug};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -138,5 +138,18 @@ impl Debug for Token {
             self.ty,
             self.loc
         )
+    }
+}
+
+impl RegionProvider for Token {
+    fn start(&self) -> Loc {
+        self.loc.clone()
+    }
+
+    fn end(&self) -> Loc {
+        let mut end = self.loc.clone();
+        end.pos += self.length();
+        end.col += self.length();
+        end
     }
 }

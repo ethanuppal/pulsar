@@ -2,7 +2,7 @@
 use super::token::{Token, TokenType};
 use crate::utils::{
     error::{ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
-    loc::{Loc, Source}
+    loc::{Loc, Region, Source}
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -214,7 +214,7 @@ impl Iterator for Lexer {
                         .of_style(Style::Primary)
                         .at_level(Level::Error)
                         .with_code(ErrorCode::UnrecognizedCharacter)
-                        .at_region(self.loc.clone(), 1)
+                        .at_region(&Region::unit(self.loc.clone()))
                         .message("Encountered unrecognized character".into())
                         .build();
                     self.error_manager.borrow_mut().record(error);

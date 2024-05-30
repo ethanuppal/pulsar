@@ -1,11 +1,15 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use std::{fmt::Display, rc::Rc};
+use std::{cmp::Ordering, fmt::Display, rc::Rc};
 
 /// Different sources of text data.
 #[derive(Clone, Debug, Eq)]
 pub enum Source {
     /// `Source::File { name, contents }` is a text file with name `name` and
     /// contents `contents`.
+    ///
+    /// Invariant: if two [`Source::File`]s have the same `name`, they must
+    /// represent the same file. For this reason, it is recommended to use
+    /// fully-qualified paths for `name`.
     File {
         name: String,
         contents: String
@@ -190,10 +194,65 @@ impl PartialEq for Loc {
     }
 }
 
-pub trait Region {
+impl PartialOrd for Loc {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.source != other.source {
+            None
+        } else {
+            self.pos.partial_cmp(&other.pos)
+        }
+    }
+}
+
+/// The location enclosede by a region begins at `start` and ends exclusively
+/// at `end`. It is required that both locations come from the same source and
+/// that `end` monotonically proceeds `start`. This invariant is enforced when
+/// constructing through [`Region::new`].
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+pub struct Region {
+    pub start: Loc,
+    pub end: Loc
+}
+
+impl Region {
+    /// A region from `start` up to (but not including) `end`.
+    pub fn new(start: Loc, end: Loc) -> Region {
+        assert!(start <= end, "`Region::from`: `start` and `end` must from the same source and `end` must be at least after `start`.");
+        Region { start, end }
+    }
+
+    /// A region at `start` of length 1.
+    ///
+    /// Requires: the `start.line` contains at least one more character after
+    /// `start.col`.
+    pub fn unit(start: Loc) -> Region {
+        let mut end = start.clone();
+        end.pos += 1;
+        end.col += 1;
+        Region::new(start, end)
+    }
+}
+
+pub trait RegionProvider {
     /// The starting location of this region.
     fn start(&self) -> Loc;
 
-    /// Must be in the same source and monotonically after [`Region::start`].
+    /// Must be in the same source and monotonically after
+    /// [`RegionProvider::start`]. See [`Region`] for details.
     fn end(&self) -> Loc;
+
+    /// The region of this object.
+    fn region(&self) -> Region {
+        Region::new(self.start(), self.end())
+    }
+}
+
+impl RegionProvider for Region {
+    fn start(&self) -> Loc {
+        self.start.clone()
+    }
+
+    fn end(&self) -> Loc {
+        self.end.clone()
+    }
 }

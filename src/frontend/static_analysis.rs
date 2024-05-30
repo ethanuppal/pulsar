@@ -12,7 +12,6 @@ use crate::utils::{
     environment::Environment,
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
     id::Gen,
-    loc::Region,
     CheapClone
 };
 use std::{
@@ -130,7 +129,7 @@ impl StaticAnalyzer {
                 .of_style(Style::Primary)
                 .at_level(Level::Warning)
                 .with_code(ErrorCode::StaticAnalysisIssue)
-                .at_region(dead_node.start(), 1)
+                .at_region(dead_node)
                 .message("Statement is never reached".into())
                 .build()
         );
@@ -138,7 +137,7 @@ impl StaticAnalyzer {
             ErrorBuilder::new()
                 .of_style(Style::Secondary)
                 .at_level(Level::Warning)
-                .at_region(term_node.start(), 1)
+                .at_region(term_node)
                 .message("   ...".into())
                 .explain(format!(
                     "Returned from function `{}` here",
@@ -154,7 +153,7 @@ impl StaticAnalyzer {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::InvalidTopLevelConstruct)
-                .at_token(func_name)
+                .at_region(func_name)
                 .message(format!(
                     "Function `{}` does not return from all paths",
                     func_name.value
@@ -170,7 +169,7 @@ impl StaticAnalyzer {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::UnboundName)
-                .at_token(name)
+                .at_region(name)
                 .message(format!(
                     "Unbound function or variable `{}`",
                     name.value
@@ -187,7 +186,7 @@ impl StaticAnalyzer {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::StaticAnalysisIssue)
-                // .at_token(&expr.start)
+                // .at_region(&expr.start)
                 .without_loc()
                 .message(format!("Ambiguous type `{}`", ty))
                 .explain(explain)
@@ -203,7 +202,7 @@ impl StaticAnalyzer {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::StaticAnalysisIssue)
-                .at_region(impure_node.start(), 1)
+                .at_region(impure_node)
                 .message(format!(
                     "Impure statement in `pure` function `{}`",
                     name.value
@@ -215,7 +214,7 @@ impl StaticAnalyzer {
                 .of_style(Style::Secondary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::StaticAnalysisIssue)
-                .at_token(pure_token)
+                .at_region(pure_token)
                 .message("   ...".into())
                 .explain("Function declared pure here".into())
                 .fix("Consider marking called functions with `pure`".into())
@@ -229,7 +228,7 @@ impl StaticAnalyzer {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::StaticAnalysisIssue)
-                .at_token(name)
+                .at_region(name)
                 .message(format!(
                     "Cannot call non-function value `{}`",
                     name.value
@@ -244,7 +243,7 @@ impl StaticAnalyzer {
     //             .of_style(Style::Primary)
     //             .at_level(Level::Error)
     //             .with_code(ErrorCode::StaticAnalysisIssue)
-    //             .at_token(ctx)
+    //             .at_region(ctx)
     //             .message("Invalid operation".into())
     //             .explain(explain)
     //             .build()
@@ -259,7 +258,7 @@ impl StaticAnalyzer {
             .of_style(Style::Primary)
             .at_level(Level::Error)
             .with_code(ErrorCode::StaticAnalysisIssue)
-            .at_token(&lhs_ctx)
+            .at_region(&lhs_ctx)
             .message(format!("Failed to unify types `{}` and `{}`", lhs, rhs))
             .explain(format!("Type inferred here to be `{}`", lhs));
         if let Some(fix) = fix {
@@ -272,7 +271,7 @@ impl StaticAnalyzer {
                     .of_style(Style::Secondary)
                     .at_level(Level::Error)
                     .with_code(ErrorCode::StaticAnalysisIssue)
-                    .at_token(&rhs_ctx)
+                    .at_region(&rhs_ctx)
                     .message("   ...".into())
                     .explain(format!("Type inferred here to be `{}`", rhs))
                     .build()
@@ -701,7 +700,7 @@ impl StaticAnalyzer {
                                     .of_style(Style::Primary)
                                     .at_level(Level::Error)
                                     .with_code(ErrorCode::StaticAnalysisIssue)
-                                    .at_token(&lhs_ctx)
+                                    .at_region(&lhs_ctx)
                                     .message(format!(
                                         "Array sizes don't match: {} != {}",
                                         lhs_size, rhs_size
@@ -713,7 +712,7 @@ impl StaticAnalyzer {
                                         .of_style(Style::Secondary)
                                         .at_level(Level::Error)
                                         .with_code(ErrorCode::StaticAnalysisIssue)
-                                        .at_token(&rhs_ctx)
+                                        .at_region(&rhs_ctx)
                                         .message("...".into())
                                         .explain(format!("Inferred to have size {} here based on environment", rhs_size))
                                         .build()

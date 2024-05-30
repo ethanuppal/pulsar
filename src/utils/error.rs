@@ -1,7 +1,5 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use crate::frontend::token::Token;
-
-use super::loc::Loc;
+use super::loc::{Region, RegionProvider};
 use colored::*;
 use std::{cell::RefCell, fmt::Display, io, rc::Rc};
 
@@ -90,7 +88,7 @@ pub struct Error {
     style: Style,
     level: Level,
     code: ErrorCode,
-    loc: Loc,
+    region: Option<Region>,
     length: usize,
     message: String,
     explain: Option<String>,
@@ -101,16 +99,22 @@ impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.style == Style::Primary {
             write!(f, "{}: ", self.level.form_header(self.code).bold(),)?;
-            if !self.loc.is_invalid() {
-                write!(f, "{}: ", self.loc.to_string().underline())?;
+            if self.region.is_some() {
+                write!(
+                    f,
+                    "{}: ",
+                    self.region.as_ref().unwrap().start.to_string().underline()
+                )?;
             }
         }
         write!(f, "{}\n", self.message.bold())?;
-        if self.loc.is_invalid() {
+        if self.region.is_none() {
             return Ok(());
         }
+        let region = self.region.as_ref().unwrap();
+        let region_lines = region.end.line - region.start.line;
         writeln!(f, "{}", "     │  ".dimmed())?;
-        let (lines, current_line_pos) = self.loc.lines(1, 1);
+        let (lines, current_line_pos) = region.start.lines(1, region_lines + 1);
         for (i, line) in lines.iter().enumerate() {
             if i > 0 {
                 writeln!(f)?;
@@ -118,11 +122,11 @@ impl Display for Error {
             write!(
                 f,
                 "{}",
-                format!("{: >4} │  ", i + self.loc.line - current_line_pos)
+                format!("{: >4} │  ", i + region.start.line - current_line_pos)
                     .dimmed()
             )?;
             if i == current_line_pos {
-                let split_first = self.loc.col - 1;
+                let split_first = region.start.col - 1;
                 let (part1, rest) = line.split_at(split_first);
                 if !line.is_empty() {
                     let split_second = split_first + self.length - 1;
@@ -180,7 +184,7 @@ impl Default for Error {
             style: Style::Primary,
             level: Level::Error,
             code: ErrorCode::default(),
-            loc: Loc::default(),
+            region: None,
             length: 0,
             message: String::default(),
             explain: None,
@@ -221,20 +225,14 @@ impl ErrorBuilder {
     }
 
     /// Locates the error as extending `length` characters starting from `loc`.
-    pub fn at_region(mut self, loc: Loc, length: usize) -> Self {
-        self.error.loc = loc;
-        self.error.length = length;
+    pub fn at_region<R: RegionProvider>(mut self, region_provider: &R) -> Self {
+        self.error.region = Some(region_provider.region());
         self
-    }
-
-    /// Locates the error at the given token `token`.
-    pub fn at_token(self, token: &Token) -> Self {
-        self.at_region(token.loc.clone(), token.length())
     }
 
     /// Identifies the error as having no location.
     pub fn without_loc(mut self) -> Self {
-        self.error.loc = Loc::make_invalid();
+        self.error.region = None;
         self
     }
 

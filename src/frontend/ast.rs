@@ -5,7 +5,7 @@ use super::{
 };
 use crate::utils::{
     format,
-    loc::{Loc, Region},
+    loc::{Loc, RegionProvider},
     mutcell::MutCell
 };
 use std::fmt::{self, Display};
@@ -206,7 +206,7 @@ impl Display for Node {
     }
 }
 
-impl Region for Node {
+impl RegionProvider for Node {
     fn start(&self) -> Loc {
         self.start_token.clone_out().unwrap().loc
     }

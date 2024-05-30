@@ -96,7 +96,7 @@ impl Parser {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::UnexpectedEOF)
-                .at_token(self.buffer.last().unwrap())
+                .at_region(self.buffer.last().unwrap())
                 .explain(format!("Unexpected EOF {}", context))
                 .build()
         );
@@ -112,7 +112,7 @@ impl Parser {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::UnexpectedToken)
-                .at_token(actual)
+                .at_region(actual)
                 .message(format!("Expected '{:?}' {}", expected_ty, context))
                 .explain(format!("Received '{:?}' here", actual.ty))
                 .build()
@@ -128,7 +128,7 @@ impl Parser {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::UnexpectedToken)
-                .at_token(actual)
+                .at_region(actual)
                 .message(format!(
                     "Expected one of {} {}",
                     expected_tys
@@ -150,7 +150,7 @@ impl Parser {
             ErrorBuilder::new()
                 .of_style(Style::Secondary)
                 .at_level(Level::Error)
-                .at_token(refback)
+                .at_region(refback)
                 .message("   ...".into())
                 .explain(explain)
                 .build()
@@ -164,7 +164,7 @@ impl Parser {
             .of_style(Style::Primary)
             .at_level(Level::Error)
             .with_code(ErrorCode::InvalidTopLevelConstruct)
-            .at_token(token)
+            .at_region(token)
             .message(format!("Unexpected {:?} at top level", token.ty))
             .fix(
                 "Allowed constructs at top level include functions and imports"
@@ -181,7 +181,7 @@ impl Parser {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::ConstructShouldBeTopLevel)
-                .at_token(token)
+                .at_region(token)
                 .message("Unexpected top-level construct".into())
                 .fix("Did you mean to place it at the top level?".into())
                 .build()
@@ -195,7 +195,7 @@ impl Parser {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::InvalidTokenForStatement)
-                .at_token(token)
+                .at_region(token)
                 .message("Invalid token at the start of statement".into())
                 .build()
         );
@@ -208,7 +208,7 @@ impl Parser {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::InvalidOperatorSyntax)
-                .at_token(token)
+                .at_region(token)
                 .message(format!(
                     "{} is not an {} operator",
                     token.value, usage
@@ -342,7 +342,7 @@ impl Parser {
                     .of_style(Style::Primary)
                     .at_level(Level::Error)
                     .with_code(ErrorCode::MalformedType)
-                    .at_token(&size_token)
+                    .at_region(&size_token)
                     .message("Array size cannot be negative".into())
                     .build()
             );
@@ -353,7 +353,7 @@ impl Parser {
                     .of_style(Style::Primary)
                     .at_level(Level::Warning)
                     .with_code(ErrorCode::MalformedType)
-                    .at_token(&size_token)
+                    .at_region(&size_token)
                     .message("Array size is zero".into())
                     .build()
             );
