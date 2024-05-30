@@ -6,7 +6,7 @@ BUILD	:= debug
 build:
 	@echo '[INFO] Building project'
 	@cargo build
-	@echo '$(PWD)/target/$(BUILD)/main "$$@"' > ./main
+	@echo '$(PWD)/target/$(BUILD)/main $$@' > ./main
 	@chmod u+x ./main
 
 .PHONY: test
@@ -33,6 +33,8 @@ deps:
 		echo '[INFO] Installing Verilator on macOS'; \
 		brew install verilator; \
 	fi
+	@echo '[INFO] Checking verilator version'
+	verilator --version
 
 .PHONY: ci_install_calyx
 ci_install_calyx:
@@ -53,6 +55,7 @@ ci_check:
 	make
 	@echo "Checking that the verilator testing harness works"
 	cd tests/calyx-verilog && make N=twice
+	cd tests/calyx-verilog && make N=map
 # @echo "Checking that './main' works"
 # ./main 1>/dev/null 2>/dev/null || exit 0
 

@@ -179,7 +179,8 @@ impl Generator {
                         &vec![Type::Int64],
                         &Box::new(Type::Int64)
                     ),
-                    input: arr_operand
+                    input: arr_operand,
+                    length: element_count
                 });
 
                 Operand::Variable(result)

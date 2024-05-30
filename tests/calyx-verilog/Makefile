@@ -1,14 +1,6 @@
 N			:= _
 BUILD_DIR	:= build
-PULSAR_MAIN	:= _pulsar_Smain_q_q
 LOC			:= tests/calyx-verilog
-
-
-ifeq ($(shell uname -s),Darwin)
-NUM_CORES := $(shell sysctl -n hw.logicalcpu)
-else
-NUM_CORES := $(shell nproc)
-endif
 
 .PHONY: test
 test:
@@ -21,12 +13,8 @@ test:
 	cd ../.. && make
 	cd ../.. && ./main $(LOC)/$(N).plsr 2>/dev/null 1>$(LOC)/$(BUILD_DIR)/$(N)/$(N).sv
 	cat harness/prefix.h harness/test.h harness/harness.cpp $(N).cpp > $(BUILD_DIR)/$(N)/sim_main.cpp
-	cd $(BUILD_DIR)/$(N) && verilator \
- 		--cc --exe -sv --build -j $(NUM_CORES) \
-  		--top-module $(PULSAR_MAIN) \
-		-CFLAGS "-DHARNESS -DPULSAR_VERILATOR_TEST -I../../../phony" \
-		sim_main.cpp $(N).sv
-	$(BUILD_DIR)/$(N)/obj_dir/V_pulsar_Smain_q_q
+	chmod +x harness/invoke.bash
+	harness/invoke.bash $(N) `grep -m 1 -o "_pulsar_Smain[^ \(]*" $(BUILD_DIR)/$(N)/$(N).sv | xargs`
 	make clean N=$(N)
 
 .PHONY: clean

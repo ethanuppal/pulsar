@@ -1,7 +1,11 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 #ifdef PULSAR_VERILATOR_TEST
+    #include <iostream>
+
 void PulsarMain::cycle() {
-    mod->clk = !mod->clk;
+    mod->clk = 0;
+    mod->eval();
+    mod->clk = 1;
     mod->eval();
 }
 void PulsarMain::pump() {
@@ -21,17 +25,29 @@ void PulsarMain::go() {
         cycle();
     }
     mod->go = 0;
-    pump();
+    cycle();
 }
+
+    #ifdef __linux__
+// linux hack for CI?
+// https://veripool.org/guide/latest/faq.html#why-do-i-get-undefined-reference-to-sc-time-stamp
+// likely not sustainable
+double sc_time_stamp() {
+    return 0;
+}
+    #endif
 
 int test(PulsarMain main);
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
-    V_pulsar_Smain_q_q* mod = new V_pulsar_Smain_q_q;
+    VPULSAR_MAIN_MODULE* mod = new VPULSAR_MAIN_MODULE;
     PulsarMain main;
     main.mod = mod;
     int exit_code = test(main);
+    if (exit_code == 0) {
+        std::cout << "test passed!" << '\n';
+    }
     delete mod;
     exit(exit_code);
 }
