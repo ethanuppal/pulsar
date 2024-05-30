@@ -17,7 +17,7 @@ struct PulsarMain {
     };
 
 #ifdef HARNESS
-    V_pulsar_Smain_q_q* mod;
+    VPULSAR_MAIN_MODULE* mod;
 #else
     dummy mod[1];
 #endif

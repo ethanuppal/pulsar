@@ -37,6 +37,11 @@ mod tests {
     }
 
     #[test]
+    fn test_map_single() {
+        test_runner("map_single");
+    }
+
+    #[test]
     fn test_map() {
         test_runner("map");
     }

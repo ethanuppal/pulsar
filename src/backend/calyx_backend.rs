@@ -407,25 +407,33 @@ impl CalyxBackend {
                 .to_vec();
                 cond_group.borrow_mut().assignments.extend(cond_assignments);
 
-                let update_group = builder.add_group("update");
+                let read_group = builder.add_group("read");
+                let write_group = builder.add_group("write");
+
                 let input_cell = self.cell_for_operand(builder, input); // also a memory
                 let result_cell = self.cell_for_var(builder, *result);
                 let (_, call_cell) = self.cell_for_call(builder, f, true);
-                let update_assignments = build_assignments!(builder;
+
+                let read_assignments = build_assignments!(builder;
                     input_cell["addr0"] = ? index_cell["out"];
                     call_cell["arg0"] = ? input_cell["read_data"];
                     call_cell["go"] = ? signal_out["out"];
+                    read_group["done"] = ? call_cell["done"];
+                )
+                .to_vec();
+                read_group.borrow_mut().assignments.extend(read_assignments);
+
+                let write_assignments = build_assignments!(builder;
                     result_cell["addr0"] = ? index_cell["out"];
                     result_cell["write_data"] = ? call_cell["ret"];
                     result_cell["write_en"] = ? call_cell["done"];
-                    update_group["done"] = ? result_cell["done"];
-
+                    write_group["done"] = ? result_cell["done"];
                 )
                 .to_vec();
-                update_group
+                write_group
                     .borrow_mut()
                     .assignments
-                    .extend(update_assignments);
+                    .extend(write_assignments);
 
                 let incr_group = builder.add_group("incr");
                 let adder =
@@ -446,7 +454,8 @@ impl CalyxBackend {
                     lt_cell.borrow().get("out"),
                     Some(cond_group),
                     Box::new(calyx_ir::Control::seq(vec![
-                        calyx_ir::Control::enable(update_group),
+                        calyx_ir::Control::enable(read_group),
+                        calyx_ir::Control::enable(write_group),
                         calyx_ir::Control::enable(incr_group),
                     ]))
                 ));
@@ -506,7 +515,7 @@ impl CalyxBackend {
 
     fn emit_func(
         &mut self, calyx_ctx: &mut calyx_ir::Context, label: &Label,
-        args: &Vec<Type>, ret: &Box<Type>, is_pure: bool,
+        _args: &Vec<Type>, ret: &Box<Type>, _is_pure: bool,
         cfg: &ControlFlowGraph
     ) {
         let comp_name = calyx_ir::Id::new(label.name.mangle());

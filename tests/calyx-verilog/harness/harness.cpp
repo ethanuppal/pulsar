@@ -30,7 +30,7 @@ int test(PulsarMain main);
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
-    V_pulsar_Smain_q_q* mod = new V_pulsar_Smain_q_q;
+    VPULSAR_MAIN_MODULE* mod = new VPULSAR_MAIN_MODULE;
     PulsarMain main;
     main.mod = mod;
     int exit_code = test(main);
