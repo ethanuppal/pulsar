@@ -18,6 +18,7 @@ int test(PulsarMain plsr) {
         if (result != arg * arg) {
             std::cout << "test failed: expected: " << (arg * arg)
                       << " but received: " << result << '\n';
+            return 1;
         }
     }
     return 0;

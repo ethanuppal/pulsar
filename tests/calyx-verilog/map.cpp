@@ -14,6 +14,7 @@ int test(PulsarMain plsr) {
     if (result != exp) {
         std::cout << "test failed: expected: " << exp
                   << " but received: " << result << '\n';
+        return 1;
     }
     return 0;
 }
