@@ -1,14 +1,14 @@
 #include "harness/test.h"
 #include <iostream>
-#include <cstddef>
 #include <ctime>
-#include <cstdlib>
+#include <random>
 
 int test(PulsarMain plsr) {
     plsr_reset(plsr);
+    std::mt19937 generator(time(NULL));
+    std::uniform_int_distribution<> distribution(0, 999);
     for (int i = 0; i < 1000; i++) {
-        unsigned int seed = time(NULL);
-        unsigned int arg = rand_r(&seed) % 1000;
+        unsigned int arg = distribution(generator);
         plsr_arg(plsr, 0, arg);
         plsr_go(plsr);
         int result = plsr_ret(plsr);

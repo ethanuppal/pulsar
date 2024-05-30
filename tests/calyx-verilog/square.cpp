@@ -3,12 +3,14 @@
 #include <cstddef>
 #include <ctime>
 #include <cstdlib>
+#include <random>
 
 int test(PulsarMain plsr) {
+    std::mt19937 generator(time(NULL));
+    std::uniform_int_distribution<> distribution(0, 999);
     plsr_reset(plsr);
     for (int i = 0; i < 1000; i++) {
-        unsigned int seed = time(NULL);
-        int arg = rand_r(&seed) % 1000;
+        unsigned int arg = distribution(generator);
         if (arg < 0) {
             arg = -arg;
         }
