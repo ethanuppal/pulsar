@@ -28,6 +28,15 @@ void PulsarMain::go() {
     cycle();
 }
 
+    #ifdef __linux__
+// linux hack for CI?
+// https://veripool.org/guide/latest/faq.html#why-do-i-get-undefined-reference-to-sc-time-stamp
+// likely not sustainable
+extern "C" double sc_time_stamp() {
+    return 0;
+}
+    #endif
+
 int test(PulsarMain main);
 
 int main(int argc, char** argv) {
