@@ -53,6 +53,7 @@ ci_check:
 	make
 	@echo "Checking that the verilator testing harness works"
 	cd tests/calyx-verilog && make N=twice
+	cd tests/calyx-verilog && make N=map
 # @echo "Checking that './main' works"
 # ./main 1>/dev/null 2>/dev/null || exit 0
 
