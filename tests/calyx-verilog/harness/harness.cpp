@@ -32,7 +32,7 @@ void PulsarMain::go() {
 // linux hack for CI?
 // https://veripool.org/guide/latest/faq.html#why-do-i-get-undefined-reference-to-sc-time-stamp
 // likely not sustainable
-extern "C" double sc_time_stamp() {
+double sc_time_stamp() {
     return 0;
 }
     #endif
