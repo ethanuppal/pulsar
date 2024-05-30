@@ -12,6 +12,7 @@ int test(PulsarMain plsr) {
         plsr_arg(plsr, 0, arg);
         plsr_go(plsr);
         int result = plsr_ret(plsr);
+        std::cout << "result: " << result << '\n';
         if (result != arg * 2) {
             std::cout << "test failed: expected: " << (arg * 2)
                       << " but received: " << result << '\n';

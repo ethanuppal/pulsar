@@ -2,6 +2,8 @@
 # REQUIRED INPUT $1 = name of build subdirectory
 # REQUIRED INPUT $2 = name of top-level module 
 
+set -x
+
 BUILD_DIR="build"
 N="$1"
 MOD="$2"
