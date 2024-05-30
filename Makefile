@@ -33,7 +33,8 @@ deps:
 		echo '[INFO] Installing Verilator on macOS'; \
 		brew install verilator; \
 	fi
-	verilator -v
+	@echo '[INFO] Checking verilator version'
+	verilator --version
 
 .PHONY: ci_install_calyx
 ci_install_calyx:
