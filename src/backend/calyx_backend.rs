@@ -636,7 +636,7 @@ impl PulsarBackend for CalyxBackend {
             .components
             .iter()
             .find(|comp| comp.name.to_string().contains("_pulsar_Smain"))
-            .unwrap()
+            .expect("No main function provided")
             .name;
 
         // Perform optimization passes

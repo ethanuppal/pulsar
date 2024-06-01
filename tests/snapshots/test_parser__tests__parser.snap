@@ -27,14 +27,14 @@ error[E0003]: tests/data/parserfail_in1.plsr:12:5: Expected 'right-brace' at end
      │  
   11 │  func foo() {
   12 │      func nested() {
-            └─── Received 'func' here
+     │      └─── Received 'func' here
   13 │          
      │  
    ...
      │  
   10 │  
   11 │  func foo() { 
-                   └ function body opened here
+     │             └ function body opened here
   12 │      func nested() {
      │  
 
@@ -50,5 +50,5 @@ error[E0003]: tests/data/parserfail_in1.plsr:19:1: Expected 'identifier' for par
      │  
   18 │  
   19 │  func missing_close_2() {
-        └─── Received 'func' here
+     │  └─── Received 'func' here
      │

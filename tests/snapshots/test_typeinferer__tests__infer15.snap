@@ -22,27 +22,27 @@ func sum_squares2(input: Int64[4]) -> Int64 {
 warning[W0010]: tests/data/infer15.plsr:8:5: Statement is never reached
      │  
    7 │      return 0
-   8 │      let a = 3
+   8 │      let a = 3 
    9 │      return 0
      │  
    ...
      │  
    6 │      let squares = map<4>(square, input)
-   7 │      return 0
-            └ Returned from function `sum_squares` here
+   7 │      return 0 
+     │      └─────── Returned from function `sum_squares` here
    8 │      let a = 3
      │  
 
 warning[W0010]: tests/data/infer15.plsr:19:5: Statement is never reached
      │  
   18 │      return 0
-  19 │      return 0
+  19 │      return 0 
   20 │  }
      │  
    ...
      │  
   17 │      let squares = map<4>(square2, input)
-  18 │      return 0
-            └ Returned from function `sum_squares2` here
+  18 │      return 0 
+     │      └─────── Returned from function `sum_squares2` here
   19 │      return 0
      │

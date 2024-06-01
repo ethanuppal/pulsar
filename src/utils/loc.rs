@@ -1,11 +1,15 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use std::{fmt::Display, rc::Rc};
+use std::{cmp::Ordering, fmt::Display, rc::Rc};
 
 /// Different sources of text data.
 #[derive(Clone, Debug, Eq)]
 pub enum Source {
     /// `Source::File { name, contents }` is a text file with name `name` and
     /// contents `contents`.
+    ///
+    /// Invariant: if two [`Source::File`]s have the same `name`, they must
+    /// represent the same file. For this reason, it is recommended to use
+    /// fully-qualified paths for `name`.
     File {
         name: String,
         contents: String
@@ -127,12 +131,13 @@ impl PartialEq for Source {
 /// column `col` of `source`, where the combination of `line` and `col` produces
 /// a direct offset `pos`. It is formatted as `"{source}:{line}:{col}"` where
 /// `{source}` is the formatted substitution of `source` and likewise for
-/// `line`/`col`.
+/// `line`/`col`. It is required that no numeric field is negative, that is,
+/// `line`, `col`, and `pos` should be treated as if they were of type `usize`.
 #[derive(Debug, Clone, Eq)]
 pub struct Loc {
-    pub line: usize,
-    pub col: usize,
-    pub pos: usize,
+    pub line: isize,
+    pub col: isize,
+    pub pos: isize,
     pub source: Rc<Source>
 }
 
@@ -144,7 +149,7 @@ impl Loc {
     ///
     /// Requires: `loc.pos` is a valid position in `loc.source`.
     pub fn lines(&self, before: usize, after: usize) -> (Vec<String>, usize) {
-        self.source.lines(self.pos, before, after)
+        self.source.lines(self.pos as usize, before, after)
     }
 
     pub fn make_invalid() -> Self {
@@ -190,10 +195,140 @@ impl PartialEq for Loc {
     }
 }
 
-pub trait Region {
+impl PartialOrd for Loc {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.source != other.source {
+            None
+        } else {
+            self.pos.partial_cmp(&other.pos)
+        }
+    }
+}
+
+/// The location enclosed by a region begins at `start` and ends exclusively
+/// at `end`. It is required that both locations come from the same source and
+/// that `end` monotonically proceeds `start` (so `start` and `end` can compare
+/// equal). This invariant is enforced when constructing through
+/// [`Region::new`].
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+pub struct Region {
+    /// An inclusive lower bound (see [`Loc::partial_cmp`]) on the region
+    /// enclosed.
+    pub start: Loc,
+
+    /// An exclusive upper bound (see [`Loc::partial_cmp`]) on the region
+    /// enclosed.
+    pub end: Loc
+}
+
+/// The line section with `start` and `end` represents the characters at
+/// positions from lower bound `start` to exclusive upper bound `end` on a line.
+/// The core invariant that `end >= start` is enforced by [`LineSection::new`].
+pub struct LineSection {
+    /// The initial position on the line.
+    pub start: isize,
+
+    /// One after the final valid position contained by this line section on
+    /// the line, that is, an exclusive upper bound on the indices of the range
+    /// of characters contained by this line section.
+    pub end: isize
+}
+
+impl LineSection {
+    pub fn new(start: isize, end: isize) -> Self {
+        assert!(start <= end);
+        Self { start, end }
+    }
+
+    pub fn length(&self) -> usize {
+        (self.end - self.start) as usize
+    }
+}
+
+impl Region {
+    /// A region from `start` up to (but not including) `end`.
+    pub fn new(start: Loc, end: Loc) -> Region {
+        assert!(start <= end, "`Region::from`: `start` and `end` must from the same source and `end` must be at least after `start`.");
+        Region { start, end }
+    }
+
+    /// A region at `start` of length 1.
+    ///
+    /// Requires: the `start.line` contains at least one more character after
+    /// `start.col`.
+    pub fn unit(start: Loc) -> Region {
+        let mut end = start.clone();
+        end.pos += 1;
+        end.col += 1;
+        Region::new(start, end)
+    }
+
+    /// The source where this region occurs.
+    pub fn source(&self) -> Rc<Source> {
+        self.start.source.clone()
+    }
+
+    pub fn start_line(&self) -> isize {
+        self.start.line
+    }
+
+    pub fn end_line(&self) -> isize {
+        self.end.line
+    }
+
+    /// Given a set of *complete* `lines` from the same source as `source()`
+    /// and the line number of the first line in `lines`, `start_line`, this
+    /// function computes the intersection of this region and the given
+    /// lines. If the output vector is non-empty, the first entry in the output
+    /// vector corresponds to the first line of this region, which is not
+    /// necessarily the first line in `lines`. See [`LineSection`].
+    pub fn find_intersection(
+        &self, lines: &Vec<String>, start_line: isize
+    ) -> Vec<LineSection> {
+        let mut result = vec![];
+        for (i, line) in lines.iter().enumerate() {
+            let actual_line = start_line + (i as isize);
+            if actual_line >= self.start_line()
+                && actual_line <= self.end_line()
+            {
+                let mut start_pos = 0;
+                let mut end_pos = line.len() as isize;
+
+                if actual_line == self.start_line() {
+                    start_pos = self.start.col - 1;
+                }
+
+                if actual_line == self.end_line() {
+                    end_pos = self.end.col - 1;
+                }
+
+                result.push(LineSection::new(start_pos, end_pos));
+            }
+        }
+        result
+    }
+}
+
+pub trait RegionProvider {
     /// The starting location of this region.
     fn start(&self) -> Loc;
 
-    /// Must be in the same source and monotonically after [`Region::start`].
+    /// Must be in the same source and monotonically after
+    /// [`RegionProvider::start`]. See [`Region`] for details.
     fn end(&self) -> Loc;
+
+    /// The region of this object.
+    fn region(&self) -> Region {
+        Region::new(self.start(), self.end())
+    }
+}
+
+impl RegionProvider for Region {
+    fn start(&self) -> Loc {
+        self.start.clone()
+    }
+
+    fn end(&self) -> Loc {
+        self.end.clone()
+    }
 }

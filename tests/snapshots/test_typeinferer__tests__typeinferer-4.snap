@@ -10,13 +10,13 @@ error[E0010]: tests/data/infer4.plsr:2:8: Failed to unify types `Int64` and `'t6
      │  
    1 │  func main() {
    2 │     let huh: Int = []
-               └── Type inferred here to be `Int64`
+     │         └── Type inferred here to be `Int64`
    3 │  }
      │  
    ...
      │  
    1 │  func main() {
-   2 │     let huh: Int = []
-                          └ Type inferred here to be `'t6[0]`
+   2 │     let huh: Int = [] 
+     │                    └─ Type inferred here to be `'t6[0]`
    3 │  }
      │
