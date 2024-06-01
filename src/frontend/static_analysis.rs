@@ -12,6 +12,7 @@ use crate::utils::{
     environment::Environment,
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
     id::Gen,
+    loc::{Region, RegionProvider},
     CheapClone
 };
 use std::{
@@ -51,8 +52,8 @@ enum TypeConstraint {
     Equality {
         lhs: TypeCell,
         rhs: TypeCell,
-        lhs_ctx: Token,
-        rhs_ctx: Token
+        lhs_ctx: Region,
+        rhs_ctx: Region
     }
 }
 
@@ -251,8 +252,8 @@ impl StaticAnalyzer {
     // }
 
     fn report_unification_failure(
-        &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Token,
-        rhs_ctx: Token, fix: Option<String>
+        &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Region,
+        rhs_ctx: Region, fix: Option<String>
     ) {
         let mut builder = ErrorBuilder::new()
             .of_style(Style::Primary)
@@ -265,7 +266,7 @@ impl StaticAnalyzer {
             builder = builder.fix(fix);
         }
         self.report(builder.build());
-        if lhs_ctx.loc != rhs_ctx.loc {
+        if lhs_ctx != rhs_ctx {
             self.report(
                 ErrorBuilder::new()
                     .of_style(Style::Secondary)
@@ -286,7 +287,8 @@ impl StaticAnalyzer {
     }
 
     fn add_constraint(
-        &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Token, rhs_ctx: Token
+        &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Region,
+        rhs_ctx: Region
     ) {
         self.constraints.push_back(TypeConstraint::Equality {
             lhs,
@@ -311,8 +313,8 @@ impl StaticAnalyzer {
                     self.add_constraint(
                         expr.ty.clone(),
                         name_ty.clone(),
-                        expr.start.clone(),
-                        name.clone()
+                        expr.region(),
+                        name.region()
                     );
                 } else {
                     self.report_unbound_name(name);
@@ -334,8 +336,8 @@ impl StaticAnalyzer {
                             self.add_constraint(
                                 expr.ty.clone(),
                                 TypeCell::new((*ret).clone()),
-                                expr.start.clone(),
-                                name.clone()
+                                expr.region(),
+                                name.region()
                             );
 
                             for (arg, param_ty) in zip(args, param_tys) {
@@ -345,9 +347,9 @@ impl StaticAnalyzer {
                                 self.add_constraint(
                                     arg_ty,
                                     TypeCell::new(param_ty),
-                                    arg.start.clone(),
-                                    name.clone() /* TODO: store the param
-                                                  * tokens? */
+                                    arg.region(),
+                                    name.region() /* TODO: store the param
+                                                   * tokens? */
                                 )
                             }
                         }
@@ -369,8 +371,8 @@ impl StaticAnalyzer {
                 self.add_constraint(
                     index_ty,
                     Type::int64_singleton(),
-                    index.start.clone(),
-                    array.start.clone()
+                    index.region(),
+                    array.region()
                 );
                 self.add_constraint(
                     TypeCell::new(Type::Array(
@@ -378,8 +380,8 @@ impl StaticAnalyzer {
                         ARRAY_TYPE_UNKNOWN_SIZE
                     )),
                     array_ty,
-                    expr.start.clone(),
-                    expr.start.clone()
+                    expr.region(),
+                    expr.region()
                 );
                 // match array_ty.clone_out() {
                 //     Type::Array(element_type, _) => {
@@ -415,8 +417,8 @@ impl StaticAnalyzer {
                     self.add_constraint(
                         element_ty_var_cell.clone(),
                         element_type,
-                        expr.start.clone(),
-                        element.start.clone()
+                        expr.region(),
+                        element.region()
                     );
                 }
             }
@@ -433,14 +435,14 @@ impl StaticAnalyzer {
                         self.add_constraint(
                             expr.ty.clone(),
                             lhs_ty,
-                            expr.start.clone(),
-                            lhs.start.clone()
+                            expr.region(),
+                            lhs.region()
                         );
                         self.add_constraint(
                             expr.ty.clone(),
                             rhs_ty,
-                            expr.start.clone(),
-                            rhs.start.clone()
+                            expr.region(),
+                            rhs.region()
                         );
 
                         *expr.ty.as_mut() = Type::Int64;
@@ -461,8 +463,8 @@ impl StaticAnalyzer {
                             args: vec![Type::Int64],
                             ret: Box::new(Type::Int64)
                         }),
-                        f.clone(),
-                        map_token.clone()
+                        f.region(),
+                        map_token.region()
                     );
                     // arr_ty = Int64[?]
                     self.add_constraint(
@@ -471,15 +473,15 @@ impl StaticAnalyzer {
                             Type::int64_singleton(),
                             ARRAY_TYPE_UNKNOWN_SIZE
                         )),
-                        arr.start.clone(),
-                        map_token.clone()
+                        arr.region(),
+                        map_token.region()
                     );
                     // expr.ty = arr_ty
                     self.add_constraint(
                         expr.ty.clone(),
                         arr_ty,
-                        map_token.clone(),
-                        arr.start.clone()
+                        map_token.region(),
+                        arr.region()
                     );
                 } else {
                     self.report_unbound_name(f);
@@ -591,8 +593,8 @@ impl StaticAnalyzer {
                     self.add_constraint(
                         hint.clone(),
                         value_ty.clone(),
-                        name.clone(),
-                        value.start.clone()
+                        name.region(),
+                        value.region()
                     );
                 }
                 self.env.bind(name.value.clone(), value_ty);
@@ -609,15 +611,15 @@ impl StaticAnalyzer {
             ) => {
                 let ((value_ty, value_is_pure), value_start) =
                     if let Some(value) = value_opt {
-                        (self.visit_expr(value)?, value.start.clone())
+                        (self.visit_expr(value)?, value.region())
                     } else {
-                        ((Type::unit_singleton(), true), token.clone())
+                        ((Type::unit_singleton(), true), token.region())
                     };
                 self.add_constraint(
                     value_ty.clone(),
                     self.env.find(RETURN_ID.into()).unwrap().clone(),
                     value_start,
-                    token.clone()
+                    token.region()
                 );
                 *node.ty.as_mut() =
                     StmtType::from(StmtTermination::Terminal, value_is_pure);
@@ -630,7 +632,7 @@ impl StaticAnalyzer {
     /// Whenever possible, pass `lhs` as the type to be unified into `rhs`.
     fn unify(
         &mut self, dsu: &mut DisjointSets<TypeNode>, lhs: TypeCell,
-        rhs: TypeCell, lhs_ctx: Token, rhs_ctx: Token
+        rhs: TypeCell, lhs_ctx: Region, rhs_ctx: Region
     ) -> Result<(), String> {
         let lhs_tn = TypeNode::from_currently_stable_cell(lhs.clone());
         let rhs_tn = TypeNode::from_currently_stable_cell(rhs.clone());
@@ -739,7 +741,7 @@ impl StaticAnalyzer {
                             lhs,
                             rhs,
                             lhs_ctx.clone(),
-                            lhs_ctx.clone(),
+                            lhs_ctx,
                             Some("Try marking the function as `pure`".into())
                         );
                         return Err("unification failure".into());

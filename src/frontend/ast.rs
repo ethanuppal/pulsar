@@ -12,6 +12,29 @@ use std::fmt::{self, Display};
 
 pub type Param = (Token, Type);
 
+trait TokenRegionProvider {
+    fn start_token(&self) -> Token;
+    fn end_token(&self) -> Option<Token>;
+}
+
+impl<T: TokenRegionProvider> RegionProvider for T {
+    fn start(&self) -> Loc {
+        self.start_token().loc
+    }
+
+    fn end(&self) -> Loc {
+        let end_token = self.end_token().unwrap_or(self.start_token());
+        let mut loc = end_token.loc;
+        // tokens are always on one line
+        if end_token.ty != TokenType::Newline {
+            let length = end_token.value.len() as isize;
+            loc.pos += length;
+            loc.col += length;
+        }
+        loc
+    }
+}
+
 #[derive(Clone)]
 pub enum ExprValue {
     ConstantInt(i64),
@@ -40,7 +63,8 @@ pub enum ExprValue {
 #[derive(Clone)]
 pub struct Expr {
     pub value: ExprValue,
-    pub start: Token,
+    pub start_token: MutCell<Option<Token>>,
+    pub end_token: MutCell<Option<Token>>,
     pub ty: TypeCell
 }
 
@@ -106,6 +130,15 @@ impl Display for Expr {
     }
 }
 
+impl TokenRegionProvider for Expr {
+    fn start_token(&self) -> Token {
+        self.start_token.clone_out().unwrap()
+    }
+
+    fn end_token(&self) -> Option<Token> {
+        self.end_token.clone_out()
+    }
+}
 #[derive(Clone)]
 pub enum NodeValue {
     Function {
@@ -206,20 +239,12 @@ impl Display for Node {
     }
 }
 
-impl RegionProvider for Node {
-    fn start(&self) -> Loc {
-        self.start_token.clone_out().unwrap().loc
+impl TokenRegionProvider for Node {
+    fn start_token(&self) -> Token {
+        self.start_token.clone_out().unwrap()
     }
 
-    fn end(&self) -> Loc {
-        let end_token = self.end_token.clone_out().unwrap();
-        let mut loc = end_token.loc;
-        // tokens are always on one line
-        if end_token.ty != TokenType::Newline {
-            let length = end_token.value.len() as isize;
-            loc.pos += length;
-            loc.col += length;
-        }
-        loc
+    fn end_token(&self) -> Option<Token> {
+        self.end_token.clone_out()
     }
 }
