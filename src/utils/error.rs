@@ -4,7 +4,7 @@ use colored::*;
 use std::{cell::RefCell, fmt::Display, io, rc::Rc};
 
 #[repr(i32)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ErrorCode {
     UnknownError,
     UnrecognizedCharacter,
@@ -31,7 +31,7 @@ impl Default for ErrorCode {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Level {
     Info,
     Note,
@@ -76,7 +76,7 @@ impl Display for Level {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Style {
     Primary,
     Secondary
@@ -84,12 +84,12 @@ pub enum Style {
 
 /// An error at a given location with various information and diagnostics. Use
 /// [`Error::fmt`] to obtain a printable version of the error.
+#[derive(Debug)]
 pub struct Error {
     style: Style,
     level: Level,
     code: ErrorCode,
     region: Option<Region>,
-    length: usize,
     message: String,
     explain: Option<String>,
     fix: Option<String>
@@ -97,6 +97,8 @@ pub struct Error {
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Only primary-style messages have a header indicating they are the
+        // root of an error message and not auxillary information
         if self.style == Style::Primary {
             write!(f, "{}: ", self.level.form_header(self.code).bold(),)?;
             if self.region.is_some() {
@@ -108,13 +110,27 @@ impl Display for Error {
             }
         }
         write!(f, "{}\n", self.message.bold())?;
+
+        // If there is no region associated with this error, then we have
+        // nothing more to print
         if self.region.is_none() {
             return Ok(());
         }
+
+        // Otherwise, we print the region via a sequence of lines from the
+        // source.
         let region = self.region.as_ref().unwrap();
-        let region_lines = region.end.line - region.start.line;
+        let region_extra_lines = (region.end.line - region.start.line) as usize;
+        let show_lines_before = 1;
+        let show_lines_after = 1;
         writeln!(f, "{}", "     │  ".dimmed())?;
-        let (lines, current_line_pos) = region.start.lines(1, region_lines + 1);
+        let (lines, current_line_pos) = region
+            .start
+            .lines(show_lines_before, region_extra_lines + show_lines_after);
+        let show_start_line =
+            region.start_line() - (show_lines_before as isize);
+        let region_line_sections =
+            region.find_intersection(&lines, show_start_line);
         for (i, line) in lines.iter().enumerate() {
             if i > 0 {
                 writeln!(f)?;
@@ -122,18 +138,27 @@ impl Display for Error {
             write!(
                 f,
                 "{}",
-                format!("{: >4} │  ", i + region.start.line - current_line_pos)
-                    .dimmed()
+                format!(
+                    "{: >4} │  ",
+                    i + (region.start.line as usize) - current_line_pos
+                )
+                .dimmed()
             )?;
-            if i == current_line_pos {
-                let split_first = region.start.col - 1;
-                let (part1, rest) = line.split_at(split_first);
+            if i >= current_line_pos
+                && i <= current_line_pos + region_extra_lines
+            {
+                let line_section = &region_line_sections[i - current_line_pos];
+                let split_first = line_section.start;
+                let (part1, rest) = line.split_at(split_first as usize);
                 if !line.is_empty() {
-                    let split_second = split_first + self.length - 1;
-                    let (part2, part3) = if split_second == line.len() {
+                    let split_second =
+                        split_first + (line_section.length() as isize) - 1;
+                    let (part2, part3) = if (split_second as usize)
+                        == line.len()
+                    {
                         (rest, "")
                     } else {
-                        rest.split_at(split_second - split_first + 1)
+                        rest.split_at((split_second - split_first + 1) as usize)
                     };
                     write!(
                         f,
@@ -159,9 +184,10 @@ impl Display for Error {
                     writeln!(f)?;
                     write!(
                         f,
-                        "        {}{} {}",
+                        "{}  {}{} {}",
+                        "     │".dimmed(),
                         " ".repeat(part1.len()),
-                        create_error_pointer(self.length)
+                        create_error_pointer(line_section.length())
                             .color(self.level.color()),
                         explain.bold().italic()
                     )?;
@@ -185,7 +211,6 @@ impl Default for Error {
             level: Level::Error,
             code: ErrorCode::default(),
             region: None,
-            length: 0,
             message: String::default(),
             explain: None,
             fix: None
@@ -240,6 +265,16 @@ impl ErrorBuilder {
     pub fn message(mut self, message: String) -> Self {
         self.error.message = message;
         self
+    }
+
+    /// Marks this error as without a message and instead continuing a previous
+    /// error.
+    ///
+    /// Requires: the error is of secondary style, which must be set before this
+    /// function is called (see [`ErrorBuilder::of_style`]).
+    pub fn continues(self) -> Self {
+        assert!(self.error.style == Style::Secondary);
+        self.message("   ...".into())
     }
 
     /// Uses an explanatory note `explain`.

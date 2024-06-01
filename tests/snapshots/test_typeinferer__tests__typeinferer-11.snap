@@ -13,7 +13,7 @@ error[E0010]: tests/data/infer11.plsr:6:26: Failed to unify types `(Int64) -> In
      │  
    5 │  func sum_squares(input: Int[4]) -> Int {
    6 │      let squares = map<1>(square, input)
-                                 └───── Type inferred here to be `(Int64) -> Int64`
+     │                           └───── Type inferred here to be `(Int64) -> Int64`
    7 │      return 0
      │  
 Suggestion: Try marking the function as `pure`

@@ -151,7 +151,7 @@ impl Parser {
                 .of_style(Style::Secondary)
                 .at_level(Level::Error)
                 .at_region(refback)
-                .message("   ...".into())
+                .continues()
                 .explain(explain)
                 .build()
         );

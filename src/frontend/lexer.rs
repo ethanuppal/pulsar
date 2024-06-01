@@ -56,13 +56,13 @@ impl Lexer {
 
     /// The current character in the buffer.
     fn current(&self) -> char {
-        self.buffer[self.loc.pos]
+        self.buffer[self.loc.pos as usize]
     }
 
     /// Whether the lexer has no remaining characters in the
     /// buffer.
     fn is_eof(&self) -> bool {
-        self.loc.pos == self.buffer.len()
+        (self.loc.pos as usize) == self.buffer.len()
     }
 
     /// Consumes a single character in the buffer.
@@ -97,9 +97,9 @@ impl Lexer {
     fn make_token(&mut self, ty: TokenType, length: usize) -> Token {
         let loc_copy = self.loc.clone();
         self.advance_n(length);
-        let value: String = self.buffer[loc_copy.pos..loc_copy.pos + length]
-            .iter()
-            .collect();
+        let pos_copy = loc_copy.pos as usize;
+        let value: String =
+            self.buffer[pos_copy..pos_copy + length].iter().collect();
         Token {
             ty,
             value,
@@ -159,8 +159,9 @@ macro_rules! lex {
         $(
             {
                 let input_token_length = ($token).len();
-                if $self.loc.pos + input_token_length <= $self.buffer.len()
-                    && $self.buffer[$self.loc.pos..$self.loc.pos + input_token_length].iter().copied().eq($token.chars()) {
+                let loc_pos = $self.loc.pos as usize;
+                if loc_pos + input_token_length <= $self.buffer.len()
+                    && $self.buffer[loc_pos..loc_pos + input_token_length].iter().copied().eq($token.chars()) {
                     return Some($self.make_token($token_type, input_token_length));
                 };
             }

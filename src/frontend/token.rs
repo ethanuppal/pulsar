@@ -148,8 +148,8 @@ impl RegionProvider for Token {
 
     fn end(&self) -> Loc {
         let mut end = self.loc.clone();
-        end.pos += self.length();
-        end.col += self.length();
+        end.pos += self.length() as isize;
+        end.col += self.length() as isize;
         end
     }
 }

@@ -38,9 +38,9 @@ mod tests {
     fn arb_loc() -> impl Strategy<Value = Loc> {
         (any::<usize>(), any::<usize>(), any::<usize>(), arb_source()).prop_map(
             |(line, col, pos, source)| Loc {
-                line,
-                col,
-                pos,
+                line: line as isize,
+                col: col as isize,
+                pos: pos as isize,
                 source
             }
         )

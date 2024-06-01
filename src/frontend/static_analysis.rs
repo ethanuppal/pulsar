@@ -138,7 +138,7 @@ impl StaticAnalyzer {
                 .of_style(Style::Secondary)
                 .at_level(Level::Warning)
                 .at_region(term_node)
-                .message("   ...".into())
+                .continues()
                 .explain(format!(
                     "Returned from function `{}` here",
                     func_name.value
@@ -215,7 +215,7 @@ impl StaticAnalyzer {
                 .at_level(Level::Error)
                 .with_code(ErrorCode::StaticAnalysisIssue)
                 .at_region(pure_token)
-                .message("   ...".into())
+                .continues()
                 .explain("Function declared pure here".into())
                 .fix("Consider marking called functions with `pure`".into())
                 .build()
@@ -272,7 +272,7 @@ impl StaticAnalyzer {
                     .at_level(Level::Error)
                     .with_code(ErrorCode::StaticAnalysisIssue)
                     .at_region(&rhs_ctx)
-                    .message("   ...".into())
+                    .continues()
                     .explain(format!("Type inferred here to be `{}`", rhs))
                     .build()
             );

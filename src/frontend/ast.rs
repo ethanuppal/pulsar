@@ -216,7 +216,7 @@ impl RegionProvider for Node {
         let mut loc = end_token.loc;
         // tokens are always on one line
         if end_token.ty != TokenType::Newline {
-            let length = end_token.value.len();
+            let length = end_token.value.len() as isize;
             loc.pos += length;
             loc.col += length;
         }
