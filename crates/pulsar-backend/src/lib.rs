@@ -1,5 +1,5 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use crate::ir::generator::GeneratedTopLevel;
+use pulsar_ir::generator::GeneratedTopLevel;
 
 pub mod calyx_backend;
 

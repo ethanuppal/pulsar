@@ -1,0 +1,16 @@
+[package]
+name = "pulsar-ir"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+authors.workspace = true
+license-file.workspace = true
+keywords.workspace = true
+repository.workspace = true
+homepage.workspace = true
+categories.workspace = true
+readme.workspace = true
+
+[dependencies]
+pulsar-frontend.workspace = true
+pulsar-utils.workspace = true

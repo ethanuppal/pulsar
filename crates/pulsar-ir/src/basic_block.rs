@@ -1,6 +1,6 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use super::{branch_condition::BranchCondition, Ir};
-use crate::utils::{
+use pulsar_utils::{
     id::{Gen, Id},
     mutcell::MutCell
 };

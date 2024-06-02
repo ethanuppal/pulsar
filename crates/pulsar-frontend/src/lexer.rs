@@ -1,6 +1,6 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use super::token::{Token, TokenType};
-use crate::utils::{
+use pulsar_utils::{
     error::{ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
     loc::{Loc, Region, Source}
 };

@@ -6,7 +6,7 @@ BUILD	:= debug
 build:
 	@echo '[INFO] Building project'
 	@cargo build
-	@echo '$(PWD)/target/$(BUILD)/main $$@' > ./main
+	@echo 'cargo run -- $$@' > ./main
 	@chmod u+x ./main
 
 .PHONY: test

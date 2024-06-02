@@ -7,7 +7,7 @@ use super::{
         ARRAY_TYPE_UNKNOWN_SIZE
     }
 };
-use crate::utils::{
+use pulsar_utils::{
     disjoint_set::{DisjointSets, NodeTrait},
     environment::Environment,
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},

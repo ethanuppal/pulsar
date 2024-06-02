@@ -1,0 +1,16 @@
+[package]
+name = "pulsar-utils"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+authors.workspace = true
+license-file.workspace = true
+keywords.workspace = true
+repository.workspace = true
+homepage.workspace = true
+categories.workspace = true
+readme.workspace = true
+
+[dependencies]
+colored.workspace = true
+lazy_static.workspace = true

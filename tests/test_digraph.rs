@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
-    use pulsar::utils::digraph::Digraph;
+    use pulsar_utils::digraph::Digraph;
 
     proptest! {
         #[test]

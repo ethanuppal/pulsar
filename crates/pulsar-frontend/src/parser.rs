@@ -5,12 +5,10 @@ use super::{
     token::{Token, TokenType},
     ty::{StmtType, Type, TypeCell}
 };
-use crate::{
-    frontend::ast::NodeValue,
-    utils::{
-        error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
-        mutcell::MutCell
-    }
+use crate::ast::NodeValue;
+use pulsar_utils::{
+    error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
+    mutcell::MutCell
 };
 use std::{cell::RefCell, rc::Rc};
 

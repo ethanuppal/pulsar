@@ -5,7 +5,7 @@ mod tests {
         collection::hash_set,
         prelude::*
     };
-    use pulsar::utils::{
+    use pulsar_utils::{
         disjoint_set::{DisjointSets, NodeTrait},
         CheapClone
     };

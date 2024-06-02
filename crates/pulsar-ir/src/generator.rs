@@ -7,14 +7,12 @@ use super::{
     variable::Variable,
     Ir
 };
-use crate::{
-    frontend::{
-        ast::{Expr, ExprValue, Node, NodeValue, Param},
-        token::{Token, TokenType},
-        ty::Type
-    },
-    utils::environment::Environment
+use pulsar_frontend::{
+    ast::{Expr, ExprValue, Node, NodeValue, Param},
+    token::{Token, TokenType},
+    ty::Type
 };
+use pulsar_utils::environment::Environment;
 use std::fmt::Display;
 
 pub enum GeneratedTopLevel {

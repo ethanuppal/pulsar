@@ -3,7 +3,7 @@ use super::{
     token::{Token, TokenType},
     ty::{StmtTypeCell, Type, TypeCell}
 };
-use crate::utils::{
+use pulsar_utils::{
     format,
     loc::{Loc, RegionProvider},
     mutcell::MutCell
@@ -17,22 +17,26 @@ trait TokenRegionProvider {
     fn end_token(&self) -> Option<Token>;
 }
 
-impl<T: TokenRegionProvider> RegionProvider for T {
-    fn start(&self) -> Loc {
-        self.start_token().loc
-    }
+macro_rules! implement_region_provider_for_token_provider {
+    ($T:ident) => {
+        impl RegionProvider for $T {
+            fn start(&self) -> Loc {
+                self.start_token().loc
+            }
 
-    fn end(&self) -> Loc {
-        let end_token = self.end_token().unwrap_or(self.start_token());
-        let mut loc = end_token.loc;
-        // tokens are always on one line
-        if end_token.ty != TokenType::Newline {
-            let length = end_token.value.len() as isize;
-            loc.pos += length;
-            loc.col += length;
+            fn end(&self) -> Loc {
+                let end_token = self.end_token().unwrap_or(self.start_token());
+                let mut loc = end_token.loc;
+                // tokens are always on one line
+                if end_token.ty != TokenType::Newline {
+                    let length = end_token.value.len() as isize;
+                    loc.pos += length;
+                    loc.col += length;
+                }
+                loc
+            }
         }
-        loc
-    }
+    };
 }
 
 #[derive(Clone)]
@@ -139,6 +143,9 @@ impl TokenRegionProvider for Expr {
         self.end_token.clone_out()
     }
 }
+
+implement_region_provider_for_token_provider!(Expr);
+
 #[derive(Clone)]
 pub enum NodeValue {
     Function {
@@ -248,3 +255,5 @@ impl TokenRegionProvider for Node {
         self.end_token.clone_out()
     }
 }
+
+implement_region_provider_for_token_provider!(Node);

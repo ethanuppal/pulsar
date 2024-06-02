@@ -1,6 +1,6 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use crate::utils::loc::{Loc, RegionProvider};
 use core::{fmt, fmt::Debug};
+use pulsar_utils::loc::{Loc, RegionProvider};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TokenType {

@@ -1,5 +1,5 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use crate::frontend::ty::Type;
+use pulsar_frontend::ty::Type;
 use std::fmt::{Display, Formatter};
 
 pub struct LabelName {
