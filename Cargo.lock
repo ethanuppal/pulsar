@@ -549,7 +549,6 @@ dependencies = [
 name = "pulsar"
 version = "0.0.0"
 dependencies = [
- "calyx-backend",
  "calyx-frontend",
  "calyx-ir",
  "calyx-opt",
@@ -558,6 +557,48 @@ dependencies = [
  "insta",
  "lazy_static",
  "proptest",
+ "pulsar-backend",
+ "pulsar-frontend",
+ "pulsar-ir",
+ "pulsar-utils",
+]
+
+[[package]]
+name = "pulsar-backend"
+version = "0.0.0"
+dependencies = [
+ "calyx-backend",
+ "calyx-frontend",
+ "calyx-ir",
+ "calyx-opt",
+ "calyx-utils",
+ "pulsar-frontend",
+ "pulsar-ir",
+ "pulsar-utils",
+]
+
+[[package]]
+name = "pulsar-frontend"
+version = "0.0.0"
+dependencies = [
+ "lazy_static",
+ "pulsar-utils",
+]
+
+[[package]]
+name = "pulsar-ir"
+version = "0.0.0"
+dependencies = [
+ "pulsar-frontend",
+ "pulsar-utils",
+]
+
+[[package]]
+name = "pulsar-utils"
+version = "0.0.0"
+dependencies = [
+ "colored",
+ "lazy_static",
 ]
 
 [[package]]

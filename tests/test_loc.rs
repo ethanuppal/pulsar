@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use pulsar::utils::loc::{Loc, Source};
+    use pulsar_utils::loc::{Loc, Source};
 
     #[test]
     fn test_loc_lines() {

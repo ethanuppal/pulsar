@@ -1,12 +1,10 @@
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
-    use pulsar::{
-        frontend::{
-            lexer::Lexer, parser::Parser, static_analysis::StaticAnalyzer
-        },
-        utils::{error::ErrorManager, loc::Source}
+    use pulsar_frontend::{
+        lexer::Lexer, parser::Parser, static_analysis::StaticAnalyzer
     };
+    use pulsar_utils::{error::ErrorManager, loc::Source};
     use std::{cell::RefCell, fs, rc::Rc};
 
     fn read(filename: &str) -> Rc<Source> {

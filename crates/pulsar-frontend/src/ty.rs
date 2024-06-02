@@ -1,6 +1,6 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use crate::utils::{id::Id, mutcell::MutCell};
 use lazy_static::lazy_static;
+use pulsar_utils::{id::Id, mutcell::MutCell};
 use std::{fmt::Display, hash::Hash};
 
 lazy_static! {

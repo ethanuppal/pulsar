@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
-    use pulsar::utils::environment::Environment;
+    use pulsar_utils::environment::Environment;
 
     proptest! {
         #[test]

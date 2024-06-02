@@ -1,5 +1,5 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use crate::utils::id::{Gen, Id};
+use pulsar_utils::id::{Gen, Id};
 use std::fmt::Display;
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]

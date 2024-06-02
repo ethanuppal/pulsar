@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
-    use pulsar::utils::id::Gen;
+    use pulsar_utils::id::Gen;
 
     proptest! {
         #[test]

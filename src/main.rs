@@ -1,13 +1,13 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use pulsar::{
-    backend::{
-        calyx_backend::{CalyxBackend, CalyxBackendInput},
-        PulsarBackend
-    },
-    frontend::{lexer::Lexer, parser::Parser, static_analysis::StaticAnalyzer},
-    ir::generator::Generator,
-    utils::{error::ErrorManager, loc::Source}
+use pulsar_backend::{
+    calyx_backend::{CalyxBackend, CalyxBackendInput},
+    PulsarBackend
 };
+use pulsar_frontend::{
+    lexer::Lexer, parser::Parser, static_analysis::StaticAnalyzer
+};
+use pulsar_ir::generator::Generator;
+use pulsar_utils::{error::ErrorManager, loc::Source};
 use std::{cell::RefCell, env, fs, io::stdout, process::Command, rc::Rc};
 
 fn handle_errors(error_manager: Rc<RefCell<ErrorManager>>) -> Result<(), ()> {

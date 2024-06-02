@@ -1,7 +1,15 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
-//! Pulsar compiler library and [calyx](http://calyxir.org) backend.
+//! Pulsar is a high-level programming language for building hardware
+//! accelerators. This crate (the `pulsar` crate) contains a driver that links
+//! together all the langauge components. The documentation for each individual
+//! component is linked under the "Re-exports" section.
+//!
+//! Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
-pub mod backend;
-pub mod frontend;
-pub mod ir;
-pub mod utils;
+#[doc(no_inline)]
+pub use pulsar_backend;
+#[doc(no_inline)]
+pub use pulsar_frontend;
+#[doc(no_inline)]
+pub use pulsar_ir;
+#[doc(no_inline)]
+pub use pulsar_utils;

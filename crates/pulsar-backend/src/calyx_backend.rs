@@ -1,23 +1,20 @@
 use super::PulsarBackend;
-use crate::{
-    frontend::ty::Type,
-    ir::{
-        basic_block::BasicBlockCell,
-        control_flow_graph::ControlFlowGraph,
-        generator::GeneratedTopLevel,
-        label::{Label, LabelName},
-        operand::Operand,
-        variable::Variable,
-        Ir
-    },
-    utils::environment::Environment
-};
 use calyx_backend::Backend;
 use calyx_ir::{build_assignments, RRC};
+use pulsar_frontend::ty::Type;
+use pulsar_ir::{
+    basic_block::BasicBlockCell,
+    control_flow_graph::ControlFlowGraph,
+    generator::GeneratedTopLevel,
+    label::{Label, LabelName},
+    operand::Operand,
+    variable::Variable,
+    Ir
+};
+use pulsar_utils::environment::Environment;
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
-    str::FromStr
+    path::{Path, PathBuf}
 };
 
 // This file contains many examples of BAD software engineering.
@@ -43,8 +40,11 @@ pub struct CalyxBackend {
 
 impl CalyxBackend {
     fn stdlib_context(lib_path: String) -> calyx_ir::Context {
+        let mut import_file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        import_file_path.push("resources");
+        import_file_path.push("import.futil");
         let ws = calyx_frontend::Workspace::construct(
-            &Some(PathBuf::from_str("src/backend/import.futil").unwrap()),
+            &Some(import_file_path),
             Path::new(&lib_path)
         )
         .unwrap();

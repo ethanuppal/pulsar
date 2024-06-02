@@ -2,11 +2,17 @@
 
 BUILD	:= debug
 
+ifeq ($(shell uname), Darwin)
+    OPEN := $(shell which open)
+else
+    OPEN := $(shell which xdg-open)
+endif
+
 .PHONY: build
 build:
 	@echo '[INFO] Building project'
 	@cargo build
-	@echo '$(PWD)/target/$(BUILD)/main $$@' > ./main
+	@echo 'cargo run -- $$@' > ./main
 	@chmod u+x ./main
 
 .PHONY: test
@@ -43,7 +49,7 @@ ci_install_calyx:
 		cd $(HOME) && git clone https://github.com/calyxir/calyx.git; \
 	fi
 	cd $(HOME)/calyx && cargo build
-	cd $(HOME)/calyx && ./target/debug/calyx --help
+	cd $(HOME)/calyx && ./target/debug/calyx --version
 	cd $(HOME)/calyx && python -m pip install flit
 	cd $(HOME)/calyx && cd calyx-py && flit install -s && cd -
 	cd $(HOME)/calyx && flit -f fud/pyproject.toml install -s --deps production
@@ -67,7 +73,8 @@ clean:
 .PHONY: docs
 docs:
 	@echo '[INFO] Building and viewing documentation'
-	@cargo doc --no-deps --open
+	@cargo doc -p pulsar-frontend -p pulsar-ir -p pulsar-backend -p pulsar-utils -p pulsar --no-deps
+		
 
 .PHONY: cloc
 cloc:
