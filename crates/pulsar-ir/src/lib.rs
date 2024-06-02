@@ -1,4 +1,8 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
+//! The IR can be structured or unstructured, dependending on the requirements
+//! of the backend.
+//!
+//! Copyright (C) 2024 Ethan Uppal. All rights reserved.
+
 use self::{label::LabelName, operand::Operand, variable::Variable};
 use std::fmt::Display;
 

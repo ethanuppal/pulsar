@@ -43,7 +43,7 @@ impl<Name: Eq + Hash, T> Environment<Name, T> {
 
     /// Binds `name` to `value` in the base scope.
     ///
-    /// @see [`Context::bind`]
+    /// @see [`Environment::bind`]
     pub fn bind_base(&mut self, name: Name, value: T) -> Option<T> {
         self.scopes.first_mut().unwrap().insert(name, value)
     }

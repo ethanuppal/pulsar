@@ -1,6 +1,9 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 //! This crate defines utilities for the pulsar compiler, such as error
-//! reporting and semantically-rich locations.
+//! reporting and semantically-rich locations. It also implements data
+//! structures such as a directed graph ([`digraph::Digraph`]) and disjoint sets
+//! ([`disjoint_set::DisjointSets`]).
+//!
+//! Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
 use std::ops::Deref;
 
