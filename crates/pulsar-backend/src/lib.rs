@@ -6,7 +6,7 @@
 
 use pulsar_ir::generator::GeneratedTopLevel;
 
-pub mod calyx_backend;
+pub mod calyx;
 
 // This interface hasn't been finalized yet, so it is quite sloppy as written
 

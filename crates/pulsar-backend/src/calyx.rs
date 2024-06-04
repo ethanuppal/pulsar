@@ -17,6 +17,8 @@ use std::{
     path::{Path, PathBuf}
 };
 
+pub mod builder;
+
 // This file contains many examples of BAD software engineering.
 //
 // One boilerplate I'm noticing is in construction of cells, groups, and control

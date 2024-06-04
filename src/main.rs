@@ -1,6 +1,6 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use pulsar_backend::{
-    calyx_backend::{CalyxBackend, CalyxBackendInput},
+    calyx::{CalyxBackend, CalyxBackendInput},
     PulsarBackend
 };
 use pulsar_frontend::{
