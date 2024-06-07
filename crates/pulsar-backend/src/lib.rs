@@ -21,8 +21,11 @@ pub trait PulsarBackend {
     type InitInput;
     type Error;
 
+    /// Initializes the backend.
     fn new(input: Self::InitInput) -> Self;
+
+    /// Consumes the backend and produces an output.
     fn run(
-        &mut self, code: Vec<GeneratedTopLevel>, output: Output
+        self, code: Vec<GeneratedTopLevel>, output: Output
     ) -> Result<(), Self::Error>;
 }

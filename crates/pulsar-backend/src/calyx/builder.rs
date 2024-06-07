@@ -2,9 +2,11 @@
 
 use calyx_ir::RRC;
 use pulsar_utils::environment::Environment;
-use std::{collections::HashMap, fmt::Display, path::PathBuf};
+use std::{
+    collections::HashMap, fmt::Display, marker::PhantomData, path::PathBuf
+};
 
-pub mod builder_macros;
+pub mod macros;
 
 /// Describes the semantics of a cell.
 #[derive(Clone, PartialEq, Eq)]
@@ -85,6 +87,9 @@ impl Display for CalyxCellKind {
     }
 }
 
+// might remove these later
+pub type CalyxPort = RRC<calyx_ir::Port>;
+
 /// A wrapper around [`calyx_ir::Cell`]s containing additional semantic
 /// information (see [`CalyxCellKind`]).
 #[derive(Clone)]
@@ -93,33 +98,66 @@ pub struct CalyxCell {
     pub value: RRC<calyx_ir::Cell>
 }
 
-// might remove these later
-pub type CalyxPort = RRC<calyx_ir::Port>;
-pub type CalyxGroup = RRC<calyx_ir::Group>;
-pub type CalyxCombGroup = RRC<calyx_ir::CombGroup>;
-
-/// A wrapper around [`calyx_ir::Control`] for scoped building.
-pub struct CalyxControl {
-    children: Vec<calyx_ir::Control>
+impl CalyxCell {
+    /// See [`calyx_ir::Cell::get`].
+    pub fn get(&self, port: &str) -> CalyxPort {
+        self.value.borrow().get(port)
+    }
 }
 
-impl CalyxControl {
-    /// Unwraps the control builder.
-    pub fn to_control(self) -> calyx_ir::Control {
-        if self.children.is_empty() {
-            calyx_ir::Control::empty()
-        } else {
-            calyx_ir::Control::seq(self.children)
-        }
-    }
+pub trait CalyxAssignmentContainer {
+    type AssignmentType;
 
-    /// Enables `group` in the current context. For example, if the current
-    /// context is a `seq`, this group will be enabled sequentially after
-    /// previous groups and control operators.
-    pub fn enable(&mut self, group: &CalyxGroup) {
-        self.children.push(calyx_ir::Control::enable(group.clone()));
-    }
+    fn add(&self, assignment: calyx_ir::Assignment<Self::AssignmentType>);
 
+    fn extend<
+        I: IntoIterator<Item = calyx_ir::Assignment<Self::AssignmentType>>
+    >(
+        &self, assignments: I
+    ) {
+        assignments.into_iter().for_each(|a| self.add(a));
+    }
+}
+
+pub struct CalyxGroup {
+    pub value: RRC<calyx_ir::Group>
+}
+
+impl CalyxAssignmentContainer for CalyxGroup {
+    type AssignmentType = calyx_ir::Nothing;
+
+    fn add(&self, assignment: calyx_ir::Assignment<Self::AssignmentType>) {
+        self.value.borrow_mut().assignments.push(assignment);
+    }
+}
+
+pub struct CalyxCombGroup {
+    pub value: RRC<calyx_ir::CombGroup>
+}
+
+impl CalyxAssignmentContainer for CalyxCombGroup {
+    type AssignmentType = calyx_ir::Nothing;
+
+    fn add(&self, assignment: calyx_ir::Assignment<Self::AssignmentType>) {
+        self.value.borrow_mut().assignments.push(assignment);
+    }
+}
+
+pub trait CalyxControlStyle {}
+
+pub struct Sequential;
+impl CalyxControlStyle for Sequential {}
+
+pub struct Parallel;
+impl CalyxControlStyle for Parallel {}
+
+/// A wrapper around [`calyx_ir::Control`] for scoped building.
+pub struct CalyxControl<T: CalyxControlStyle> {
+    children: Vec<calyx_ir::Control>,
+    phantom: PhantomData<T>
+}
+
+impl<T: CalyxControlStyle> CalyxControl<T> {
     /// Opens a `seq` context where `f` is called. For instance,
     /// ```
     /// fn add_seq(control: &mut CalyxControl, my_group: &CalyxGroup) {
@@ -138,8 +176,8 @@ impl CalyxControl {
     /// ```
     pub fn seq<F>(&mut self, f: F)
     where
-        F: FnOnce(&mut Self) {
-        let mut child = Self::default();
+        F: FnOnce(&mut CalyxControl<Sequential>) {
+        let mut child = CalyxControl::<Sequential>::default();
         f(&mut child);
         self.children.push(calyx_ir::Control::seq(child.children));
     }
@@ -147,8 +185,8 @@ impl CalyxControl {
     /// Opens a `par` context. See [`CalyxControl::seq`] for details.
     pub fn par<F>(&mut self, f: F)
     where
-        F: FnOnce(&mut Self) {
-        let mut child = Self::default();
+        F: FnOnce(&mut CalyxControl<Parallel>) {
+        let mut child = CalyxControl::<Parallel>::default();
         f(&mut child);
         self.children.push(calyx_ir::Control::par(child.children));
     }
@@ -158,14 +196,14 @@ impl CalyxControl {
         &mut self, port: CalyxPort, cond: Option<CalyxCombGroup>, true_f: F,
         false_f: F
     ) where
-        F: FnOnce(&mut Self) {
-        let mut true_branch = Self::default();
-        let mut false_branch = Self::default();
+        F: FnOnce(&mut CalyxControl<Sequential>) {
+        let mut true_branch = CalyxControl::<Sequential>::default();
+        let mut false_branch = CalyxControl::<Sequential>::default();
         true_f(&mut true_branch);
         false_f(&mut false_branch);
         self.children.push(calyx_ir::Control::if_(
             port,
-            cond.map(|cond| cond),
+            cond.map(|cond| cond.value),
             Box::new(true_branch.to_control()),
             Box::new(false_branch.to_control())
         ));
@@ -175,12 +213,12 @@ impl CalyxControl {
     pub fn while_<F>(
         &mut self, port: CalyxPort, cond: Option<CalyxCombGroup>, f: F
     ) where
-        F: FnOnce(&mut Self) {
-        let mut body = Self::default();
+        F: FnOnce(&mut CalyxControl<Sequential>) {
+        let mut body = CalyxControl::<Sequential>::default();
         f(&mut body);
         self.children.push(calyx_ir::Control::while_(
             port,
-            cond.map(|cond| cond),
+            cond.map(|cond| cond.value),
             Box::new(body.to_control())
         ));
     }
@@ -188,9 +226,46 @@ impl CalyxControl {
     // TODO: more control
 }
 
-impl Default for CalyxControl {
+impl<T: CalyxControlStyle> Default for CalyxControl<T> {
     fn default() -> Self {
-        Self { children: vec![] }
+        Self {
+            children: vec![],
+            phantom: PhantomData
+        }
+    }
+}
+
+impl CalyxControl<Sequential> {
+    /// Enables `group` to run in sequence.
+    pub fn enable_next(&mut self, group: &CalyxGroup) {
+        self.children
+            .push(calyx_ir::Control::enable(group.value.clone()));
+    }
+
+    /// Unwraps the control builder.
+    pub fn to_control(self) -> calyx_ir::Control {
+        if self.children.is_empty() {
+            calyx_ir::Control::empty()
+        } else {
+            calyx_ir::Control::seq(self.children)
+        }
+    }
+}
+
+impl CalyxControl<Parallel> {
+    /// Enables `group` to run in parallel.
+    pub fn enable(&mut self, group: &CalyxGroup) {
+        self.children
+            .push(calyx_ir::Control::enable(group.value.clone()));
+    }
+
+    /// Unwraps the control builder.
+    pub fn to_control(self) -> calyx_ir::Control {
+        if self.children.is_empty() {
+            calyx_ir::Control::empty()
+        } else {
+            calyx_ir::Control::par(self.children)
+        }
     }
 }
 
@@ -211,7 +286,7 @@ pub struct CalyxComponent<'a, ComponentData: Default> {
     cell_name_prefix: String,
     unique_counter: usize,
     user_data: ComponentData,
-    control_builder: CalyxControl
+    control_builder: CalyxControl<Sequential>
 }
 
 impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
@@ -253,7 +328,7 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
     }
 
     /// The control of this component.
-    pub fn control(&mut self) -> &mut CalyxControl {
+    pub fn control(&mut self) -> &mut CalyxControl<Sequential> {
         &mut self.control_builder
     }
 
@@ -261,6 +336,9 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
     pub fn with_calyx_builder<F, T>(&mut self, f: F) -> T
     where
         F: FnOnce(&mut calyx_ir::Builder) -> T {
+        // Creating a calyx_ir::Builder is very cheap (for now). If I can figure
+        // out a better way, e.g., storing the builder in the struct, I will
+        // switch to that, but I tried doing that for many hours to no avail.
         let mut ir_builder =
             calyx_ir::Builder::new(&mut self.component, &self.lib_sig)
                 .not_generated()
@@ -295,6 +373,10 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
         )
     }
 
+    /// Creates a cell named `name` for a primitive `prim` with parameters
+    /// `params`. Before using this function, see if
+    /// [`CalyxComponent::named_reg`] or [`CalyxComponent::named_mem`] are more
+    /// appropriate.
     pub fn named_prim(
         &mut self, name: &str, prim: &str, params: Vec<u64>
     ) -> CalyxCell {
@@ -314,7 +396,7 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
         &mut self, prefix: String, component: String, instantiate_new: bool
     ) -> (String, CalyxCell) {
         let cell_name = if instantiate_new {
-            format!("{}{}", prefix, self.unique_number())
+            format!("{}{}", prefix, self.get_unique_number())
         } else {
             prefix
         };
@@ -327,20 +409,50 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
         (cell_name, cell)
     }
 
-    /// An unnamed register cell.
+    /// An unnamed register cell. See [`CalyxComponent::named_reg`].
     pub fn unnamed_cell(&mut self, kind: CalyxCellKind) -> CalyxCell {
-        let cell_name = format!("t{}", self.unique_number());
+        let cell_name = format!("t{}", self.get_unique_number());
         self.find_or_create_cell(cell_name, kind)
     }
 
-    /// A constant cell.
-    pub fn constant(&'a mut self, value: i64, width: usize) -> CalyxCell {
-        self.with_calyx_builder(|b| CalyxCell {
+    /// A constant cell, that is, a primitive `"std_const"`.
+    pub fn constant(&mut self, value: i64, width: usize) -> CalyxCell {
+        CalyxCell {
             kind: CalyxCellKind::Constant { width },
-            value: b.add_constant(value as u64, width as u64)
-        })
+            value: self.with_calyx_builder(|b| {
+                b.add_constant(value as u64, width as u64)
+            })
+        }
     }
 
+    /// Equivlane to `constant(1, 1)`.
+    pub fn signal_out(&mut self) -> CalyxCell {
+        self.constant(1, 1)
+    }
+
+    /// Adds `name` as an alias to refer to `cell`.
+    ///
+    /// Requires: `name` has not been previously bound.
+    pub fn alias_cell(&mut self, name: String, cell: CalyxCell) {
+        assert!(self.env.bind(name, cell).is_none());
+    }
+
+    /// Creates a new group guaranteed to start with `prefix`.
+    pub fn add_group(&mut self, prefix: &str) -> CalyxGroup {
+        CalyxGroup {
+            value: self.with_calyx_builder(|b| b.add_group(prefix))
+        }
+    }
+
+    /// Creates a new combinational group guaranteed to start with `prefix`.
+    pub fn add_comb_group(&mut self, prefix: &str) -> CalyxCombGroup {
+        CalyxCombGroup {
+            value: self.with_calyx_builder(|b| b.add_comb_group(prefix))
+        }
+    }
+
+    /// Retrieves a cell of type `kind` bound to `key`, creating it if
+    /// necessary.
     fn find_or_create_cell(
         &mut self, key: String, kind: CalyxCellKind
     ) -> CalyxCell {
@@ -367,12 +479,15 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
         }
     }
 
-    fn unique_number(&mut self) -> usize {
+    /// A number guaranteed to be unique across all calls to this function for a
+    /// specific component builder such as `self`.
+    fn get_unique_number(&mut self) -> usize {
         let result = self.unique_counter;
         self.unique_counter += 1;
         result
     }
 
+    /// Yields a [`calyx_ir::Component`].
     fn finalize(self) -> calyx_ir::Component {
         *self.component.control.borrow_mut() =
             self.control_builder.to_control();
@@ -460,9 +575,16 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
     }
 }
 
+/// A builder for calyx IR optimized for generation from an AST or
+/// (un)structured TAC IR.
 pub struct CalyxBuilder {
+    /// The calyx program being built.
     ctx: calyx_ir::Context,
+
+    /// Component signatures.
     sigs: HashMap<String, Vec<calyx_ir::PortDef<u64>>>,
+
+    /// Prefix for named cells to avoid collision with unnamed cells.
     cell_name_prefix: String
 }
 
@@ -524,8 +646,8 @@ impl CalyxBuilder {
         }
     }
 
-    /// Binds a component `name` to a list of `ports` so it can be instantiated
-    /// by another component.
+    /// Binds a component (named `name`)'s signature to a list of `ports` so it
+    /// can be constructed or instantiated by another component.
     pub fn register_component(
         &mut self, name: String, ports: Vec<calyx_ir::PortDef<u64>>
     ) {
@@ -533,7 +655,8 @@ impl CalyxBuilder {
     }
 
     /// Returns a component builder for a registered component. Invalidates a
-    /// previous component builder.
+    /// previous component builder. Once you are finished with the component
+    /// builder, call [`CalyxBuilder::finish_component`].
     ///
     /// Requires: [`CalyxBuilder::register_component`] has been issued for
     /// `name`.
@@ -554,6 +677,7 @@ impl CalyxBuilder {
         )
     }
 
+    /// Marks a component as completed.
     pub fn finish_component<ComponentData: Default>(
         &mut self, component: CalyxComponent<ComponentData>
     ) {
