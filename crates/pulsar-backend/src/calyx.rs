@@ -1,4 +1,8 @@
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
+
 use super::PulsarBackend;
+use crate::Output;
+use builder::{CalyxBuilder, CalyxCell, CalyxComponent};
 use calyx_backend::Backend;
 use calyx_ir::{build_assignments, RRC};
 use pulsar_frontend::ty::Type;
@@ -11,11 +15,8 @@ use pulsar_ir::{
     variable::Variable,
     Ir
 };
-use pulsar_utils::environment::Environment;
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf}
-};
+use std::{io::stderr, path::PathBuf};
+use crate::build_assignments_2;
 
 pub mod builder;
 
@@ -31,74 +32,53 @@ pub mod builder;
 // I realized that a contributing factor to this is that my IR has everything
 // has Int64. I should change that
 
-pub struct CalyxBackend {
-    sig: HashMap<String, Vec<calyx_ir::PortDef<u64>>>,
-    env: Environment<Variable, RRC<calyx_ir::Cell>>,
-    call_env: Environment<String, RRC<calyx_ir::Cell>>,
-    ret_cell: Option<RRC<calyx_ir::Cell>>,
-    param_env: usize,
-    temp_count: usize
+struct FunctionContext {
+    ret_cell: Option<CalyxCell>,
+    param_env: usize
 }
 
-impl CalyxBackend {
-    fn stdlib_context(lib_path: String) -> calyx_ir::Context {
-        let mut import_file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        import_file_path.push("resources");
-        import_file_path.push("import.futil");
-        let ws = calyx_frontend::Workspace::construct(
-            &Some(import_file_path),
-            Path::new(&lib_path)
-        )
-        .unwrap();
-        calyx_ir::Context {
-            components: vec![],
-            lib: ws.lib,
-            entrypoint: "main".into(),
-            bc: calyx_ir::BackendConf::default(),
-            extra_opts: vec![],
-            metadata: None
+impl Default for FunctionContext {
+    fn default() -> Self {
+        Self {
+            ret_cell: None,
+            param_env: 0
         }
     }
+}
 
+pub struct CalyxBackend<'a> {
+    builder: CalyxBuilder<'a, FunctionContext>
+}
+
+impl<'a> CalyxBackend<'a> {
     /// Returns the register associated with `var` in the current component,
     /// building it if necessary.
     fn cell_for_var(
-        &mut self, builder: &mut calyx_ir::Builder, var: Variable
-    ) -> RRC<calyx_ir::Cell> {
-        if let Some(cell) = self.env.find(var) {
-            cell.clone()
-        } else {
-            let cell =
-                builder.add_primitive(var.to_string(), "std_reg", &vec![64]);
-            self.env.bind(var, cell.clone());
-            cell
-        }
+        &mut self, component: &'a mut CalyxComponent<'a, FunctionContext>,
+        var: Variable
+    ) -> CalyxCell {
+        component.named_reg(var.to_string(), 64)
     }
 
     // TODO: support larger nested arrays
     // but arbitrary pointer access needs to be restricted in static analyzer
     // when targeting hardware
     fn make_cell_for_pointer(
-        &mut self, builder: &mut calyx_ir::Builder, var: Variable,
-        cell_size: usize, length: usize
-    ) -> RRC<calyx_ir::Cell> {
-        let cell = builder.add_primitive(
-            var.to_string(),
-            "comb_mem_d1",
-            &vec![cell_size as u64, length as u64, 64]
-        );
-        self.env.bind(var, cell.clone());
-        cell
+        &mut self, component: &'a mut CalyxComponent<'a, FunctionContext>,
+        var: Variable, cell_size: usize, length: usize
+    ) -> CalyxCell {
+        component.named_mem(var.to_string(), cell_size, length, 64)
     }
 
     /// Builds a constant if the operand is a constant. See
     /// [`CalyxBackend::cell_for_var`] for when the operand is a variable.
     fn cell_for_operand(
-        &mut self, builder: &mut calyx_ir::Builder, operand: &Operand
-    ) -> RRC<calyx_ir::Cell> {
+        &mut self, component: &'a mut CalyxComponent<'a, FunctionContext>,
+        operand: &Operand
+    ) -> CalyxCell {
         match &operand {
-            Operand::Constant(value) => builder.add_constant(*value as u64, 64),
-            Operand::Variable(var) => self.cell_for_var(builder, *var)
+            Operand::Constant(value) => component.constant(*value, 64),
+            Operand::Variable(var) => self.cell_for_var(component, *var)
         }
     }
 
@@ -124,15 +104,16 @@ impl CalyxBackend {
                 calyx_ir::Attributes::default()
             ));
         }
-        self.sig.insert(label.name.mangle().clone(), comp_ports);
+        self.builder.register_component(label.name.mangle().clone(), comp_ports);
     }
 
     /// A component for a call to `call` instantiated as a cell a single time in
     /// the current component.
     fn cell_for_call(
-        &mut self, builder: &mut calyx_ir::Builder, call: &LabelName,
-        unique: bool
+        &mut self, component: &'a mut CalyxComponent<'a, FunctionContext>,
+        call: &LabelName, unique: bool
     ) -> (String, RRC<calyx_ir::Cell>) {
+        component.
         // For some reason, this is private https://github.com/calyxir/calyx/blob/main/calyx-ir/src/builder.rs#L361
         fn cell_from_signature(
             name: calyx_ir::Id, typ: calyx_ir::CellType,
@@ -223,18 +204,18 @@ impl CalyxBackend {
     }
 
     fn emit_ir(
-        &mut self, builder: &mut calyx_ir::Builder, seq: &mut calyx_ir::Seq,
+        &mut self, component: &mut CalyxComponent<FunctionContext>,
         ir: &Ir
-    ) {
+    )  {
         match ir {
             Ir::Add(result, lhs, rhs) => {
-                let lhs_cell = self.cell_for_operand(builder, lhs);
-                let rhs_cell = self.cell_for_operand(builder, rhs);
-                let result_cell = self.cell_for_var(builder, *result);
-                let signal_out = builder.add_constant(1, 1);
+                let lhs_cell = self.cell_for_operand(component, lhs);
+                let rhs_cell = self.cell_for_operand(component, rhs);
+                let result_cell = self.cell_for_var(component, *result);
+                let signal_out = component.constant(1, 1);
                 let adder =
-                    builder.add_primitive("adder", "std_add", &vec![64]);
-                let add_group = builder.add_group("add");
+                    component.named_prim("adder", "std_add", vec![64]);
+                let add_group = component.add_group("add");
                 let assignments = build_assignments!(builder;
                     adder["left"] = ? lhs_cell["out"];
                     adder["right"] = ? rhs_cell["out"];
@@ -507,92 +488,72 @@ impl CalyxBackend {
     }
 
     fn emit_block(
-        &mut self, builder: &mut calyx_ir::Builder, seq: &mut calyx_ir::Seq,
+        &mut self, mut component: &mut CalyxComponent<FunctionContext>,
         block: BasicBlockCell
     ) {
         for ir in block.as_ref().into_iter() {
-            self.emit_ir(builder, seq, ir);
+            self.emit_ir(&mut component, ir);
         }
     }
 
     fn emit_func(
-        &mut self, calyx_ctx: &mut calyx_ir::Context, label: &Label,
-        _args: &Vec<Type>, ret: &Box<Type>, _is_pure: bool,
-        cfg: &ControlFlowGraph
+        &mut self, label: &Label, _args: &Vec<Type>, ret: &Box<Type>,
+        _is_pure: bool, cfg: &ControlFlowGraph
     ) {
-        let comp_name = calyx_ir::Id::new(label.name.mangle());
-
-        let mut comp = calyx_ir::Component::new(
-            comp_name,
-            self.sig.get(label.name.mangle()).unwrap().clone(),
-            true,
-            false,
-            None
-        );
-
-        let mut builder =
-            calyx_ir::Builder::new(&mut comp, &calyx_ctx.lib).not_generated();
-
-        let mut main_seq = calyx_ir::Seq {
-            stmts: vec![],
-            attributes: calyx_ir::Attributes::default()
-        };
+        let mut component =
+            self.builder.start_component(label.name.mangle().clone());
 
         if **ret != Type::Unit {
-            let func = builder.component.signature.clone();
-            self.ret_cell = Some(self.cell_for_temp(&mut builder));
-            let ret_cell = self.ret_cell.clone().unwrap();
-            let always: Vec<calyx_ir::Assignment<calyx_ir::Nothing>> =
-                build_assignments!(builder;
+            let func = component.signature();
+            let ret_cell =
+                component.unnamed_cell(builder::CalyxCellKind::Register {
+                    size: ret.size() * 8
+                });
+            component.user_data_mut().ret_cell = Some(ret_cell.clone());
+            let always = 
+                build_assignments_2!(component;
                     func["ret"] = ? ret_cell["out"];
                 )
                 .to_vec();
-            builder.add_continuous_assignments(always);
+            component.with_calyx_builder(|builder| {
+                builder.add_continuous_assignments(always);
+            });
         }
 
         // for block in cfg.blocks() {
         //     self.emit_block(block);
         // }
         assert_eq!(1, cfg.size(), "CalyxBackend requires structured IR only in the entry block, but other blocks were found in the CFG");
-        self.env.push();
-        self.call_env.push();
-        self.param_env = 0;
-        self.emit_block(&mut builder, &mut main_seq, cfg.entry());
-        self.env.pop();
-        self.call_env.pop();
-
-        *comp.control.borrow_mut() = calyx_ir::Control::Seq(main_seq);
-
-        calyx_ctx.components.push(comp);
+        self.emit_block(&mut component, cfg.entry());
     }
 }
 
 pub struct CalyxBackendInput {
-    pub lib_path: String,
-    pub calyx_output: calyx_utils::OutputFile,
-    pub verilog_output: calyx_utils::OutputFile
+    pub lib_path: PathBuf
 }
 
-impl PulsarBackend for CalyxBackend {
-    type ExtraInput = CalyxBackendInput;
+impl<'a> PulsarBackend for CalyxBackend<'a> {
+    type InitInput = CalyxBackendInput;
     type Error = calyx_utils::Error;
 
-    fn new() -> Self {
+    fn new(input: Self::InitInput) -> Self {
+        let mut prelude_file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        prelude_file_path.push("resources");
+        prelude_file_path.push("prelude.futil");
+
         Self {
-            env: Environment::new(),
-            call_env: Environment::new(),
-            sig: HashMap::new(),
-            ret_cell: None,
-            param_env: 0,
-            temp_count: 0
+            builder: CalyxBuilder::new(
+                Some(prelude_file_path),
+                input.lib_path,
+                "main".into(),
+                "_".into()
+            )
         }
     }
 
     fn run(
-        &mut self, code: Vec<GeneratedTopLevel>, input: Self::ExtraInput
+        &mut self, code: Vec<GeneratedTopLevel>, output: Output
     ) -> Result<(), Self::Error> {
-        let mut calyx_ctx = CalyxBackend::stdlib_context(input.lib_path);
-
         // Create a calyx program from the IR
         // - Step 1: load signatures
         for generated_top_level in &code {
@@ -615,31 +576,18 @@ impl PulsarBackend for CalyxBackend {
                     ret,
                     is_pure,
                     cfg
-                } => self.emit_func(
-                    &mut calyx_ctx,
-                    label,
-                    args,
-                    ret,
-                    *is_pure,
-                    cfg
-                )
+                } => self.emit_func(label, args, ret, *is_pure, cfg)
             }
         }
 
-        // Debug print
-        calyx_ir::Printer::write_context(
-            &calyx_ctx,
-            false,
-            &mut input.calyx_output.get_write()
-        )
-        .unwrap();
+        // Obtain the program context
+        let mut builder = CalyxBuilder::dummy();
+        std::mem::swap(&mut self.builder, &mut builder);
+        let mut calyx_ctx = self.builder.finalize();
 
-        calyx_ctx.entrypoint = calyx_ctx
-            .components
-            .iter()
-            .find(|comp| comp.name.to_string().contains("_pulsar_Smain"))
-            .expect("No main function provided")
-            .name;
+        // Debug print
+        calyx_ir::Printer::write_context(&calyx_ctx, false, &mut stderr())
+            .unwrap();
 
         // Perform optimization passes
         let pm = calyx_opt::pass_manager::PassManager::default_passes()?;
@@ -659,7 +607,17 @@ impl PulsarBackend for CalyxBackend {
 
         // Emit to Verilog
         let backend = calyx_backend::VerilogBackend;
-        backend.run(calyx_ctx, input.verilog_output)?;
+        backend.run(calyx_ctx, output.into())?;
         Ok(())
+    }
+}
+
+impl Into<calyx_utils::OutputFile> for Output {
+    fn into(self) -> calyx_utils::OutputFile {
+        match self {
+            Output::Stdout => calyx_utils::OutputFile::Stdout,
+            Output::Stderr => calyx_utils::OutputFile::Stderr,
+            Output::File(path) => calyx_utils::OutputFile::File(path)
+        }
     }
 }

@@ -5,17 +5,24 @@
 //! Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
 use pulsar_ir::generator::GeneratedTopLevel;
+use std::path::PathBuf;
 
 pub mod calyx;
 
 // This interface hasn't been finalized yet, so it is quite sloppy as written
 
+pub enum Output {
+    Stdout,
+    Stderr,
+    File(PathBuf)
+}
+
 pub trait PulsarBackend {
-    type ExtraInput;
+    type InitInput;
     type Error;
 
-    fn new() -> Self;
+    fn new(input: Self::InitInput) -> Self;
     fn run(
-        &mut self, code: Vec<GeneratedTopLevel>, input: Self::ExtraInput
+        &mut self, code: Vec<GeneratedTopLevel>, output: Output
     ) -> Result<(), Self::Error>;
 }
