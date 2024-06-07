@@ -33,6 +33,9 @@ macro_rules! build_assignments_2_aux {
     };
 }
 
+/// Behaves like [`calyx_ir::build_assignments!`] but takes in a
+/// [`CalyxComponent`] instead of a [`calyx_ir::Builder`] and uses
+/// [`CalyxCell`]s instead of `RRC<calyx_ir::Cell>`s.
 #[macro_export(local_inner_macros)]
 macro_rules! build_assignments_2 {
     ($component:expr; $($args:tt)*) => {

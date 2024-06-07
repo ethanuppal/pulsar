@@ -1,7 +1,7 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
 use super::PulsarBackend;
-use crate::{build_assignments_2, Output};
+use crate::{build_assignments_2, finish_component, Output};
 use builder::{
     CalyxAssignmentContainer, CalyxBuilder, CalyxCell, CalyxCellKind,
     CalyxComponent, CalyxControl, Sequential
@@ -22,10 +22,6 @@ use std::{io::stderr, path::PathBuf};
 pub mod builder;
 
 // This file contains many examples of BAD software engineering.
-//
-// One boilerplate I'm noticing is in construction of cells, groups, and control
-// -- see if you can find a nicer, more beautiful way to write it
-//
 // All components are treated very much like functions. They have input ports
 // all of width 64 and one output port of width 64. However hardware is a lot
 // more flexible than this. See if you can figure out how to better use it.
@@ -52,37 +48,29 @@ pub struct CalyxBackend {
 }
 
 impl CalyxBackend {
-    /// Returns the register associated with `var` in the current component,
-    /// building it if necessary.
-    fn cell_for_var(
-        &self, component: &mut CalyxComponent<FunctionContext>, var: Variable
-    ) -> CalyxCell {
-        component.named_reg(var.to_string(), 64)
-    }
-
     // TODO: support larger nested arrays
     // but arbitrary pointer access needs to be restricted in static analyzer
     // when targeting hardware
-    fn make_cell_for_pointer(
+    fn make_cell_for_array(
         &self, component: &mut CalyxComponent<FunctionContext>, var: Variable,
         cell_size: usize, length: usize
     ) -> CalyxCell {
         component.named_mem(var.to_string(), cell_size, length, 64)
     }
 
-    /// Builds a constant if the operand is a constant. See
-    /// [`CalyxBackend::cell_for_var`] for when the operand is a variable.
-    fn cell_for_operand(
+    /// Builds a constant if the operand is a constant and looks up a variable
+    /// otherwise.
+    fn find_operand_cell(
         &self, component: &mut CalyxComponent<FunctionContext>,
         operand: &Operand
     ) -> CalyxCell {
         match &operand {
             Operand::Constant(value) => component.constant(*value, 64),
-            Operand::Variable(var) => self.cell_for_var(component, *var)
+            Operand::Variable(var) => component.find(var.to_string())
         }
     }
 
-    fn cache_func_sig(
+    fn register_func(
         &mut self, label: &Label, args: &Vec<Type>, ret: &Box<Type>
     ) {
         let mut comp_ports = vec![];
@@ -109,7 +97,7 @@ impl CalyxBackend {
     }
 
     /// A component for a call to `call` instantiated as a cell a single time in
-    /// the current component.
+    /// the current component if `unique` and instantiated fresh otherwise.
     fn cell_for_call(
         &self, component: &mut CalyxComponent<FunctionContext>,
         call: &LabelName, unique: bool
@@ -121,10 +109,10 @@ impl CalyxBackend {
 
     /// A unique cell that is only used for a single instruction and does not
     /// need to be referenced elsewhere.
-    fn unnamed_reg(
+    fn new_unnamed_reg(
         &self, component: &mut CalyxComponent<FunctionContext>
     ) -> CalyxCell {
-        component.unnamed_cell(CalyxCellKind::Register { size: 64 })
+        component.new_unnamed_cell(CalyxCellKind::Register { size: 64 })
     }
 
     fn emit_ir(
@@ -134,10 +122,10 @@ impl CalyxBackend {
         let signal_out = component.signal_out();
         match ir {
             Ir::Add(result, lhs, rhs) => {
-                let lhs_cell = self.cell_for_operand(component, lhs);
-                let rhs_cell = self.cell_for_operand(component, rhs);
-                let result_cell = self.cell_for_var(component, *result);
-                let adder = component.named_prim("adder", "std_add", vec![64]);
+                let lhs_cell = self.find_operand_cell(component, lhs);
+                let rhs_cell = self.find_operand_cell(component, rhs);
+                let result_cell = component.new_reg(result.to_string(), 64);
+                let adder = component.new_prim("adder", "std_add", vec![64]);
                 let add_group = component.add_group("add");
                 add_group.extend(build_assignments_2!(component;
                     adder["left"] = ? lhs_cell["out"];
@@ -149,11 +137,11 @@ impl CalyxBackend {
                 parent.enable_next(&add_group);
             }
             Ir::Mul(result, lhs, rhs) => {
-                let lhs_cell = self.cell_for_operand(component, lhs);
-                let rhs_cell = self.cell_for_operand(component, rhs);
-                let result_cell = self.cell_for_var(component, *result);
+                let lhs_cell = self.find_operand_cell(component, lhs);
+                let rhs_cell = self.find_operand_cell(component, rhs);
+                let result_cell = component.new_reg(result.to_string(), 64);
                 let mult =
-                    component.named_prim("mult", "std_mult_pipe", vec![64]);
+                    component.new_prim("mult", "std_mult_pipe", vec![64]);
                 let mult_group = component.add_group("multiply");
                 mult_group.extend(build_assignments_2!(component;
                     mult["left"] = ? lhs_cell["out"];
@@ -166,17 +154,13 @@ impl CalyxBackend {
                 parent.enable_next(&mult_group);
             }
             Ir::Assign(result, value) => {
-                let value_cell = self.cell_for_operand(component, value);
-                if let CalyxCellKind::CombMemoryD1 {
-                    size: _,
-                    length: _,
-                    address_bits: _
-                } = value_cell.kind
-                {
+                let value_cell = self.find_operand_cell(component, value);
+                if value_cell.kind.is_memory() {
+                    // "copy" pointer
                     component.alias_cell(result.to_string(), value_cell);
                     return;
                 }
-                let result_cell = self.cell_for_var(component, *result);
+                let result_cell = component.new_reg(result.to_string(), 64);
                 let assign_group = component.add_group("assign");
                 assign_group.extend(build_assignments_2!(component;
                     result_cell["in"] = ? value_cell["out"];
@@ -187,7 +171,8 @@ impl CalyxBackend {
             }
             Ir::GetParam(result) => {
                 let func = component.signature();
-                let result_cell = self.cell_for_var(component, *result);
+                // TODO: memory refs
+                let result_cell = component.new_reg(result.to_string(), 64);
                 let get_param_group = component.add_group("get_param");
                 let param_port =
                     format!("arg{}", component.user_data_ref().param_env);
@@ -206,13 +191,13 @@ impl CalyxBackend {
                 if let Some(value) = value_opt {
                     let return_group = component.add_group("return");
                     let mut value_cell =
-                        self.cell_for_operand(component, value);
+                        self.find_operand_cell(component, value);
 
                     // We need to use the done port (doesn't exist on constants)
                     // so if it's a constant we need to make
                     // a temporary port
                     if let Operand::Constant(_) = value {
-                        let temp_cell = self.unnamed_reg(component);
+                        let temp_cell = self.new_unnamed_reg(component);
                         return_group.extend(build_assignments_2!(component;
                             temp_cell["in"] = ? value_cell["out"];
                         ));
@@ -236,12 +221,7 @@ impl CalyxBackend {
                 }
             }
             Ir::LocalAlloc(result, size, count) => {
-                self.make_cell_for_pointer(
-                    component,
-                    *result,
-                    *size * 8,
-                    *count
-                );
+                self.make_cell_for_array(component, *result, *size * 8, *count);
             }
             Ir::Store {
                 result,
@@ -249,9 +229,13 @@ impl CalyxBackend {
                 index
             } => {
                 let store_group = component.add_group("store");
-                let result_cell = self.cell_for_var(component, *result);
-                let value_cell = self.cell_for_operand(component, value);
-                let index_cell = self.cell_for_operand(component, index);
+                let result_cell = component.find(result.to_string());
+                let value_cell = self.find_operand_cell(component, value);
+                let index_cell = self.find_operand_cell(component, index);
+                assert!(
+                    result_cell.kind.is_memory(),
+                    "Ir::Store should take a memory result cell"
+                );
                 store_group.extend(build_assignments_2!(component;
                     result_cell["addr0"] = ? index_cell["out"];
                     result_cell["write_data"] = ? value_cell["out"];
@@ -266,9 +250,13 @@ impl CalyxBackend {
                 index
             } => {
                 let load_group = component.add_group("load");
-                let result_cell = self.cell_for_var(component, *result);
-                let value_cell = self.cell_for_operand(component, value);
-                let index_cell = self.cell_for_operand(component, index);
+                let result_cell = component.new_reg(result.to_string(), 64);
+                let value_cell = self.find_operand_cell(component, value);
+                assert!(
+                    value_cell.kind.is_memory(),
+                    "Ir::Load should take a memory result cell"
+                );
+                let index_cell = self.find_operand_cell(component, index);
                 load_group.extend(build_assignments_2!(component;
                     value_cell["addr0"] = ? index_cell["out"];
                     result_cell["in"] = ? value_cell["read_data"];
@@ -285,7 +273,7 @@ impl CalyxBackend {
                 length
             } => {
                 assert!(length % parallel_factor == 0, "parallel_factor must divide length. figure out a better place to assert this, probably in the type checker fix");
-                let index_cell = self.unnamed_reg(component);
+                let index_cell = self.new_unnamed_reg(component);
 
                 let init_group = component.add_group("init");
                 let zero = component.constant(0, 64);
@@ -297,7 +285,7 @@ impl CalyxBackend {
 
                 let cond_group = component.add_comb_group("cond");
                 let array_size_cell = component.constant(*length as i64, 64);
-                let lt_cell = component.named_prim("lt", "std_lt", vec![64]);
+                let lt_cell = component.new_prim("lt", "std_lt", vec![64]);
                 cond_group.extend(build_assignments_2!(component;
                     lt_cell["left"] = ? index_cell["out"];
                     lt_cell["right"] = ? array_size_cell["out"];
@@ -306,8 +294,16 @@ impl CalyxBackend {
                 let read_group = component.add_group("read");
                 let write_group = component.add_group("write");
 
-                let input_cell = self.cell_for_operand(component, input); // also a memory
-                let result_cell = self.cell_for_var(component, *result);
+                let input_cell = self.find_operand_cell(component, input); // also a memory
+                assert!(
+                    input_cell.kind.is_memory(),
+                    "Ir::Map should take a memory input cell"
+                );
+                let result_cell = component.find(result.to_string());
+                assert!(
+                    result_cell.kind.is_memory(),
+                    "Ir::Map should take a memory result cell"
+                );
                 let (_, call_cell) = self.cell_for_call(component, f, true);
 
                 read_group.extend(build_assignments_2!(component;
@@ -325,7 +321,7 @@ impl CalyxBackend {
                 ));
 
                 let incr_group = component.add_group("incr");
-                let adder = component.named_prim("adder", "std_add", vec![64]);
+                let adder = component.new_prim("adder", "std_add", vec![64]);
                 let one = component.constant(1, 64);
                 incr_group.extend(build_assignments_2!(component;
                     adder["left"] = ? index_cell["out"];
@@ -348,7 +344,7 @@ impl CalyxBackend {
                 let call_group = component.add_group("call");
                 for (i, arg) in args.iter().enumerate() {
                     let arg_port =
-                        self.cell_for_operand(component, arg).get("out");
+                        self.find_operand_cell(component, arg).get("out");
                     call_group.add(component.with_calyx_builder(|b| {
                         b.build_assignment(
                             call_cell.get(&format!("arg{}", i)),
@@ -365,7 +361,7 @@ impl CalyxBackend {
 
                 if let Some(result) = result_opt {
                     let use_call_group = component.add_group("use_call");
-                    let result_cell = self.cell_for_var(component, *result);
+                    let result_cell = component.new_reg(result.to_string(), 64);
                     use_call_group.extend(build_assignments_2!(component;
                         result_cell["in"] = ? call_cell["ret"];
                         result_cell["write_en"] = ? signal_out["out"];
@@ -389,16 +385,16 @@ impl CalyxBackend {
     }
 
     fn emit_func(
-        &self, builder: &mut CalyxBuilder, label: &Label, _args: &Vec<Type>,
-        ret: &Box<Type>, _is_pure: bool, cfg: &ControlFlowGraph
+        &mut self, label: &Label, _args: &Vec<Type>, ret: &Box<Type>,
+        _is_pure: bool, cfg: &ControlFlowGraph
     ) {
         let mut component: CalyxComponent<FunctionContext> =
-            builder.start_component(label.name.mangle().clone());
+            self.builder.start_component(label.name.mangle().clone());
 
         if **ret != Type::Unit {
             let func = component.signature();
             let ret_cell =
-                component.unnamed_cell(builder::CalyxCellKind::Register {
+                component.new_unnamed_cell(builder::CalyxCellKind::Register {
                     size: ret.size() * 8
                 });
             component.user_data_mut().ret_cell = Some(ret_cell.clone());
@@ -418,6 +414,8 @@ impl CalyxBackend {
         let mut root_control = CalyxControl::default();
         self.emit_block(&mut component, &mut root_control, cfg.entry());
         *component.control() = root_control;
+
+        finish_component!(self.builder, component);
     }
 }
 
@@ -447,9 +445,6 @@ impl PulsarBackend for CalyxBackend {
     fn run(
         mut self, code: Vec<GeneratedTopLevel>, output: Output
     ) -> Result<(), Self::Error> {
-        let mut builder = CalyxBuilder::dummy();
-        std::mem::swap(&mut builder, &mut self.builder);
-
         // Create a calyx program from the IR
         // - Step 1: load signatures
         for generated_top_level in &code {
@@ -460,7 +455,13 @@ impl PulsarBackend for CalyxBackend {
                     ret,
                     is_pure: _,
                     cfg: _
-                } => self.cache_func_sig(label, args, ret)
+                } => {
+                    if label.name.mangle().contains("_pulsar_Smain") {
+                        self.builder
+                            .update_entrypoint(label.name.mangle().clone());
+                    }
+                    self.register_func(label, args, ret);
+                }
             }
         }
         // - Step 2: emit generated IR
@@ -472,19 +473,13 @@ impl PulsarBackend for CalyxBackend {
                     ret,
                     is_pure,
                     cfg
-                } => self.emit_func(
-                    &mut builder,
-                    label,
-                    args,
-                    ret,
-                    *is_pure,
-                    cfg
-                )
+                } => self.emit_func(label, args, ret, *is_pure, cfg)
             }
         }
 
         // Obtain the program context
-
+        let mut builder = CalyxBuilder::dummy();
+        std::mem::swap(&mut builder, &mut self.builder);
         let mut calyx_ctx = builder.finalize();
 
         // Debug print

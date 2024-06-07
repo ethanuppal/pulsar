@@ -3,7 +3,10 @@
 use calyx_ir::RRC;
 use pulsar_utils::environment::Environment;
 use std::{
-    collections::HashMap, fmt::Display, marker::PhantomData, path::PathBuf
+    collections::HashMap,
+    fmt::{format, Display},
+    marker::PhantomData,
+    path::PathBuf
 };
 
 pub mod macros;
@@ -45,8 +48,23 @@ impl CalyxCellKind {
                 size: _,
                 length: _,
                 address_bits: _
-            } => true,
+            }
+            | Self::Primitive { name: _, params: _ } => true,
             _ => false
+        }
+    }
+
+    /// Whether the cell is a memory.
+    pub fn is_memory(&self) -> bool {
+        if let Self::CombMemoryD1 {
+            size: _,
+            length: _,
+            address_bits: _
+        } = self
+        {
+            true
+        } else {
+            false
         }
     }
 
@@ -62,7 +80,7 @@ impl CalyxCellKind {
                 address_bits
             } => vec![*size as u64, *length as u64, *address_bits as u64],
             CalyxCellKind::Primitive { name: _, params } => params.clone(),
-            CalyxCellKind::GoDoneComponent { component } => {
+            CalyxCellKind::GoDoneComponent { component: _ } => {
                 panic!("Cell not a primitive")
             }
             CalyxCellKind::Constant { width } => vec![*width as u64]
@@ -341,29 +359,29 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
         // switch to that, but I tried doing that for many hours to no avail.
         let mut ir_builder =
             calyx_ir::Builder::new(&mut self.component, &self.lib_sig)
-                .not_generated()
-                .validate();
+                .not_generated();
         f(&mut ir_builder)
     }
 
     /// A register cell bound to `name`.
-    pub fn named_reg(&mut self, name: String, width: usize) -> CalyxCell {
+    ///
+    /// Requires: `name` has not been bound.
+    pub fn new_reg(&mut self, name: String, width: usize) -> CalyxCell {
         let mut bind_name = self.cell_name_prefix.clone();
         bind_name.push_str(&name);
-        self.find_or_create_cell(
-            bind_name,
-            CalyxCellKind::Register { size: width }
-        )
+        self.create_cell(bind_name, CalyxCellKind::Register { size: width })
     }
 
     /// A memory cell bound to `name`.
+    ///
+    /// Requires: `name` has not been bound.
     pub fn named_mem(
         &mut self, name: String, cell_size: usize, length: usize,
         address_bits: usize
     ) -> CalyxCell {
         let mut bind_name = self.cell_name_prefix.clone();
         bind_name.push_str(&name);
-        self.find_or_create_cell(
+        self.create_cell(
             bind_name,
             CalyxCellKind::CombMemoryD1 {
                 size: cell_size,
@@ -377,10 +395,12 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
     /// `params`. Before using this function, see if
     /// [`CalyxComponent::named_reg`] or [`CalyxComponent::named_mem`] are more
     /// appropriate.
-    pub fn named_prim(
+    ///
+    /// Requires: `name` has not been bound.
+    pub fn new_prim(
         &mut self, name: &str, prim: &str, params: Vec<u64>
     ) -> CalyxCell {
-        self.find_or_create_cell(
+        self.create_cell(
             name.into(),
             CalyxCellKind::Primitive {
                 name: prim.into(),
@@ -409,10 +429,10 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
         (cell_name, cell)
     }
 
-    /// An unnamed register cell. See [`CalyxComponent::named_reg`].
-    pub fn unnamed_cell(&mut self, kind: CalyxCellKind) -> CalyxCell {
+    /// An unnamed cell of a given `kind`.
+    pub fn new_unnamed_cell(&mut self, kind: CalyxCellKind) -> CalyxCell {
         let cell_name = format!("t{}", self.get_unique_number());
-        self.find_or_create_cell(cell_name, kind)
+        self.create_cell(cell_name, kind)
     }
 
     /// A constant cell, that is, a primitive `"std_const"`.
@@ -430,11 +450,24 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
         self.constant(1, 1)
     }
 
-    /// Adds `name` as an alias to refer to `cell`.
+    /// Adds `name` as a named alias to refer to `cell`.
     ///
     /// Requires: `name` has not been previously bound.
     pub fn alias_cell(&mut self, name: String, cell: CalyxCell) {
-        assert!(self.env.bind(name, cell).is_none());
+        assert!(self
+            .env
+            .bind(format!("{}{}", self.cell_name_prefix, name), cell)
+            .is_none());
+    }
+
+    /// Looks up a named cell previously bound to `name`.
+    ///
+    /// Requires: `name` has been bound.
+    pub fn find(&mut self, name: String) -> CalyxCell {
+        self.env
+            .find(format!("{}{}", self.cell_name_prefix, name))
+            .expect("Did not find cell in component environment")
+            .clone()
     }
 
     /// Creates a new group guaranteed to start with `prefix`.
@@ -451,32 +484,34 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
         }
     }
 
-    /// Retrieves a cell of type `kind` bound to `key`, creating it if
-    /// necessary.
-    fn find_or_create_cell(
-        &mut self, key: String, kind: CalyxCellKind
-    ) -> CalyxCell {
-        if let Some(cell) = self.env.find(key.clone()) {
-            cell.clone()
+    /// Yields a [`calyx_ir::Component`].
+    pub fn finalize(self) -> calyx_ir::Component {
+        *self.component.control.borrow_mut() =
+            self.control_builder.to_control();
+        self.component
+    }
+
+    /// Creates a cell of type `kind` bound to `key`.
+    ///
+    /// Requires: `key` has not been bound.
+    fn create_cell(&mut self, key: String, kind: CalyxCellKind) -> CalyxCell {
+        let calyx_cell = if kind.is_primitive() {
+            self._create_primitive(
+                key.clone(),
+                kind.to_string(),
+                kind.primitive_params()
+            )
+        } else if let CalyxCellKind::GoDoneComponent { component } = &kind {
+            self._create_component_cell(key.clone(), component.clone())
         } else {
-            let calyx_cell = if kind.is_primitive() {
-                self._create_primitive(
-                    key.clone(),
-                    kind.to_string(),
-                    kind.primitive_params()
-                )
-            } else if let CalyxCellKind::GoDoneComponent { component } = &kind {
-                self._create_component_cell(key.clone(), component.clone())
-            } else {
-                panic!("unknown cell kind")
-            };
-            let cell = CalyxCell {
-                kind,
-                value: calyx_cell
-            };
-            self.env.bind(key, cell.clone());
-            cell
-        }
+            panic!("unknown cell kind")
+        };
+        let cell = CalyxCell {
+            kind,
+            value: calyx_cell
+        };
+        self.env.bind(key, cell.clone());
+        cell
     }
 
     /// A number guaranteed to be unique across all calls to this function for a
@@ -485,13 +520,6 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
         let result = self.unique_counter;
         self.unique_counter += 1;
         result
-    }
-
-    /// Yields a [`calyx_ir::Component`].
-    fn finalize(self) -> calyx_ir::Component {
-        *self.component.control.borrow_mut() =
-            self.control_builder.to_control();
-        self.component
     }
 
     /// Creates a [`calyx_ir::Cell`] for a `primitive`.
@@ -505,7 +533,7 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
     fn _create_component_cell(
         &mut self, name: String, component: String
     ) -> RRC<calyx_ir::Cell> {
-        let mut port_defs = self.ext_sigs.get(&name).unwrap().clone();
+        let mut port_defs = self.ext_sigs.get(&component).unwrap().clone();
 
         let mut go_attr = calyx_ir::Attributes::default();
         go_attr.insert(calyx_ir::Attribute::Num(calyx_ir::NumAttr::Go), 1);
@@ -656,17 +684,20 @@ impl CalyxBuilder {
 
     /// Returns a component builder for a registered component. Invalidates a
     /// previous component builder. Once you are finished with the component
-    /// builder, call [`CalyxBuilder::finish_component`].
+    /// builder, call [`finish_component!`].
     ///
     /// Requires: [`CalyxBuilder::register_component`] has been issued for
     /// `name`.
-    pub fn start_component<'b, ComponentData: Default>(
-        &'b mut self, name: String
-    ) -> CalyxComponent<'b, ComponentData> {
+    pub fn start_component<ComponentData: Default>(
+        &self, name: String
+    ) -> CalyxComponent<ComponentData> {
         CalyxComponent::new(
             calyx_ir::Component::new(
                 name.clone(),
-                self.sigs.get(&name).unwrap().clone(),
+                self.sigs
+                    .get(&name)
+                    .expect("Use `register_component` first")
+                    .clone(),
                 true,
                 false,
                 None
@@ -677,11 +708,13 @@ impl CalyxBuilder {
         )
     }
 
-    /// Marks a component as completed.
-    pub fn finish_component<ComponentData: Default>(
-        &mut self, component: CalyxComponent<ComponentData>
-    ) {
-        self.ctx.components.push(component.finalize());
+    /// Please use [`finish_component!`] instead.
+    pub fn _finish_component(&mut self, component: calyx_ir::Component) {
+        self.ctx.components.push(component);
+    }
+
+    pub fn update_entrypoint(&mut self, entrypoint: String) {
+        self.ctx.entrypoint = entrypoint.into();
     }
 
     /// Yields a [`calyx_ir::Context`].
@@ -691,4 +724,13 @@ impl CalyxBuilder {
     pub fn finalize(self) -> calyx_ir::Context {
         self.ctx
     }
+}
+
+/// `finish_component!(builder, component)` marks a `component` as finalized in
+/// `builder`.
+#[macro_export]
+macro_rules! finish_component {
+    ($builder:expr, $component:expr) => {
+        $builder._finish_component($component.finalize())
+    };
 }
