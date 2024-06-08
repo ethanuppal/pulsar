@@ -7,7 +7,7 @@ members = [
 ]
 
 [workspace.package]
-name = "pulsar"
+name = "pulsar-lang"
 description = "A high-level programming language for building hardware accelerators"
 homepage = "https://github.com/ethanuppal/pulsar/tree/main"
 repository = "https://github.com/ethanuppal/pulsar/tree/main"
