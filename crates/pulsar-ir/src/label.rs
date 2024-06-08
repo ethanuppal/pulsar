@@ -2,6 +2,10 @@
 use pulsar_frontend::ty::Type;
 use std::fmt::{Display, Formatter};
 
+/// If one exists, the start symbol for a pulsar program is guaranteed to begin
+/// with the following.
+pub const MAIN_SYMBOL_PREFIX: &str = "_pulsar_Smain";
+
 pub struct LabelName {
     unmangled: String,
     mangled: String,

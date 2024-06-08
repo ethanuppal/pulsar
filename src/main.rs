@@ -1,14 +1,16 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use pulsar_backend::{
-    calyx_backend::{CalyxBackend, CalyxBackendInput},
-    PulsarBackend
+    calyx::{CalyxBackend, CalyxBackendInput},
+    Output, PulsarBackend
 };
 use pulsar_frontend::{
     lexer::Lexer, parser::Parser, static_analysis::StaticAnalyzer
 };
 use pulsar_ir::generator::Generator;
 use pulsar_utils::{error::ErrorManager, loc::Source};
-use std::{cell::RefCell, env, fs, io::stdout, process::Command, rc::Rc};
+use std::{
+    cell::RefCell, env, fs, io::stdout, path::PathBuf, process::Command, rc::Rc
+};
 
 fn handle_errors(error_manager: Rc<RefCell<ErrorManager>>) -> Result<(), ()> {
     if error_manager.borrow().has_errors() {
@@ -58,16 +60,11 @@ pub fn main() -> Result<(), ()> {
         .trim()
         .to_string();
 
-    let mut calyx_backend = CalyxBackend::new();
+    let calyx_backend = CalyxBackend::new(CalyxBackendInput {
+        lib_path: PathBuf::from(calyx_root)
+    });
     calyx_backend
-        .run(
-            generated_code,
-            CalyxBackendInput {
-                lib_path: calyx_root,
-                calyx_output: calyx_utils::OutputFile::Stderr,
-                verilog_output: calyx_utils::OutputFile::Stdout
-            }
-        )
+        .run(generated_code, Output::Stdout)
         .map_err(|err| {
             println!("{:?}\n", err);
         })?;
