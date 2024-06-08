@@ -7,7 +7,7 @@ members = [
 ]
 
 [workspace.package]
-name = "pulsar-lang"
+name = "pulsar"
 description = "A high-level programming language for building hardware accelerators"
 homepage = "https://github.com/ethanuppal/pulsar/tree/main"
 repository = "https://github.com/ethanuppal/pulsar/tree/main"
@@ -33,7 +33,7 @@ pulsar-frontend = { path = "crates/pulsar-frontend", version = "0.0.0" }
 pulsar-backend = { path = "crates/pulsar-backend", version = "0.0.0" }
 
 [package]
-name = "pulsar"
+name = "pulsar-lang"
 default-run = "pulsar"
 version.workspace = true
 edition.workspace = true

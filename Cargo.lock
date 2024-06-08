@@ -546,24 +546,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pulsar"
-version = "0.0.0"
-dependencies = [
- "calyx-frontend",
- "calyx-ir",
- "calyx-opt",
- "calyx-utils",
- "colored",
- "insta",
- "lazy_static",
- "proptest",
- "pulsar-backend",
- "pulsar-frontend",
- "pulsar-ir",
- "pulsar-utils",
-]
-
-[[package]]
 name = "pulsar-backend"
 version = "0.0.0"
 dependencies = [
@@ -590,6 +572,24 @@ name = "pulsar-ir"
 version = "0.0.0"
 dependencies = [
  "pulsar-frontend",
+ "pulsar-utils",
+]
+
+[[package]]
+name = "pulsar-lang"
+version = "0.0.0"
+dependencies = [
+ "calyx-frontend",
+ "calyx-ir",
+ "calyx-opt",
+ "calyx-utils",
+ "colored",
+ "insta",
+ "lazy_static",
+ "proptest",
+ "pulsar-backend",
+ "pulsar-frontend",
+ "pulsar-ir",
  "pulsar-utils",
 ]
 
