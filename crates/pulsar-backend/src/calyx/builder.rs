@@ -3,10 +3,7 @@
 use calyx_ir::RRC;
 use pulsar_utils::environment::Environment;
 use std::{
-    collections::HashMap,
-    fmt::{format, Display},
-    marker::PhantomData,
-    path::PathBuf
+    collections::HashMap, fmt::Display, marker::PhantomData, path::PathBuf
 };
 
 pub mod macros;
@@ -123,11 +120,14 @@ impl CalyxCell {
     }
 }
 
+/// An abstraction over a calyx group for adding assignments.
 pub trait CalyxAssignmentContainer {
     type AssignmentType;
 
+    /// Inserts a single assignment.
     fn add(&self, assignment: calyx_ir::Assignment<Self::AssignmentType>);
 
+    /// Inserts a set of assignment.
     fn extend<
         I: IntoIterator<Item = calyx_ir::Assignment<Self::AssignmentType>>
     >(
@@ -137,6 +137,7 @@ pub trait CalyxAssignmentContainer {
     }
 }
 
+/// See [`calyx_ir::Group`].
 pub struct CalyxGroup {
     pub value: RRC<calyx_ir::Group>
 }
@@ -149,6 +150,7 @@ impl CalyxAssignmentContainer for CalyxGroup {
     }
 }
 
+/// See [`calyx_ir::CombGroup`].
 pub struct CalyxCombGroup {
     pub value: RRC<calyx_ir::CombGroup>
 }
@@ -161,21 +163,24 @@ impl CalyxAssignmentContainer for CalyxCombGroup {
     }
 }
 
-pub trait CalyxControlStyle {}
+/// A flag for [`CalyxControl`].
+pub trait CalyxControlType {}
 
+/// Represents sequential [`CalyxControl`].
 pub struct Sequential;
-impl CalyxControlStyle for Sequential {}
+impl CalyxControlType for Sequential {}
 
+/// Represents parallel [`CalyxControl`].
 pub struct Parallel;
-impl CalyxControlStyle for Parallel {}
+impl CalyxControlType for Parallel {}
 
 /// A wrapper around [`calyx_ir::Control`] for scoped building.
-pub struct CalyxControl<T: CalyxControlStyle> {
+pub struct CalyxControl<T: CalyxControlType> {
     children: Vec<calyx_ir::Control>,
     phantom: PhantomData<T>
 }
 
-impl<T: CalyxControlStyle> CalyxControl<T> {
+impl<T: CalyxControlType> CalyxControl<T> {
     /// Opens a `seq` context where `f` is called. For instance,
     /// ```
     /// fn add_seq(control: &mut CalyxControl, my_group: &CalyxGroup) {
@@ -244,7 +249,7 @@ impl<T: CalyxControlStyle> CalyxControl<T> {
     // TODO: more control
 }
 
-impl<T: CalyxControlStyle> Default for CalyxControl<T> {
+impl<T: CalyxControlType> Default for CalyxControl<T> {
     fn default() -> Self {
         Self {
             children: vec![],
@@ -470,6 +475,16 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
             .clone()
     }
 
+    /// See [`Environment::push`].
+    pub fn begin_scope(&mut self) {
+        self.env.push();
+    }
+
+    /// See [`Environment::pop`].
+    pub fn end_scope(&mut self) -> bool {
+        self.env.pop()
+    }
+
     /// Creates a new group guaranteed to start with `prefix`.
     pub fn add_group(&mut self, prefix: &str) -> CalyxGroup {
         CalyxGroup {
@@ -603,8 +618,8 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
     }
 }
 
-/// A builder for calyx IR optimized for generation from an AST or
-/// (un)structured TAC IR.
+/// A builder for calyx IR optimized for generation from a higher-level AST or
+/// IR.
 pub struct CalyxBuilder {
     /// The calyx program being built.
     ctx: calyx_ir::Context,
@@ -627,15 +642,17 @@ impl CalyxBuilder {
     /// - `lib_path` should be the root of the calyx installation location,
     ///   e.g., the folder generated from cloning the repository from GitHub.
     ///
-    /// - `entrypoint` is the name of the entry component in the program.
+    /// - `entrypoint` is the name of the entry component in the program. If
+    ///   `None` is passed, it will default to `"main"`. You can use
+    ///   [`CalyxBuilder::set_entrypoint`] to update it.
     ///
     /// - `cell_name_prefix` is the non-empty prefix applied to all named cells
     ///   (e.g., those requested via [`CalyxComponent::named_reg`]) to guarantee
     ///   no collisions with unnamed cells (e.g., those requested via
     ///   [`CalyxComponent::unnamed_cell`]). It must be non-empty.
     pub fn new(
-        prelude: Option<PathBuf>, lib_path: PathBuf, entrypoint: String,
-        cell_name_prefix: String
+        prelude: Option<PathBuf>, lib_path: PathBuf,
+        entrypoint: Option<String>, cell_name_prefix: String
     ) -> Self {
         assert!(!cell_name_prefix.is_empty());
 
@@ -646,11 +663,12 @@ impl CalyxBuilder {
         let ctx = calyx_ir::Context {
             components: vec![],
             lib: ws.lib,
-            entrypoint: entrypoint.into(),
+            entrypoint: entrypoint.unwrap_or("main".into()).into(),
             bc: calyx_ir::BackendConf::default(),
             extra_opts: vec![],
             metadata: None
         };
+
         Self {
             ctx,
             sigs: HashMap::new(),
@@ -682,9 +700,8 @@ impl CalyxBuilder {
         self.sigs.insert(name, ports);
     }
 
-    /// Returns a component builder for a registered component. Invalidates a
-    /// previous component builder. Once you are finished with the component
-    /// builder, call [`finish_component!`].
+    /// Returns a component wrapper for a registered component. Once you are
+    /// finished with the component builder, call [`finish_component!`].
     ///
     /// Requires: [`CalyxBuilder::register_component`] has been issued for
     /// `name`.
@@ -713,7 +730,12 @@ impl CalyxBuilder {
         self.ctx.components.push(component);
     }
 
-    pub fn update_entrypoint(&mut self, entrypoint: String) {
+    /// Updates the name of the program entrypoint.
+    ///
+    /// Requires: [`CalyxBuilder::register_component`] has been issued for
+    /// `entrypoint`.
+    pub fn set_entrypoint(&mut self, entrypoint: String) {
+        assert!(self.sigs.contains_key(&entrypoint));
         self.ctx.entrypoint = entrypoint.into();
     }
 

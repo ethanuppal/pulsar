@@ -12,7 +12,7 @@ use pulsar_ir::{
     basic_block::BasicBlockCell,
     control_flow_graph::ControlFlowGraph,
     generator::GeneratedTopLevel,
-    label::{Label, LabelName},
+    label::{Label, LabelName, MAIN_SYMBOL_PREFIX},
     operand::Operand,
     variable::Variable,
     Ir
@@ -94,6 +94,10 @@ impl CalyxBackend {
         }
         self.builder
             .register_component(label.name.mangle().clone(), comp_ports);
+
+        if label.name.mangle().starts_with(MAIN_SYMBOL_PREFIX) {
+            self.builder.set_entrypoint(label.name.mangle().clone());
+        }
     }
 
     /// A component for a call to `call` instantiated as a cell a single time in
@@ -436,7 +440,7 @@ impl PulsarBackend for CalyxBackend {
             builder: CalyxBuilder::new(
                 Some(prelude_file_path),
                 input.lib_path,
-                "main".into(),
+                None,
                 "_".into()
             )
         }
@@ -456,10 +460,6 @@ impl PulsarBackend for CalyxBackend {
                     is_pure: _,
                     cfg: _
                 } => {
-                    if label.name.mangle().contains("_pulsar_Smain") {
-                        self.builder
-                            .update_entrypoint(label.name.mangle().clone());
-                    }
                     self.register_func(label, args, ret);
                 }
             }
