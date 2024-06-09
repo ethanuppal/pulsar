@@ -123,6 +123,7 @@ impl Display for Error {
         let region_extra_lines = (region.end.line - region.start.line) as usize;
         let show_lines_before = 1;
         let show_lines_after = 1;
+        let mut already_explained = false;
         writeln!(f, "{}", "     │  ".dimmed())?;
         let (lines, current_line_pos) = region
             .start
@@ -174,7 +175,10 @@ impl Display for Error {
                 } else {
                     write!(f, "{}{}", part1, " ".on_color(self.level.color()))?;
                 }
-                if let Some(explain) = &self.explain {
+                if let Some(explain) =
+                    &self.explain.as_ref().filter(|_| !already_explained)
+                {
+                    already_explained = true;
                     fn create_error_pointer(length: usize) -> String {
                         match length {
                             0 => "".into(),

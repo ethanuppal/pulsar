@@ -3,6 +3,7 @@
 //! Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
 pub mod ast;
+pub mod attribute;
 pub mod lexer;
 pub mod op;
 pub mod parser;

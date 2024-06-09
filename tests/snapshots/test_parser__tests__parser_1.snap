@@ -1,0 +1,41 @@
+---
+source: tests/test_parser.rs
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", test_num),\n    error_manager.clone())"
+---
+func main() -> Unit {
+    return
+}
+error[E0006]: tests/data/parser1.plsr:6:5: Invalid token at the start of statement
+     │  
+   5 │  func foo() {
+   6 │      fun bad_nested() {
+   7 │  
+     │  
+
+error[E0005]: tests/data/parser1.plsr:12:5: Unexpected top-level construct
+     │  
+  11 │  func foo() {
+  12 │      func nested() {
+  13 │          
+     │  
+Suggestion: Did you mean to place it at the top level?
+
+error[E0003]: tests/data/parser1.plsr:19:1: Expected 'identifier' for parameter name in `missing_close`
+     │  
+  18 │  
+  19 │  func missing_close_2() {
+     │  └─── Received 'func' here
+     │  
+
+error[E0002]: tests/data/parser1.plsr:19:25: 
+     │  
+  18 │  
+  19 │  func missing_close_2() { 
+     │                          └ Unexpected EOF at end of function body
+     │  
+   ...
+     │  
+  18 │  
+  19 │  func missing_close_2() { 
+     │                         └ { opened here
+     │

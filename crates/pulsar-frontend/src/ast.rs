@@ -3,30 +3,33 @@ use super::{
     token::{Token, TokenType},
     ty::{StmtTypeCell, Type, TypeCell}
 };
+use crate::{
+    attribute::{Attribute, Attributes},
+    ty::StmtType
+};
 use pulsar_utils::{
     format,
-    loc::{Loc, RegionProvider},
-    mutcell::MutCell
+    loc::{Loc, RegionProvider}
 };
 use std::fmt::{self, Display};
 
 pub type Param = (Token, Type);
 
-trait TokenRegionProvider {
-    fn start_token(&self) -> Token;
-    fn end_token(&self) -> Option<Token>;
+pub(crate) trait TokenRegionProvider {
+    fn start_token(&self) -> &Token;
+    fn end_token(&self) -> &Token;
 }
 
 macro_rules! implement_region_provider_for_token_provider {
     ($T:ident) => {
         impl RegionProvider for $T {
             fn start(&self) -> Loc {
-                self.start_token().loc
+                self.start_token().loc.clone()
             }
 
             fn end(&self) -> Loc {
-                let end_token = self.end_token().unwrap_or(self.start_token());
-                let mut loc = end_token.loc;
+                let end_token = self.end_token();
+                let mut loc = end_token.loc.clone();
                 // tokens are always on one line
                 if end_token.ty != TokenType::Newline {
                     let length = end_token.value.len() as isize;
@@ -67,9 +70,22 @@ pub enum ExprValue {
 #[derive(Clone)]
 pub struct Expr {
     pub value: ExprValue,
-    pub start_token: MutCell<Option<Token>>,
-    pub end_token: MutCell<Option<Token>>,
-    pub ty: TypeCell
+    pub ty: TypeCell,
+    start_token: Token,
+    end_token: Token
+}
+
+impl Expr {
+    /// Constructs a new expression with the given `value` that ranges from
+    /// `start_token` to `end_token`.
+    pub fn new(value: ExprValue, start_token: Token, end_token: Token) -> Self {
+        Self {
+            value,
+            start_token,
+            end_token,
+            ty: TypeCell::new(Type::Unknown)
+        }
+    }
 }
 
 impl Display for Expr {
@@ -135,12 +151,12 @@ impl Display for Expr {
 }
 
 impl TokenRegionProvider for Expr {
-    fn start_token(&self) -> Token {
-        self.start_token.clone_out().unwrap()
+    fn start_token(&self) -> &Token {
+        &self.start_token
     }
 
-    fn end_token(&self) -> Option<Token> {
-        self.end_token.clone_out()
+    fn end_token(&self) -> &Token {
+        &self.end_token
     }
 }
 
@@ -161,7 +177,7 @@ pub enum NodeValue {
         value: Box<Expr>
     },
     Return {
-        token: Token,
+        keyword_token: Token,
         value: Option<Box<Expr>>
     }
 }
@@ -170,11 +186,32 @@ pub enum NodeValue {
 pub struct Node {
     pub value: NodeValue,
     pub ty: StmtTypeCell,
-    pub start_token: MutCell<Option<Token>>,
-    pub end_token: MutCell<Option<Token>>
+    pub attributes: Attributes,
+    start_token: Token,
+    end_token: Token
 }
 
 impl Node {
+    /// Constructs a node node with the given `value` that ranges from
+    /// `start_token` to `end_token`.
+    pub fn new(value: NodeValue, start_token: Token, end_token: Token) -> Self {
+        Self {
+            value,
+            ty: StmtType::make_unknown(),
+            attributes: Attributes::default(),
+            start_token,
+            end_token
+        }
+    }
+
+    /// Marks this node as generated (that is, not present syntactically in the
+    /// user's source).
+    pub fn mark_generated(mut self) -> Self {
+        self.attributes.add(Attribute::Generated);
+        self
+    }
+
+    /// Pretty-prints this node at the given indentation `level`.
     fn pretty(&self, level: usize) -> String {
         let mut result = format::make_indent(level);
         let content = match &self.value {
@@ -218,7 +255,7 @@ impl Node {
                 format!("let {}{} = {}", name.value, hint_str, value)
             }
             NodeValue::Return {
-                token: _,
+                keyword_token: _,
                 value: value_opt
             } => {
                 format!(
@@ -234,10 +271,6 @@ impl Node {
         result.push_str(&content);
         result
     }
-
-    pub fn is_phantom(&self) -> bool {
-        self.start_token.as_ref().is_none() || self.end_token.as_ref().is_none()
-    }
 }
 
 impl Display for Node {
@@ -247,12 +280,12 @@ impl Display for Node {
 }
 
 impl TokenRegionProvider for Node {
-    fn start_token(&self) -> Token {
-        self.start_token.clone_out().unwrap()
+    fn start_token(&self) -> &Token {
+        &self.start_token
     }
 
-    fn end_token(&self) -> Option<Token> {
-        self.end_token.clone_out()
+    fn end_token(&self) -> &Token {
+        &self.end_token
     }
 }
 

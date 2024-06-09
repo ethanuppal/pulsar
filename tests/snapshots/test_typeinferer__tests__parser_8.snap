@@ -1,6 +1,6 @@
 ---
 source: tests/test_typeinferer.rs
-expression: "typeinferer_output(\"tests/data/infer8.plsr\", error_manager.clone())"
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\", test_num),\n    error_manager.clone())"
 ---
 error[E0004]: tests/data/infer8.plsr:1:6: Function `does_not_return` does not return from all paths
      │  

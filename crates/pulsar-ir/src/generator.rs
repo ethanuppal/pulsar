@@ -199,7 +199,10 @@ impl Generator {
                 self.env.bind(name.value.clone(), name_var);
                 block.as_mut().add(Ir::Assign(name_var, value_operand));
             }
-            NodeValue::Return { token: _, value } => {
+            NodeValue::Return {
+                keyword_token: _,
+                value
+            } => {
                 let value_operand = value
                     .as_ref()
                     .map(|value| self.gen_expr(value.as_ref(), block.clone()));

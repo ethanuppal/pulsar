@@ -65,6 +65,7 @@ pulsar-frontend.workspace = true
 pulsar-ir.workspace = true
 pulsar-backend.workspace = true
 pulsar-utils.workspace = true
+paste = "1.0.15"
 
 [dev-dependencies]
 proptest = "1.4.0"

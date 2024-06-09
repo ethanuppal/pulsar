@@ -1,6 +1,6 @@
 ---
 source: tests/test_parser.rs
-expression: "parser_output(\"tests/data/parser_in6.pl\", error_manager.clone())"
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", test_num),\n    error_manager.clone())"
 ---
 func param1(a: Int64) -> Unit {
     return

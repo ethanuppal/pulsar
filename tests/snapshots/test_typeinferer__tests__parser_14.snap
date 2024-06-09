@@ -1,6 +1,6 @@
 ---
 source: tests/test_typeinferer.rs
-expression: "typeinferer_output(\"tests/data/infer14.plsr\", error_manager)"
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\", test_num),\n    error_manager.clone())"
 ---
 error[E0010]: tests/data/infer14.plsr:6:5: Impure statement in `pure` function `square`
      │  

@@ -44,103 +44,38 @@ mod tests {
         output
     }
 
-    #[test]
-    fn test_typeinferer() {
-        let error_manager = ErrorManager::with_max_count(5);
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer1.plsr",
-            error_manager.clone()
-        ));
+    use paste::paste;
 
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer2.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer3.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer4.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer5.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer6.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer7.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer8.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer9.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer10.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer11.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer12.plsr",
-            error_manager.clone()
-        ));
+    macro_rules! generate_test {
+        ($num:expr) => {
+            paste! {
+                #[test]
+                fn [<test_parser_ $num>]() {
+                    let test_num = $num;
+                    let error_manager = ErrorManager::with_max_count(5);
+                    assert_snapshot!(typeinferer_output(
+                        &format!("tests/data/infer{}.plsr", test_num),
+                        error_manager.clone()
+                    ));
+                }
+            }
+        };
     }
 
-    #[test]
-    fn test_infer13() {
-        let error_manager = ErrorManager::with_max_count(5);
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer13.plsr",
-            error_manager
-        ));
-    }
-
-    #[test]
-    fn test_infer14() {
-        let error_manager = ErrorManager::with_max_count(5);
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer14.plsr",
-            error_manager
-        ));
-    }
-
-    #[test]
-    fn test_infer15() {
-        let error_manager = ErrorManager::with_max_count(5);
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer15.plsr",
-            error_manager
-        ));
-    }
-
-    #[test]
-    fn test_infer16() {
-        let error_manager = ErrorManager::with_max_count(5);
-        assert_snapshot!(typeinferer_output(
-            "tests/data/infer16.plsr",
-            error_manager
-        ));
-    }
+    generate_test!(1);
+    generate_test!(2);
+    generate_test!(3);
+    generate_test!(4);
+    generate_test!(5);
+    generate_test!(6);
+    generate_test!(7);
+    generate_test!(8);
+    generate_test!(9);
+    generate_test!(10);
+    generate_test!(11);
+    generate_test!(12);
+    generate_test!(13);
+    generate_test!(14);
+    generate_test!(15);
+    generate_test!(16);
 }

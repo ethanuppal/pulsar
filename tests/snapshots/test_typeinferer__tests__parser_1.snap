@@ -1,6 +1,6 @@
 ---
 source: tests/test_typeinferer.rs
-expression: "typeinferer_output(\"tests/data/infer1.plsr\", error_manager.clone())"
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\", test_num),\n    error_manager.clone())"
 ---
 error[E0009]: tests/data/infer1.plsr:2:25: Unbound function or variable `a`
      │  

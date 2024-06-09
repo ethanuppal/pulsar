@@ -1,6 +1,6 @@
 ---
 source: tests/test_typeinferer.rs
-expression: "typeinferer_output(\"tests/data/infer9.plsr\", error_manager.clone())"
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\", test_num),\n    error_manager.clone())"
 ---
 func main() -> Unit {
     return 1: Int64

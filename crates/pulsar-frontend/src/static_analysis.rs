@@ -1,3 +1,5 @@
+use crate::attribute::Attribute;
+
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use super::{
     ast::{Expr, ExprValue, Node, NodeValue},
@@ -559,7 +561,7 @@ impl StaticAnalyzer {
                     if func_ty.as_ref().termination == StmtTermination::Terminal
                         && !warned_dead_code
                         && !just_found_term
-                        && !node.is_phantom()
+                        && !node.attributes.has(Attribute::Generated)
                     {
                         self.warn_dead_code(name, node, term_node.unwrap());
                         warned_dead_code = true;
@@ -604,7 +606,7 @@ impl StaticAnalyzer {
             }
             (
                 NodeValue::Return {
-                    token,
+                    keyword_token: token,
                     value: value_opt
                 },
                 false
