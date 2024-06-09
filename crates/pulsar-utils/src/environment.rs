@@ -58,3 +58,9 @@ impl<Name: Eq + Hash, T> Environment<Name, T> {
         None
     }
 }
+
+impl<Name: Eq + Hash, T> Default for Environment<Name, T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}

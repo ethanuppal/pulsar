@@ -109,7 +109,7 @@ impl Display for Error {
                 )?;
             }
         }
-        write!(f, "{}\n", self.message.bold())?;
+        writeln!(f, "{}", self.message.bold())?;
 
         // If there is no region associated with this error, then we have
         // nothing more to print
@@ -299,6 +299,12 @@ impl ErrorBuilder {
     }
 }
 
+impl Default for ErrorBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A shared error manager with an error recording limit.
 pub struct ErrorManager {
     max_count: usize,
@@ -344,15 +350,13 @@ impl ErrorManager {
     pub fn consume_and_write<W: io::Write>(
         &mut self, output: &mut W
     ) -> io::Result<()> {
-        let mut i = 0;
-        for error in &self.errors {
+        for (i, error) in self.errors.iter().enumerate() {
             if error.style == Style::Primary && i > 0 {
-                output.write(&[b'\n'])?;
+                output.write_all(&[b'\n'])?;
             }
             output.write_all(error.to_string().as_bytes())?;
-            output.write(&[b'\n'])?;
+            output.write_all(&[b'\n'])?;
             output.flush()?;
-            i += 1;
         }
         self.errors.clear();
         self.primary_count = 0;

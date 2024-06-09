@@ -53,7 +53,7 @@ pub fn main() -> Result<(), ()> {
     let generated_code: Vec<_> = generator.into_iter().collect();
 
     let command_output = Command::new("fud")
-        .args(&["c", "global.root"])
+        .args(["c", "global.root"])
         .output()
         .expect("'fud' is not installed and/or misconfigured");
     let calyx_root = String::from_utf8_lossy(&command_output.stdout)

@@ -261,7 +261,7 @@ impl Node {
                 format!(
                     "return{}",
                     if let Some(value) = value_opt {
-                        format!(" {}", value.to_string())
+                        format!(" {}", value)
                     } else {
                         "".into()
                     }

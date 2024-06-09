@@ -367,8 +367,8 @@ impl StaticAnalyzer {
             }
             ExprValue::Subscript(array, index) => {
                 *expr.ty.as_mut() = self.new_type_var();
-                let (array_ty, array_is_pure) = self.visit_expr(&array)?;
-                let (index_ty, index_is_pure) = self.visit_expr(&index)?;
+                let (array_ty, array_is_pure) = self.visit_expr(array)?;
+                let (index_ty, index_is_pure) = self.visit_expr(index)?;
                 expr_is_pure &= array_is_pure && index_is_pure;
                 self.add_constraint(
                     index_ty,

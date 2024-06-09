@@ -54,13 +54,18 @@ impl<Node: Hash + Eq + Clone, Edge> Digraph<Node, Edge> {
         let mut stack = vec![];
 
         stack.push(start);
-        while !stack.is_empty() {
-            let node = stack.pop().unwrap();
+        while let Some(node) = stack.pop() {
             visited.insert(node.clone());
             f(node.clone());
             for (_, next) in self.out_of(node).unwrap() {
                 stack.push(next.clone());
             }
         }
+    }
+}
+
+impl<Node: Hash + Eq + Clone, Edge> Default for Digraph<Node, Edge> {
+    fn default() -> Self {
+        Self::new()
     }
 }

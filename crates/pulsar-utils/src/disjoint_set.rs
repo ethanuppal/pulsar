@@ -91,13 +91,11 @@ where
     T: Debug
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut i = 0;
-        for (node, data) in &self.nodes {
+        for (i, (node, data)) in self.nodes.iter().enumerate() {
             if i > 0 {
                 writeln!(f)?;
             }
             write!(f, "{:?} -> {:?}", node, data.parent)?;
-            i += 1;
         }
         Ok(())
     }
@@ -112,5 +110,11 @@ impl<'a, T: NodeTrait> IntoIterator for &'a DisjointSets<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.nodes.iter().map(|(node, data)| (node, &data.parent))
+    }
+}
+
+impl<T: NodeTrait> Default for DisjointSets<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }

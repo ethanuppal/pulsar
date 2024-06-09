@@ -283,7 +283,7 @@ impl Region {
     /// vector corresponds to the first line of this region, which is not
     /// necessarily the first line in `lines`. See [`LineSection`].
     pub fn find_intersection(
-        &self, lines: &Vec<String>, start_line: isize
+        &self, lines: &[String], start_line: isize
     ) -> Vec<LineSection> {
         let mut result = vec![];
         for (i, line) in lines.iter().enumerate() {

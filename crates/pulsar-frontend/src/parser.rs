@@ -341,10 +341,7 @@ macro_rules! parse_full_node {
 
 impl TokenType {
     fn begins_top_level_construct(&self) -> bool {
-        match self {
-            Self::Func | Self::Pure => true,
-            _ => false
-        }
+        matches!(self, Self::Func | Self::Pure)
     }
 }
 
@@ -384,7 +381,7 @@ impl Parser {
             self.expect(TokenType::Integer, Ctx::For("array size".into()))?
         }?;
 
-        let size = i64::from_str_radix(size_token.value.as_str(), 10).ok()?;
+        let size = size_token.value.as_str().parse::<i64>().ok()?;
         if size < 0 {
             self.report(
                 ErrorBuilder::new()
@@ -489,7 +486,7 @@ impl Parser {
         }?;
         match literal_token.ty {
             TokenType::Integer => Some(ExprValue::ConstantInt(
-                i64::from_str_radix(&literal_token.value, 10).unwrap()
+                literal_token.value.parse::<i64>().unwrap()
             )),
             TokenType::LeftBracket => {
                 self.unget();
@@ -607,8 +604,7 @@ impl Parser {
             // TODO: check for negatives
             Some(ExprValue::HardwareMap(
                 map_token.clone(),
-                usize::from_str_radix(&parallel_factor_token.value, 10)
-                    .unwrap(),
+                parallel_factor_token.value.parse::<usize>().unwrap(),
                 f,
                 Box::new(arr)
             ))
@@ -692,7 +688,7 @@ impl Parser {
         self.consume_ignored();
         let primary = parse_full_expr!(self.parse_primary_expr_value())?;
         if let Some(binary_op) =
-            self.current_opt().map(|token| Op::from(token.ty)).flatten()
+            self.current_opt().and_then(|token| Op::from(token.ty))
         {
             if binary_op.is_binary {
                 self.parse_binary_expr(primary, -1)

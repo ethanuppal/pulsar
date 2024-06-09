@@ -29,18 +29,10 @@ pub mod builder;
 // I realized that a contributing factor to this is that my IR has everything
 // has Int64. I should change that
 
+#[derive(Default)]
 struct FunctionContext {
     ret_cell: Option<CalyxCell>,
     param_env: usize
-}
-
-impl Default for FunctionContext {
-    fn default() -> Self {
-        Self {
-            ret_cell: None,
-            param_env: 0
-        }
-    }
 }
 
 pub struct CalyxBackend {
@@ -509,9 +501,9 @@ impl PulsarBackend for CalyxBackend {
     }
 }
 
-impl Into<calyx_utils::OutputFile> for Output {
-    fn into(self) -> calyx_utils::OutputFile {
-        match self {
+impl From<Output> for calyx_utils::OutputFile {
+    fn from(output: Output) -> Self {
+        match output {
             Output::Stdout => calyx_utils::OutputFile::Stdout,
             Output::Stderr => calyx_utils::OutputFile::Stderr,
             Output::File(path) => calyx_utils::OutputFile::File(path)
