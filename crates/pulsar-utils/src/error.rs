@@ -299,12 +299,6 @@ impl ErrorBuilder {
     }
 }
 
-impl Default for ErrorBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// A shared error manager with an error recording limit.
 pub struct ErrorManager {
     max_count: usize,

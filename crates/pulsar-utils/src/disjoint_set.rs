@@ -112,9 +112,3 @@ impl<'a, T: NodeTrait> IntoIterator for &'a DisjointSets<T> {
         self.nodes.iter().map(|(node, data)| (node, &data.parent))
     }
 }
-
-impl<T: NodeTrait> Default for DisjointSets<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}

@@ -13,9 +13,7 @@ pub struct LabelName {
 }
 
 impl LabelName {
-    pub fn from_native(
-        value: String, args: &Vec<Type>, ret: &Box<Type>
-    ) -> Self {
+    pub fn from_native(value: String, args: &Vec<Type>, ret: &Type) -> Self {
         let mut mangled = String::new();
         mangled.push_str("_pulsar");
         mangled.push_str(&format!("_S{}", value));

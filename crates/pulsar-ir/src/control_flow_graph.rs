@@ -58,13 +58,11 @@ impl ControlFlowGraph {
 
 impl Display for ControlFlowGraph {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut i = 0;
-        for basic_block in &self.out_graph.nodes() {
+        for (i, basic_block) in self.out_graph.nodes().iter().enumerate() {
             if i > 0 {
                 writeln!(f)?;
             }
             write!(f, "{}", basic_block)?;
-            i += 1;
         }
         Ok(())
     }

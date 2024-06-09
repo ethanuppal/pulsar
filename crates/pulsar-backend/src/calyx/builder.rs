@@ -39,30 +39,28 @@ impl CalyxCellKind {
     /// [`CalyxCellKind::to_string`] retrieves the name of the primitive in the
     /// standard library.
     pub fn is_primitive(&self) -> bool {
-        match &self {
+        matches!(
+            self,
             Self::Register { size: _ }
-            | Self::CombMemoryD1 {
-                size: _,
-                length: _,
-                address_bits: _
-            }
-            | Self::Primitive { name: _, params: _ } => true,
-            _ => false
-        }
+                | Self::CombMemoryD1 {
+                    size: _,
+                    length: _,
+                    address_bits: _
+                }
+                | Self::Primitive { name: _, params: _ }
+        )
     }
 
     /// Whether the cell is a memory.
     pub fn is_memory(&self) -> bool {
-        if let Self::CombMemoryD1 {
-            size: _,
-            length: _,
-            address_bits: _
-        } = self
-        {
-            true
-        } else {
-            false
-        }
+        matches!(
+            self,
+            Self::CombMemoryD1 {
+                size: _,
+                length: _,
+                address_bits: _
+            }
+        )
     }
 
     /// The parameters associated with the primitive.
@@ -95,7 +93,7 @@ impl Display for CalyxCellKind {
                 address_bits: _
             } => "comb_mem_d1",
             Self::Primitive { name, params: _ } => name,
-            Self::GoDoneComponent { component } => &component,
+            Self::GoDoneComponent { component } => component,
             Self::Constant { width: _ } => "std_const"
         }
         .fmt(f)
@@ -363,7 +361,7 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
         // out a better way, e.g., storing the builder in the struct, I will
         // switch to that, but I tried doing that for many hours to no avail.
         let mut ir_builder =
-            calyx_ir::Builder::new(&mut self.component, &self.lib_sig)
+            calyx_ir::Builder::new(&mut self.component, self.lib_sig)
                 .not_generated();
         f(&mut ir_builder)
     }

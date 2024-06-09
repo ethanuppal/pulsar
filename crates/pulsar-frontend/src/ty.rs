@@ -37,10 +37,7 @@ impl Type {
     }
 
     pub fn is_known(self) -> bool {
-        match self {
-            Self::Unknown => false,
-            _ => true
-        }
+        !matches!(self, Self::Unknown)
     }
 
     pub fn make_unknown() -> TypeCell {

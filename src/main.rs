@@ -23,6 +23,7 @@ fn handle_errors(error_manager: Rc<RefCell<ErrorManager>>) -> Result<(), ()> {
     Ok(())
 }
 
+#[allow(clippy::result_unit_err)]
 pub fn main() -> Result<(), ()> {
     let mut args = env::args();
     args.next(); // ignore program path

@@ -69,8 +69,8 @@ impl Generator {
         match &expr.value {
             ExprValue::ConstantInt(value) => Operand::Constant(*value),
             ExprValue::BinOp(lhs, op, rhs) => {
-                let lhs = self.gen_expr(&lhs, block.clone());
-                let rhs = self.gen_expr(&rhs, block.clone());
+                let lhs = self.gen_expr(lhs, block.clone());
+                let rhs = self.gen_expr(rhs, block.clone());
                 let result = Variable::new();
                 match op.ty {
                     TokenType::Plus => {
@@ -113,8 +113,8 @@ impl Generator {
                 })
             }
             ExprValue::Subscript(array, index) => {
-                let array_operand = self.gen_expr(&array, block.clone());
-                let index_operand = self.gen_expr(&index, block.clone());
+                let array_operand = self.gen_expr(array, block.clone());
+                let index_operand = self.gen_expr(index, block.clone());
                 let result = Variable::new();
                 block.as_mut().add(Ir::Load {
                     result,
@@ -135,15 +135,13 @@ impl Generator {
                     element_size,
                     element_count
                 ));
-                let mut i = 0;
-                for element in elements {
+                for (i, element) in elements.iter().enumerate() {
                     let element_operand = self.gen_expr(element, block.clone());
                     block.as_mut().add(Ir::Store {
                         result,
                         value: element_operand,
-                        index: Operand::Constant(i)
+                        index: Operand::Constant(i as i64)
                     });
-                    i += 1;
                 }
                 for i in elements.len()..element_count {
                     block.as_mut().add(Ir::Store {

@@ -63,9 +63,3 @@ impl<Node: Hash + Eq + Clone, Edge> Digraph<Node, Edge> {
         }
     }
 }
-
-impl<Node: Hash + Eq + Clone, Edge> Default for Digraph<Node, Edge> {
-    fn default() -> Self {
-        Self::new()
-    }
-}

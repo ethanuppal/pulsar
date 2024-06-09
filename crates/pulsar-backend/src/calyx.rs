@@ -62,9 +62,7 @@ impl CalyxBackend {
         }
     }
 
-    fn register_func(
-        &mut self, label: &Label, args: &Vec<Type>, ret: &Box<Type>
-    ) {
+    fn register_func(&mut self, label: &Label, args: &[Type], ret: &Type) {
         let mut comp_ports = vec![];
         for (i, arg) in args.iter().enumerate() {
             let width = arg.size();
@@ -76,7 +74,7 @@ impl CalyxBackend {
                 calyx_ir::Attributes::default()
             ));
         }
-        if **ret != Type::Unit {
+        if *ret != Type::Unit {
             comp_ports.push(calyx_ir::PortDef::new(
                 "ret",
                 (ret.size() * 8) as u64,
@@ -370,24 +368,24 @@ impl CalyxBackend {
     }
 
     fn emit_block(
-        &self, mut component: &mut CalyxComponent<FunctionContext>,
+        &self, component: &mut CalyxComponent<FunctionContext>,
         parent: &mut CalyxControl<Sequential>, block: BasicBlockCell
     ) {
         parent.seq(|s| {
             for ir in block.as_ref().into_iter() {
-                self.emit_ir(&mut component, s, ir);
+                self.emit_ir(component, s, ir);
             }
         });
     }
 
     fn emit_func(
-        &mut self, label: &Label, _args: &Vec<Type>, ret: &Box<Type>,
-        _is_pure: bool, cfg: &ControlFlowGraph
+        &mut self, label: &Label, _args: &[Type], ret: &Type, _is_pure: bool,
+        cfg: &ControlFlowGraph
     ) {
         let mut component: CalyxComponent<FunctionContext> =
             self.builder.start_component(label.name.mangle().clone());
 
-        if **ret != Type::Unit {
+        if *ret != Type::Unit {
             let func = component.signature();
             let ret_cell =
                 component.new_unnamed_cell(builder::CalyxCellKind::Register {

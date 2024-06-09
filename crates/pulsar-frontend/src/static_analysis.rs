@@ -590,7 +590,7 @@ impl StaticAnalyzer {
                 },
                 false
             ) => {
-                let (value_ty, expr_is_pure) = self.visit_expr(&value)?;
+                let (value_ty, expr_is_pure) = self.visit_expr(value)?;
                 if let Some(hint) = hint_opt {
                     self.add_constraint(
                         hint.clone(),
