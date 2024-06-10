@@ -80,7 +80,7 @@ impl StaticAnalyzer {
         self.env.bind_base(name, TypeCell::new(ty));
     }
 
-    /// Performs control-flow analysis on funcitions and infers the types of
+    /// Performs control-flow analysis on functions and infers the types of
     /// nodes and expression in the program `program`, returning the
     /// annotated AST if no error occured.
     pub fn infer(&mut self, mut program: Vec<Node>) -> Option<Vec<Node>> {
@@ -365,7 +365,10 @@ impl StaticAnalyzer {
                     return None;
                 }
             }
-            ExprValue::Subscript(array, index) => {
+            ExprValue::PostfixBop(array, op1, index, op2)
+                if op1.ty == TokenType::LeftBracket
+                    && op2.ty == TokenType::RightBracket =>
+            {
                 *expr.ty.as_mut() = self.new_type_var();
                 let (array_ty, array_is_pure) = self.visit_expr(array)?;
                 let (index_ty, index_is_pure) = self.visit_expr(index)?;
@@ -398,6 +401,7 @@ impl StaticAnalyzer {
                 //     }
                 // }
             }
+            ExprValue::PostfixBop(_, _, _, _) => todo!(),
             ExprValue::ArrayLiteral(elements, should_continue) => {
                 let element_ty_var = self.new_type_var();
                 let element_ty_var_cell = TypeCell::new(element_ty_var);
@@ -425,7 +429,7 @@ impl StaticAnalyzer {
                 }
             }
             ExprValue::PrefixOp(_, _) => todo!(),
-            ExprValue::BinOp(lhs, bop, rhs) => {
+            ExprValue::InfixBop(lhs, bop, rhs) => {
                 // for now we hard code it
                 // i don't know how to deal with e.g. operator overloading here
                 match bop.ty {

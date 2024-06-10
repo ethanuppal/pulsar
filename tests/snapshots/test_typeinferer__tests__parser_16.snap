@@ -1,14 +1,14 @@
 ---
 source: tests/test_typeinferer.rs
-expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\", test_num),\n    error_manager.clone())"
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\", 16), error_manager)"
 ---
 func main() -> Unit {
     let arr = [1: Int64]: Int64[1]
-    let first = arr: Int64[1][0: Int64]: Int64
+    let first = (arr: Int64[1][0: Int64]): Int64
     return
 }
 func main2() -> Unit {
     let arr = [[1: Int64]: Int64[1]]: Int64[1][1]
-    let first = arr: Int64[1][1][0: Int64]: Int64[1]
+    let first = (arr: Int64[1][1][0: Int64]): Int64[1]
     return
 }

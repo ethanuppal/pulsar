@@ -51,11 +51,10 @@ mod tests {
             paste! {
                 #[test]
                 fn [<test_parser_ $num>]() {
-                    let test_num = $num;
-                    let error_manager = ErrorManager::with_max_count(5);
+                    let error_manager = ErrorManager::with_max_count(10);
                     assert_snapshot!(typeinferer_output(
-                        &format!("tests/data/infer{}.plsr", test_num),
-                        error_manager.clone()
+                        &format!("tests/data/infer{}.plsr", $num),
+                        error_manager
                     ));
                 }
             }

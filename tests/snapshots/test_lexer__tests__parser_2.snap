@@ -1,0 +1,19 @@
+---
+source: tests/test_lexer.rs
+expression: "lexer_output(&format!(\"tests/data/lexer{}.plsr\", 2), error_manager)"
+---
+(1, ty = integer, loc = tests/data/lexer2.plsr:1:1)
+(2, ty = integer, loc = tests/data/lexer2.plsr:1:3)
+(3, ty = integer, loc = tests/data/lexer2.plsr:1:5)
+(4, ty = integer, loc = tests/data/lexer2.plsr:1:7)
+(5, ty = integer, loc = tests/data/lexer2.plsr:1:9)
+(\n, ty = newline, loc = tests/data/lexer2.plsr:1:10)
+(id, ty = identifier, loc = tests/data/lexer2.plsr:2:1)
+(\n, ty = newline, loc = tests/data/lexer2.plsr:2:3)
+(id1, ty = identifier, loc = tests/data/lexer2.plsr:3:1)
+(\n, ty = newline, loc = tests/data/lexer2.plsr:3:4)
+(_id1, ty = identifier, loc = tests/data/lexer2.plsr:4:1)
+(\n, ty = newline, loc = tests/data/lexer2.plsr:4:5)
+(1, ty = integer, loc = tests/data/lexer2.plsr:5:1)
+(id, ty = identifier, loc = tests/data/lexer2.plsr:5:2)
+(\n, ty = newline, loc = tests/data/lexer2.plsr:5:4)

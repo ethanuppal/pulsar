@@ -1,15 +1,31 @@
 ---
 source: tests/test_parser.rs
-expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", test_num),\n    error_manager.clone())"
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", 1), error_manager)"
 ---
 func main() -> Unit {
     return
 }
-error[E0006]: tests/data/parser1.plsr:6:5: Invalid token at the start of statement
+error[E0006]: tests/data/parser1.plsr:6:5: Invalid token at the start of a statement
      │  
    5 │  func foo() {
    6 │      fun bad_nested() {
    7 │  
+     │  
+
+info[I0003]: tests/data/parser1.plsr:6:9: Attempting to recover understanding of code
+     │  
+   5 │  func foo() {
+   6 │      fun bad_nested() {
+     │          └───────── Seeking end of function body
+   7 │  
+     │  
+
+info[I0003]: tests/data/parser1.plsr:8:6: Attempting to recover understanding of code
+     │  
+   7 │  
+   8 │      } 
+     │       └ Seeking top-level construct
+   9 │  }
      │  
 
 error[E0005]: tests/data/parser1.plsr:12:5: Unexpected top-level construct
@@ -20,11 +36,34 @@ error[E0005]: tests/data/parser1.plsr:12:5: Unexpected top-level construct
      │  
 Suggestion: Did you mean to place it at the top level?
 
+info[I0003]: tests/data/parser1.plsr:12:10: Attempting to recover understanding of code
+     │  
+  11 │  func foo() {
+  12 │      func nested() {
+     │           └───── Seeking end of function body
+  13 │          
+     │  
+
+info[I0003]: tests/data/parser1.plsr:14:6: Attempting to recover understanding of code
+     │  
+  13 │          
+  14 │      } 
+     │       └ Seeking top-level construct
+  15 │  }
+     │  
+
 error[E0003]: tests/data/parser1.plsr:19:1: Expected 'identifier' for parameter name in `missing_close`
      │  
   18 │  
   19 │  func missing_close_2() {
      │  └─── Received 'func' here
+     │  
+
+info[I0003]: tests/data/parser1.plsr:19:1: Attempting to recover understanding of code
+     │  
+  18 │  
+  19 │  func missing_close_2() {
+     │  └─── Seeking top-level construct
      │  
 
 error[E0002]: tests/data/parser1.plsr:19:25: 

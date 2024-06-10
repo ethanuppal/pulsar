@@ -68,7 +68,7 @@ impl Generator {
     fn gen_expr(&mut self, expr: &Expr, block: BasicBlockCell) -> Operand {
         match &expr.value {
             ExprValue::ConstantInt(value) => Operand::Constant(*value),
-            ExprValue::BinOp(lhs, op, rhs) => {
+            ExprValue::InfixBop(lhs, op, rhs) => {
                 let lhs = self.gen_expr(lhs, block.clone());
                 let rhs = self.gen_expr(rhs, block.clone());
                 let result = Variable::new();
@@ -112,7 +112,10 @@ impl Generator {
                     Operand::Variable(result)
                 })
             }
-            ExprValue::Subscript(array, index) => {
+            ExprValue::PostfixBop(array, op1, index, op2)
+                if op1.ty == TokenType::LeftBracket
+                    && op2.ty == TokenType::RightBracket =>
+            {
                 let array_operand = self.gen_expr(array, block.clone());
                 let index_operand = self.gen_expr(index, block.clone());
                 let result = Variable::new();

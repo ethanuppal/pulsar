@@ -43,11 +43,10 @@ mod tests {
             paste! {
                 #[test]
                 fn [<test_parser_ $num>]() {
-                    let test_num = $num;
-                    let error_manager = ErrorManager::with_max_count(5);
+                    let error_manager = ErrorManager::with_max_count(10);
                     assert_snapshot!(parser_output(
-                        &format!("tests/data/parser{}.plsr", test_num),
-                        error_manager.clone()
+                        &format!("tests/data/parser{}.plsr", $num),
+                        error_manager
                     ));
                 }
             }

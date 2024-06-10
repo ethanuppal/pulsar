@@ -309,6 +309,12 @@ impl Region {
     }
 }
 
+impl Display for Region {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}, {})", self.start, self.end)
+    }
+}
+
 pub trait RegionProvider {
     /// The starting location of this region.
     fn start(&self) -> Loc;

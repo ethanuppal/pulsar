@@ -41,7 +41,7 @@ mod tests {
             dumb_token()
         ));
         assert_snapshot!(
-            Expr::new(ExprValue::BinOp(left, make_token(TokenType::Plus, "+"), right), dumb_token(), dumb_token()).to_string(),
+            Expr::new(ExprValue::InfixBop(left, make_token(TokenType::Plus, "+"), right), dumb_token(), dumb_token()).to_string(),
             @"(5 + 3)"
         )
     }

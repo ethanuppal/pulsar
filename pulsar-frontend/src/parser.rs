@@ -5,7 +5,10 @@ use super::{
     token::{Token, TokenType},
     ty::{Type, TypeCell}
 };
-use crate::ast::{NodeValue, TokenRegionProvider};
+use crate::{
+    ast::{NodeValue, TokenRegionProvider},
+    op::Associativity
+};
 use pulsar_utils::error::{
     Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style
 };
@@ -72,6 +75,11 @@ impl Parser {
         }
     }
 
+    /// Parses the current token as an operator without consuming any tokens.
+    fn current_op_opt(&self) -> Option<Op> {
+        self.current_opt().and_then(|token| Op::from(token.ty))
+    }
+
     fn is_at(&self, ty: TokenType) -> bool {
         self.current_opt()
             .map(|token| token.ty == ty)
@@ -87,7 +95,7 @@ impl Parser {
     }
 
     fn advance(&mut self) {
-        self.pos += 1
+        self.pos += 1;
     }
 
     fn take(&mut self) -> Token {
@@ -96,6 +104,7 @@ impl Parser {
         result
     }
 
+    /// Reverts a [`Parser::advance`], returning `true` unless `self.is_eof()`.
     fn unget(&mut self) -> bool {
         if self.pos > 0 {
             self.pos -= 1;
@@ -105,6 +114,7 @@ impl Parser {
         }
     }
 
+    /// Skips past tokens that can be arbitrarily inserted, such as newlines.
     fn consume_ignored(&mut self) {
         while !self.is_eof() && self.current().ty == TokenType::Newline {
             self.advance()
@@ -115,7 +125,7 @@ impl Parser {
     /// reports an error otherwise, returning `None`.
     fn expect(&mut self, token_type: TokenType, context: Ctx) -> Option<Token> {
         if self.is_eof() {
-            self.report_unexpected_eof(context.to_string());
+            self.report_unexpected_eof(context);
             None
         } else if self.current().ty != token_type {
             self.report_expected_token(
@@ -129,10 +139,11 @@ impl Parser {
         }
     }
 
-    /// EOF is unexpectedly encountered in the parsing context `context`.
+    /// [Reports](Parser::report): EOF is unexpectedly encountered in the
+    /// parsing context `context`.
     ///
     /// Requires: `!buffer.is_empty()`.
-    fn report_unexpected_eof(&mut self, context: String) {
+    fn report_unexpected_eof(&mut self, context: Ctx) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
@@ -144,8 +155,9 @@ impl Parser {
         );
     }
 
-    /// The token type of the found token `actual` diverges from the expected
-    /// type `expected_ty` in the parsing context `context`.
+    /// [Reports](Parser::report): The token type of the found token `actual`
+    /// diverges from the expected type `expected_ty` in the parsing context
+    /// `context`.
     fn report_expected_token(
         &mut self, expected_ty: TokenType, actual: &Token, context: &str
     ) {
@@ -161,9 +173,9 @@ impl Parser {
         );
     }
 
-    /// @see [`Parser::report_expected_token`]
+    /// [Reports](Parser::report): See [`Parser::report_expected_token`].
     fn report_expected_tokens(
-        &mut self, expected_tys: &[TokenType], actual: &Token, context: &str
+        &mut self, expected_tys: &[TokenType], actual: &Token, context: Ctx
     ) {
         self.report(
             ErrorBuilder::new()
@@ -185,8 +197,8 @@ impl Parser {
         );
     }
 
-    /// Refers back to a previous token `refback` with additional explanation
-    /// `explain`.
+    /// Constructs a secondary-style error that refers back to a previous token
+    /// `refback` with additional explanation `explain`.
     fn report_refback(&mut self, refback: &Token, explain: String) {
         self.report(
             ErrorBuilder::new()
@@ -199,8 +211,8 @@ impl Parser {
         );
     }
 
-    /// A construct (marked by `token`) is found at top level that should not
-    /// be. See [`Parser::report_not_top_level`].
+    /// [Reports](Parser::report): A construct (marked by `token`) is found at
+    /// top level that should not be. See [`Parser::report_not_top_level`].
     fn report_top_level(&mut self, token: &Token) {
         self.report(ErrorBuilder::new()
             .of_style(Style::Primary)
@@ -215,8 +227,9 @@ impl Parser {
             .build());
     }
 
-    /// A construct (marked by `token`) that belongs only at top level is found
-    /// further nested. See [`Parser::report_top_level`].
+    /// [Reports](Parser::report): A construct (marked by `token`) that belongs
+    /// only at top level is found further nested. See
+    /// [`Parser::report_top_level`].
     fn report_not_top_level(&mut self, token: &Token) {
         self.report(
             ErrorBuilder::new()
@@ -230,7 +243,8 @@ impl Parser {
         );
     }
 
-    /// `token` represents an invalid start to a statement.
+    /// [Reports](Parser::report): `token` represents an invalid start to a
+    /// statement.
     fn report_invalid_token(&mut self, token: &Token) {
         self.report(
             ErrorBuilder::new()
@@ -238,12 +252,13 @@ impl Parser {
                 .at_level(Level::Error)
                 .with_code(ErrorCode::InvalidTokenForStatement)
                 .at_region(token)
-                .message("Invalid token at the start of statement".into())
+                .message("Invalid token at the start of a statement".into())
                 .build()
         );
     }
 
-    /// `token` was used incorrectly as a `usage` operator when it is not.
+    /// [Reports](Parser::report): `token` was used incorrectly as a `usage`
+    /// operator when it is not.
     fn report_invalid_operator(&mut self, token: &Token, usage: &str) {
         self.report(
             ErrorBuilder::new()
@@ -265,17 +280,6 @@ impl Parser {
     }
 }
 
-// macro_rules! expect_any {
-//     ($self:ident in _ => $context:expr) => {
-//         if $self.is_eof() {
-//             $self.report($self.error_unexpected_eof($context));
-//             None
-//         } else {
-//             Some($self.take())
-//         }
-//     };
-// }
-
 macro_rules! expect_n {
     ($self:ident in [$($token_type:expr),*] => $context:expr) => {
         if $self.is_eof() {
@@ -294,8 +298,11 @@ macro_rules! expect_n {
     };
 }
 
+/// `contained_in! { self; left_type, name, right_type; ... }` computes an
+/// expression or series of statements followed by an expression (`...`)
+/// surrounded by tokens of type `left_type` and `right_type`.
 macro_rules! contained_in {
-    ($self:ident in $open_type:expr, $loc_ctx:expr, $close_type:expr; $($action:tt)*) => {
+    ($self:ident; $open_type:expr, $loc_ctx:expr, $close_type:expr; $($action:tt)*) => {
         {
             let open_token = $self.expect($open_type, Ctx::Begin($loc_ctx.into()))?;
             let result = {$($action)*};
@@ -312,8 +319,7 @@ macro_rules! contained_in {
     };
 }
 
-/// `parse_full!(self.method_returning_value<Expr>())` wraps the
-/// value as an [`Expr`] or [`Node`] by keeping track of the surrounding tokens.
+/// See [`parse_full_expr!`] and [`parse_full_node!`].
 macro_rules! parse_full_abstract {
     ($self:ident.$method:ident<$type:ty>($($arg:expr),*)) => {{
         let start_token = $self.current().clone();
@@ -341,14 +347,30 @@ macro_rules! parse_full_node {
 
 impl TokenType {
     fn begins_top_level_construct(&self) -> bool {
-        matches!(self, Self::Func | Self::Pure)
+        matches!(self, Self::Func | Self::Pure) // || Self::Import
     }
 }
 
 impl Parser {
     /// Advances until EOF, or when specified by `current_exit`, or when a
     /// top-level construct is potentially found.
-    fn synchronize(&mut self, custom_exit: fn(&Token) -> bool) {
+    fn synchronize(
+        &mut self, custom_exit: fn(&Token) -> bool, description: String
+    ) {
+        if !self.is_eof() {
+            self.report(
+                ErrorBuilder::new()
+                    .of_style(Style::Primary)
+                    .at_level(Level::Info)
+                    .with_code(ErrorCode::UnexpectedToken)
+                    .at_region(self.current())
+                    .message(
+                        "Attempting to recover understanding of code".into()
+                    )
+                    .explain(description)
+                    .build()
+            );
+        }
         while !self.is_eof()
             && !custom_exit(self.current())
             && !self.current().ty.begins_top_level_construct()
@@ -359,7 +381,7 @@ impl Parser {
 
     /// Identical to [`Parser::synchronize`] but with no custom exit.`
     fn attempt_restore_to_top_level(&mut self) {
-        self.synchronize(|_| false);
+        self.synchronize(|_| false, "Seeking top-level construct".into());
     }
 
     fn parse_primary_type(&mut self, name: Option<&str>) -> Option<Type> {
@@ -376,12 +398,16 @@ impl Parser {
     }
 
     fn parse_array_type(&mut self, inner: Type) -> Option<Type> {
-        let size_token = contained_in! { self in
+        let size_token = contained_in! { self;
             TokenType::LeftBracket, "array type", TokenType::RightBracket;
             self.expect(TokenType::Integer, Ctx::For("array size".into()))?
         }?;
 
-        let size = size_token.value.as_str().parse::<i64>().ok()?;
+        let size = size_token
+            .value
+            .as_str()
+            .parse::<i64>()
+            .expect("number token can be parsed as number");
         if size < 0 {
             self.report(
                 ErrorBuilder::new()
@@ -415,10 +441,13 @@ impl Parser {
 
     fn parse_type(&mut self, name: Option<&str>) -> Option<Type> {
         if self.is_eof() {
-            self.report_unexpected_eof(match name {
-                Some(name) => format!("in {}", name),
-                None => "in type".into()
-            });
+            self.report_unexpected_eof(Ctx::In(
+                match name {
+                    Some(name) => name,
+                    None => "type"
+                }
+                .into()
+            ));
             return None;
         }
         let primary = self.parse_primary_type(name)?;
@@ -429,60 +458,53 @@ impl Parser {
         }
     }
 
-    fn parse_array_expr_value(&mut self) -> Option<ExprValue> {
-        let open_bracket = self.expect(
-            TokenType::LeftBracket,
-            Ctx::Begin("array literal".into())
-        )?;
-
+    fn parse_array_literal_expr_value(&mut self) -> Option<ExprValue> {
         let mut elements = vec![];
         let mut should_continue = false;
         let mut i = 0;
-        while !self.is_eof() && self.current().ty != TokenType::RightBracket {
-            if i > 0 {
-                self.expect(
-                    TokenType::Comma,
-                    Ctx::Between("array elements".into())
-                )?;
-                self.consume_ignored();
-            }
-            match (self.current_opt().map(|token| token.ty), i) {
-                (Some(TokenType::RightBracket), i) => {
-                    if i > 0 {
+        contained_in! { self;
+            TokenType::LeftBracket, "array literal", TokenType::RightBracket;
+
+            while !self.is_eof() && self.current().ty != TokenType::RightBracket {
+                if i > 0 {
+                    self.expect(
+                        TokenType::Comma,
+                        Ctx::Between("array elements".into())
+                    )?;
+                    self.consume_ignored();
+                }
+                match (self.current_opt().map(|token| token.ty), i) {
+                    (Some(TokenType::RightBracket), i) => {
+                        if i > 0 {
+                            break;
+                        }
+                    }
+                    (Some(TokenType::Dots), _) => {
+                        should_continue = true;
+                        self.advance();
                         break;
                     }
+                    _ => {}
                 }
-                (Some(TokenType::Dots), _) => {
-                    should_continue = true;
-                    self.advance();
-                    break;
+
+                let element_opt = self.parse_expr();
+                if let Some(element) = element_opt {
+                    elements.push(element);
+                } else {
+                    self.synchronize(|token| token.ty == TokenType::RightBrace, "Seeking end of array literal".into());
+                    return None;
                 }
-                _ => {}
-            }
-            let element_opt = self.parse_expr();
-            if let Some(element) = element_opt {
-                elements.push(element);
-            } else {
-                self.synchronize(|token| token.ty == TokenType::RightBrace);
-                return None;
-            }
 
-            i += 1;
-        }
-
-        let close_brace = self
-            .expect(TokenType::RightBracket, Ctx::End("array literal".into()));
-        if close_brace.is_none() {
-            self.report_refback(&open_bracket, "Bracket opened here".into());
-            return None;
-        }
+                i += 1;
+            }
+        };
 
         Some(ExprValue::ArrayLiteral(elements, should_continue))
     }
 
     fn parse_literal_expr_value(&mut self) -> Option<ExprValue> {
         let literal_token = expect_n! { self in
-            [TokenType::Integer, TokenType::Float, TokenType::Char, TokenType::LeftBracket, TokenType::Identifier] => "at start of expression"
+            [TokenType::Integer, TokenType::Float, TokenType::Char, TokenType::LeftBracket, TokenType::Identifier] => Ctx::Begin("literal expression".into())
         }?;
         match literal_token.ty {
             TokenType::Integer => Some(ExprValue::ConstantInt(
@@ -490,7 +512,7 @@ impl Parser {
             )),
             TokenType::LeftBracket => {
                 self.unget();
-                self.parse_array_expr_value()
+                self.parse_array_literal_expr_value()
             }
             TokenType::Identifier => {
                 Some(ExprValue::BoundName(literal_token.clone()))
@@ -499,8 +521,10 @@ impl Parser {
         }
     }
 
-    fn parse_prefix_expr_value(&mut self, prefix_op: Op) -> Option<ExprValue> {
-        if !prefix_op.is_unary {
+    fn parse_unary_prefix_expr_value(
+        &mut self, prefix_op: Op
+    ) -> Option<ExprValue> {
+        if prefix_op.is_unary_prefix() {
             self.report_invalid_operator(&self.current().clone(), "unary");
             return None;
         }
@@ -509,6 +533,35 @@ impl Parser {
         let rhs = self.parse_expr()?;
 
         Some(ExprValue::PrefixOp(op_token, Box::new(rhs)))
+    }
+
+    fn parse_postfix_binary_expr_value(
+        &mut self, mut lhs: Expr
+    ) -> Option<ExprValue> {
+        while let Some(postfix_bop) =
+            self.current_op_opt().and_then(|op| op.postfix_binary)
+        {
+            let op1 = self.take();
+            let rhs = self.parse_expr()?;
+            let op2 = self.expect(
+                postfix_bop.close_token_ty,
+                postfix_bop.name.map_or(
+                    Ctx::After(
+                        "second subexpression in postfix binary expression"
+                            .into()
+                    ),
+                    |name| Ctx::In(name)
+                )
+            )?;
+            let start_token = lhs.start_token().clone();
+            let end_token = op2.clone();
+            lhs = Expr::new(
+                ExprValue::PostfixBop(Box::new(lhs), op1, Box::new(rhs), op2),
+                start_token,
+                end_token
+            );
+        }
+        Some(lhs.value)
     }
 
     /// Warning: do not call this function unless it is wrapped in
@@ -520,7 +573,7 @@ impl Parser {
         )?;
 
         let mut args = vec![];
-        contained_in! { self in
+        contained_in! { self;
             TokenType::LeftPar, "call expression", TokenType::RightPar;
             let mut i = 0;
             while !self.is_eof() && self.current().ty != TokenType::RightPar {
@@ -536,7 +589,7 @@ impl Parser {
                 if let Some(arg) = arg_opt {
                     args.push(arg);
                 } else {
-                    self.synchronize(|token| token.ty == TokenType::RightPar);
+                    self.synchronize(|token| token.ty == TokenType::RightPar, "Seeking end of call arguments".into());
                     return None;
                 }
 
@@ -549,10 +602,12 @@ impl Parser {
 
     fn parse_primary_expr_value_aux(&mut self) -> Option<ExprValue> {
         if self.is_eof() {
-            self.report_unexpected_eof("in expression".into());
+            self.report_unexpected_eof(Ctx::Begin("primary expression".into()));
             None
-        } else if let Some(prefix_op) = Op::from(self.current().ty) {
-            self.parse_prefix_expr_value(prefix_op)
+        } else if let Some(prefix_op) =
+            self.current_op_opt().filter(|op| op.is_unary_prefix())
+        {
+            self.parse_unary_prefix_expr_value(prefix_op)
         } else if self.is_at(TokenType::LeftPar) {
             let open_paren = self.take();
             let expr_value = self.parse_expr()?.value;
@@ -620,63 +675,65 @@ impl Parser {
 
     fn parse_primary_expr_value(&mut self) -> Option<ExprValue> {
         let primary = parse_full_expr!(self.parse_primary_expr_value_aux())?;
-        if !self.is_eof() && self.is_at(TokenType::LeftBracket) {
-            let index_expr = contained_in! {
-                self in TokenType::LeftBracket, "subscript", TokenType::RightBracket;
-                self.parse_expr()?
-            }?;
-            Some(ExprValue::Subscript(
-                Box::new(primary),
-                Box::new(index_expr)
-            ))
+        if self
+            .current_op_opt()
+            .map_or(false, |op| op.is_postfix_binary())
+        {
+            self.parse_postfix_binary_expr_value(primary)
         } else {
             Some(primary.value)
         }
     }
 
-    // I think my handling of start tokens is wrong
     /// Implements [operator-precedence parsing](https://en.wikipedia.org/wiki/Operator-precedence_parser).
-    fn parse_binary_expr(
+    fn parse_infix_binary_expr(
         &mut self, mut lhs: Expr, min_precedence: Precedence
     ) -> Option<Expr> {
         let mut lookahead = self.current().clone();
         while !self.is_eof()
             && Op::from(lookahead.ty)
-                .map(|op| op.is_binary && op.binary_precedence > min_precedence)
+                .and_then(|op| op.infix_binary)
+                .map(|bop| bop.precedence >= min_precedence)
                 .unwrap_or_default()
         {
             let op_token = self.take();
-            let op = Op::from(op_token.ty).unwrap();
+            let bop = Op::from(op_token.ty)
+                .and_then(|op| op.infix_binary)
+                .expect("while cond guarantees");
 
             let mut rhs = parse_full_expr!(self.parse_primary_expr_value())?;
+            if self.is_eof() {
+                break;
+            }
             lookahead = self.current().clone();
             while !self.is_eof()
                 && Op::from(lookahead.ty)
-                    .map(|next_op| {
-                        next_op.is_binary
-                            && ((next_op.is_left_associative
-                                && next_op.binary_precedence
-                                    > op.binary_precedence)
-                                || (!next_op.is_left_associative
-                                    && next_op.binary_precedence
-                                        == op.binary_precedence))
+                    .and_then(|next_op| next_op.infix_binary)
+                    .map(|next_bop| {
+                        (next_bop.associativity == Associativity::Left
+                            && next_bop.precedence > bop.precedence)
+                            || (next_bop.associativity == Associativity::Right
+                                && next_bop.precedence == bop.precedence)
                     })
                     .unwrap_or_default()
             {
-                let next_op = Op::from(lookahead.ty).unwrap();
-                let new_min_precedence = op.binary_precedence
-                    + if next_op.binary_precedence > op.binary_precedence {
+                let next_bop = Op::from(lookahead.ty)
+                    .and_then(|bop| bop.infix_binary)
+                    .unwrap();
+
+                let new_min_precedence = bop.precedence
+                    + if next_bop.precedence > bop.precedence {
                         1
                     } else {
                         0
                     };
-                rhs = self.parse_binary_expr(rhs, new_min_precedence)?;
+                rhs = self.parse_infix_binary_expr(rhs, new_min_precedence)?;
                 lookahead = self.current().clone();
             }
             let start_token = lhs.start_token().clone();
             let end_token = rhs.end_token().clone();
             lhs = Expr::new(
-                ExprValue::BinOp(Box::new(lhs), op_token, Box::new(rhs)),
+                ExprValue::InfixBop(Box::new(lhs), op_token, Box::new(rhs)),
                 start_token,
                 end_token
             );
@@ -687,11 +744,9 @@ impl Parser {
     fn parse_expr(&mut self) -> Option<Expr> {
         self.consume_ignored();
         let primary = parse_full_expr!(self.parse_primary_expr_value())?;
-        if let Some(binary_op) =
-            self.current_opt().and_then(|token| Op::from(token.ty))
-        {
-            if binary_op.is_binary {
-                self.parse_binary_expr(primary, -1)
+        if let Some(op) = self.current_op_opt() {
+            if op.is_infix_binary() {
+                self.parse_infix_binary_expr(primary, -1)
             } else {
                 self.report_invalid_operator(&self.current().clone(), "binary");
                 None
@@ -755,7 +810,7 @@ impl Parser {
         let mut nodes = vec![];
         let mut block_failed = false;
 
-        contained_in! { self in
+        contained_in! { self;
             TokenType::LeftBrace, name, TokenType::RightBrace;
             self.consume_ignored();
             while !self.is_eof() && self.current().ty != TokenType::RightBrace {
@@ -764,7 +819,7 @@ impl Parser {
                     nodes.push(stmt);
                 } else {
                     block_failed = true;
-                    self.synchronize(|token| token.ty == TokenType::RightBrace);
+                    self.synchronize(|token| token.ty == TokenType::RightBrace, format!("Seeking end of {}", name));
                     break;
                 }
             }
@@ -935,7 +990,10 @@ impl Parser {
             return None;
         }
         let node = parse_full_node!(self.parse_stmt_value(top_level))?;
-        self.end_stmt();
+        if self.end_stmt().is_none() {
+            self.advance();
+            return None;
+        }
         Some(node)
     }
 }

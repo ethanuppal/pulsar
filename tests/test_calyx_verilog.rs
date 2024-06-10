@@ -45,4 +45,9 @@ mod tests {
     fn test_map() {
         test_runner("map");
     }
+
+    #[test]
+    fn test_math() {
+        test_runner("math");
+    }
 }

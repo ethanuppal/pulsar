@@ -25,20 +25,24 @@ mod tests {
         output
     }
 
-    #[test]
-    fn test_lexer() {
-        let error_manager = ErrorManager::with_max_count(5);
-        assert_snapshot!(lexer_output(
-            "tests/data/lexer_in1.plsr",
-            error_manager.clone()
-        ));
-        assert_snapshot!(lexer_output(
-            "tests/data/lexer_in2.plsr",
-            error_manager.clone()
-        ));
-        assert_snapshot!(lexer_output(
-            "tests/data/lexer_in3.plsr",
-            error_manager.clone()
-        ));
+    use paste::paste;
+
+    macro_rules! generate_test {
+        ($num:expr) => {
+            paste! {
+                #[test]
+                fn [<test_parser_ $num>]() {
+                    let error_manager = ErrorManager::with_max_count(10);
+                    assert_snapshot!(lexer_output(
+                        &format!("tests/data/lexer{}.plsr", $num),
+                        error_manager
+                    ));
+                }
+            }
+        };
     }
+
+    generate_test!(1);
+    generate_test!(2);
+    generate_test!(3);
 }

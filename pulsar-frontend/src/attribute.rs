@@ -1,7 +1,8 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
-#[repr(usize)]
+#[repr(u8)]
 pub enum Attribute {
+    /// Not present in user source.
     Generated
 }
 
@@ -12,10 +13,10 @@ pub struct Attributes {
 
 impl Attributes {
     pub fn add(&mut self, attr: Attribute) {
-        self.bitmap |= 1 << (attr as usize);
+        self.bitmap |= 1 << (attr as u8);
     }
 
     pub fn has(&self, attr: Attribute) -> bool {
-        self.bitmap & (1 << (attr as usize)) != 0
+        self.bitmap & (1 << (attr as u8)) != 0
     }
 }

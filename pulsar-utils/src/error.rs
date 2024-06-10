@@ -253,7 +253,7 @@ impl ErrorBuilder {
         self
     }
 
-    /// Locates the error as extending `length` characters starting from `loc`.
+    /// Locates the error at the region given by `region_provider`.
     pub fn at_region<R: RegionProvider>(mut self, region_provider: &R) -> Self {
         self.error.region = Some(region_provider.region());
         self

@@ -51,15 +51,14 @@ pub enum ExprValue {
     /// TODO: Call an `expr` or some sort of chaining of `::`
     Call(Token, Vec<Expr>),
 
-    Subscript(Box<Expr>, Box<Expr>),
-
     /// `ArrayLiteral(elements, should_continue)` is an array literal beginning
     /// with `elements` and filling the remainder of the array with zeros if
     /// `should_continue`.
     ArrayLiteral(Vec<Expr>, bool),
 
     PrefixOp(Token, Box<Expr>),
-    BinOp(Box<Expr>, Token, Box<Expr>),
+    InfixBop(Box<Expr>, Token, Box<Expr>),
+    PostfixBop(Box<Expr>, Token, Box<Expr>, Token),
 
     /// `HardwareMap(map_token, parallel_factor, f, arr)` is an array produced
     /// by applying `f` elementwise to `arr` using a hardware parallelism
@@ -108,9 +107,6 @@ impl Display for Expr {
                         .join(", ")
                 )?;
             }
-            ExprValue::Subscript(array, index) => {
-                write!(f, "{}[{}]", array, index)?;
-            }
             ExprValue::ArrayLiteral(elements, should_continue) => {
                 write!(
                     f,
@@ -133,8 +129,11 @@ impl Display for Expr {
             ExprValue::PrefixOp(op, rhs) => {
                 write!(f, "({} {})", op.value, rhs)?;
             }
-            ExprValue::BinOp(lhs, op, rhs) => {
+            ExprValue::InfixBop(lhs, op, rhs) => {
                 write!(f, "({} {} {})", lhs, op.value, rhs)?;
+            }
+            ExprValue::PostfixBop(lhs, op1, rhs, op2) => {
+                write!(f, "({}{}{}{})", lhs, op1.value, rhs, op2.value)?;
             }
             ExprValue::HardwareMap(_, parallel_factor, fun, arr) => {
                 write!(f, "map<{}>({}, {})", parallel_factor, fun.value, arr)?;

@@ -1,0 +1,21 @@
+---
+source: tests/test_lexer.rs
+expression: "lexer_output(&format!(\"tests/data/lexer{}.plsr\", 3), error_manager)"
+---
+(func, ty = func, loc = tests/data/lexer3.plsr:1:1)
+(test, ty = identifier, loc = tests/data/lexer3.plsr:1:6)
+((, ty = left-par, loc = tests/data/lexer3.plsr:1:10)
+(), ty = right-par, loc = tests/data/lexer3.plsr:1:11)
+({, ty = left-brace, loc = tests/data/lexer3.plsr:1:13)
+(\n, ty = newline, loc = tests/data/lexer3.plsr:1:14)
+(print, ty = identifier, loc = tests/data/lexer3.plsr:2:5)
+((, ty = left-par, loc = tests/data/lexer3.plsr:2:10)
+(1, ty = integer, loc = tests/data/lexer3.plsr:2:11)
+(+, ty = plus, loc = tests/data/lexer3.plsr:2:13)
+(2, ty = integer, loc = tests/data/lexer3.plsr:2:15)
+(*, ty = times, loc = tests/data/lexer3.plsr:2:17)
+(3, ty = integer, loc = tests/data/lexer3.plsr:2:19)
+(), ty = right-par, loc = tests/data/lexer3.plsr:2:20)
+(\n, ty = newline, loc = tests/data/lexer3.plsr:2:21)
+(}, ty = right-brace, loc = tests/data/lexer3.plsr:3:1)
+(\n, ty = newline, loc = tests/data/lexer3.plsr:3:2)
