@@ -1,0 +1,19 @@
+---
+source: tests/test_parser.rs
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", test_num),\n    error_manager.clone())"
+---
+func this() -> Unit {
+    return
+}
+func is() -> Unit {
+    return
+}
+func a() -> Unit {
+    return
+}
+func valid() -> Unit {
+    return
+}
+func program() -> Unit {
+    return
+}

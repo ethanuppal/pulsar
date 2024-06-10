@@ -1,0 +1,9 @@
+---
+source: tests/test_parser.rs
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", test_num),\n    error_manager.clone())"
+---
+func main() -> Unit {
+    let input: Int64[64] = [...]
+    let squares = input
+    return
+}

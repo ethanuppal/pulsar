@@ -1,0 +1,19 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\", test_num),\n    error_manager.clone())"
+---
+func square(value: Int64) -> Int64 {
+    return (value: Int64 * value: Int64): Int64
+}
+func sum_squares(input: Int64[4]) -> Int64 {
+    let squares = map<1>(square, input: Int64[4]): Int64[4]
+    return 0: Int64
+}
+error[E0010]: tests/data/infer11.plsr:6:26: Failed to unify types `(Int64) -> Int64` and `pure (Int64) -> Int64`
+     │  
+   5 │  func sum_squares(input: Int[4]) -> Int {
+   6 │      let squares = map<1>(square, input)
+     │                           └───── Type inferred here to be `(Int64) -> Int64`
+   7 │      return 0
+     │  
+Suggestion: Try marking the function as `pure`

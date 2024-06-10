@@ -20,6 +20,11 @@ test: build
 	@echo '[INFO] Running tests'
 	@cargo nextest run --features disable_color
 
+.PHONY: lint
+lint:
+	@echo '[INFO] Linting with clippy'
+	@cargo clippy -- -A clippy::new_without_default -A clippy::comparison_chain
+
 .PHONY: coverage
 coverage: build
 	@echo '[INFO] Checking coverage'

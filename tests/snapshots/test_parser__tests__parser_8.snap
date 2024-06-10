@@ -1,0 +1,10 @@
+---
+source: tests/test_parser.rs
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", test_num),\n    error_manager.clone())"
+---
+func unit() -> Unit {
+    return
+}
+func int() -> Int64 {}
+func array() -> Int64[64] {}
+func array(input: MyCustomType1) -> MyCustomType2 {}

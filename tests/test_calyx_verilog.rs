@@ -8,7 +8,7 @@ mod tests {
 
     const CALYX_VERILOG_TEST_DIR: &str = "tests/calyx-verilog";
 
-    fn test_runner<S: Display>(name: S) {
+    fn run_verilator_test<S: Display>(name: S) {
         let cwd = env::current_dir()
             .expect("Failed to get the current working directory");
         env::set_current_dir(CALYX_VERILOG_TEST_DIR)
@@ -27,22 +27,27 @@ mod tests {
     }
 
     #[test]
-    fn test_twice() {
-        test_runner("twice");
+    fn twice() {
+        run_verilator_test("twice");
     }
 
     #[test]
-    fn test_square() {
-        test_runner("square");
+    fn square() {
+        run_verilator_test("square");
     }
 
     #[test]
-    fn test_map_single() {
-        test_runner("map_single");
+    fn map_single() {
+        run_verilator_test("map_single");
     }
 
     #[test]
-    fn test_map() {
-        test_runner("map");
+    fn map() {
+        run_verilator_test("map");
+    }
+
+    #[test]
+    fn math() {
+        run_verilator_test("math");
     }
 }

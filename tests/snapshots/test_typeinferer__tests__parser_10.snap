@@ -1,0 +1,14 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\", test_num),\n    error_manager.clone())"
+---
+func bad() -> Int64 {
+    return
+}
+error[E0010]: tests/data/infer10.plsr:2:5: Failed to unify types `Unit` and `Int64`
+     │  
+   1 │  func bad() -> Int {
+   2 │      return 
+     │      └───── Type inferred here to be `Unit`
+   3 │  }
+     │

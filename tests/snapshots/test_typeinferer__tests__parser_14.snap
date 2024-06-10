@@ -1,0 +1,18 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\", test_num),\n    error_manager.clone())"
+---
+error[E0010]: tests/data/infer14.plsr:6:5: Impure statement in `pure` function `square`
+     │  
+   5 │  pure func square(value: Int) -> Int {
+   6 │      return multiply(value, value) 
+   7 │  }
+     │  
+   ...
+     │  
+   4 │  
+   5 │  pure func square(value: Int) -> Int {
+     │  └─── Function declared pure here
+   6 │      return multiply(value, value)
+     │  
+Suggestion: Consider marking called functions with `pure`

@@ -36,47 +36,31 @@ mod tests {
         output
     }
 
-    #[test]
-    fn test_parser() {
-        let error_manager = ErrorManager::with_max_count(5);
-        assert_snapshot!(parser_output(
-            "tests/data/parserfail_in1.plsr",
-            error_manager.clone()
-        ));
+    use paste::paste;
 
-        assert_snapshot!(parser_output(
-            "tests/data/parser_in1.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(parser_output(
-            "tests/data/parser_in2.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(parser_output(
-            "tests/data/parser_in3.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(parser_output(
-            "tests/data/parser_in4.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(parser_output(
-            "tests/data/parser_in5.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(parser_output(
-            "tests/data/parser_in6.plsr",
-            error_manager.clone()
-        ));
-
-        assert_snapshot!(parser_output(
-            "tests/data/parser_in7.plsr",
-            error_manager.clone()
-        ));
+    macro_rules! generate_test {
+        ($num:expr) => {
+            paste! {
+                #[test]
+                fn [<test_parser_ $num>]() {
+                    let error_manager = ErrorManager::with_max_count(10);
+                    assert_snapshot!(parser_output(
+                        &format!("tests/data/parser{}.plsr", $num),
+                        error_manager
+                    ));
+                }
+            }
+        };
     }
+
+    generate_test!(1);
+    generate_test!(2);
+    generate_test!(3);
+    generate_test!(4);
+    generate_test!(5);
+    generate_test!(6);
+    generate_test!(7);
+    generate_test!(8);
+    generate_test!(9);
+    generate_test!(10);
 }

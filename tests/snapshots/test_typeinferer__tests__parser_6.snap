@@ -1,0 +1,14 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\", test_num),\n    error_manager.clone())"
+---
+func main() -> Unit {
+    let small = [1: Int64]: Int64[1]
+    let small2: Int64[1] = small: Int64[1]
+    return
+}
+func foo() -> Unit {
+    let small = [1: Int64]: Int64[1]
+    let small2 = small: Int64[1]
+    return
+}

@@ -1,0 +1,10 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\", test_num),\n    error_manager.clone())"
+---
+pure func multiply(x: Int64, y: Int64) -> Int64 {
+    return (x: Int64 * y: Int64): Int64
+}
+pure func square(value: Int64) -> Int64 {
+    return multiply(value: Int64, value: Int64): Int64
+}
