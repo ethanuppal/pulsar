@@ -48,6 +48,8 @@ pub enum ExprValue {
     /// TODO: Support `::`s
     BoundName(Token),
 
+    MemberAccess(Box<Expr>, Token),
+
     /// TODO: Call an `expr` or some sort of chaining of `::`
     Call(Token, Vec<Expr>),
 
@@ -95,6 +97,9 @@ impl Display for Expr {
             }
             ExprValue::BoundName(name) => {
                 write!(f, "{}", name.value)?;
+            }
+            ExprValue::MemberAccess(value, member) => {
+                write!(f, "{}.{}", value, member.value)?;
             }
             ExprValue::Call(name, args) => {
                 write!(

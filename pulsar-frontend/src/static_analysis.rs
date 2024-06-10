@@ -365,6 +365,7 @@ impl StaticAnalyzer {
                     return None;
                 }
             }
+            ExprValue::MemberAccess(_, _) => todo!(),
             ExprValue::PostfixBop(array, op1, index, op2)
                 if op1.ty == TokenType::LeftBracket
                     && op2.ty == TokenType::RightBracket =>

@@ -1,0 +1,8 @@
+---
+source: tests/test_parser.rs
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", 9), error_manager)"
+---
+func main() -> Int64 {
+    let arr = [[1]]
+    return ((arr[0])[0])
+}

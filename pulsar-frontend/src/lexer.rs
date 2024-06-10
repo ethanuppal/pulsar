@@ -196,6 +196,7 @@ impl Iterator for Lexer {
             | "=" => { TokenType::Assign }
             | ":" => { TokenType::Colon }
             | "..." => { TokenType::Dots }
+            | "." => { TokenType::Dot }
             | "," => { TokenType::Comma }
             | "\n" => { TokenType::Newline }
             | "func" => { TokenType::Func }

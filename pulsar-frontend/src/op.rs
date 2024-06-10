@@ -12,7 +12,9 @@ pub enum Associativity {
 
 pub struct InfixBinaryOp {
     pub precedence: Precedence,
-    pub associativity: Associativity
+    pub associativity: Associativity,
+    pub name: Option<String>,
+    pub required_token_ty: Option<TokenType>
 }
 
 pub struct PrefixUnaryOp {}
@@ -32,11 +34,14 @@ pub struct Op {
 
 impl Op {
     pub fn infix_binary(
-        mut self, precedence: Precedence, associativity: Associativity
+        mut self, precedence: Precedence, associativity: Associativity,
+        name: Option<String>, required_token_ty: Option<TokenType>
     ) -> Self {
         self.infix_binary = Some(InfixBinaryOp {
             precedence,
-            associativity
+            associativity,
+            name,
+            required_token_ty
         });
         self
     }
@@ -61,15 +66,24 @@ impl Op {
         match ty {
             TokenType::Plus | TokenType::Minus => Some(
                 Op::default()
-                    .infix_binary(50, Associativity::Left)
+                    .infix_binary(50, Associativity::Left, None, None)
                     .prefix_unary()
             ),
-            TokenType::Times => {
-                Some(Op::default().infix_binary(100, Associativity::Left))
-            }
+            TokenType::Times => Some(Op::default().infix_binary(
+                100,
+                Associativity::Left,
+                Some("multiplication".into()),
+                None
+            )),
             TokenType::LeftBracket => Some(Op::default().postfix_binary(
                 TokenType::RightBracket,
                 Some("subscript".into())
+            )),
+            TokenType::Dot => Some(Op::default().infix_binary(
+                150,
+                Associativity::Left,
+                Some("member access".into()),
+                Some(TokenType::Identifier)
             )),
             _ => None
         }
