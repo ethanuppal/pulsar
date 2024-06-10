@@ -18,6 +18,8 @@ func main() {
 }
 ```
 
+The compiler is tested e2e via [verilator], a hardware simulation tool.
+
 ## Crates
 
 - [`pulsar-lang`](https://crates.io/crates/pulsar-lang): Compiler driver
@@ -27,3 +29,4 @@ func main() {
 - [`pulsar-backend`](https://crates.io/crates/pulsar-backend): Target emission, e.g., Verilog (via [calyx])
 
 [calyx]: http://calyxir.org
+[verilator]: https://www.veripool.org/verilator/
