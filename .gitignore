@@ -1,9 +1,1 @@
-/target
-main
-a.out
-tests/calyx-verilog/build/*
-!tests/calyx-verilog/build/.gitkeep
-obj_dir/
-tests/calyx-verilog/build/obj_dir/
-tests/calyx-verilog/obj_dir/
 crates/calyx-builder/target/

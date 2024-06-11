@@ -2,10 +2,9 @@
 name = "pulsar-calyx-builder"
 version = "0.0.0"
 authors = ["Ethan Uppal"]
-license-file = "LICENSE"
+license = "MIT"
 
 [dependencies]
 calyx-utils = "0.7.1"
 calyx-ir = "0.7.1"
 calyx-frontend = "0.7.1"
-pulsar-utils = "0.0.1"

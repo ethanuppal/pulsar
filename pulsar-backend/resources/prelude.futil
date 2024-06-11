@@ -1,3 +1,0 @@
-import "primitives/core.futil";
-import "primitives/binary_operators.futil";
-import "primitives/memories/comb.futil";

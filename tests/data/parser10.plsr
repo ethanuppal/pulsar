@@ -1,3 +1,0 @@
-func member_access() -> Int {
-    return foo.bar.baz + 3 * array[3].member2
-}

@@ -1,9 +1,0 @@
-pure func inc(x: Int) -> Int {
-    return x + 1
-}
-
-func main() -> Int {
-    let arr = [1]
-    let arr2 = map<1>(inc, arr)
-    return arr2[0]
-}

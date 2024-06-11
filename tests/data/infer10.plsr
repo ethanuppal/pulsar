@@ -1,3 +1,0 @@
-func bad() -> Int {
-    return
-}

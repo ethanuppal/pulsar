@@ -1,8 +1,0 @@
-func inc(x: Int) -> Int {
-    return x + 1
-}
-
-func main(x: Int) -> Int {
-    let arr: Int[4] = [1, ...]
-    return (inc(arr[0]) + arr[1] + arr[2] + arr[3]) * x
-}

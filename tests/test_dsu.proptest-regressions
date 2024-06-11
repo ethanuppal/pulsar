@@ -1,7 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc d87100fb95b4013fc846090405f98a1563459554d3579283e6008091ece1251c # shrinks to values1 = {CheapCloneInt32 { value: 0 }}, values2 = {CheapCloneInt32 { value: 0 }, CheapCloneInt32 { value: -1 }}

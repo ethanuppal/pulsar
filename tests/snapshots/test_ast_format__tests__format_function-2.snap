@@ -1,7 +1,0 @@
----
-source: tests/test_ast_format.rs
-expression: "Node {\n        value: NodeValue::Function {\n            name: Token {\n                ty: TokenType::Identifier,\n                value: \"foo\".into(),\n                loc: Loc::default(),\n            },\n            params: vec![],\n            ret: Type::Unit,\n            is_pure: true,\n            body: body.clone(),\n        },\n        ty: StmtType::make_unknown(),\n    }.to_string()"
----
-pure func foo() -> Unit {
-    let x = 5
-}

@@ -1,9 +1,0 @@
-pure func square(x: Int) -> Int {
-    return x * x
-}
-
-func main() -> Int {
-    let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    let res = map<1>(square, arr)
-    return res[0] + res[1] + res[2] + res[3] + res[4] + res[5] + res[6] + res[7] + res[8] + res[9]
-}

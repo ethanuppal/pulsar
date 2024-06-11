@@ -1,3 +1,0 @@
-func main() -> Int {
-    return 1 + 2 * 3
-}
