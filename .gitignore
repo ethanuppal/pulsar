@@ -6,3 +6,4 @@ tests/calyx-verilog/build/*
 obj_dir/
 tests/calyx-verilog/build/obj_dir/
 tests/calyx-verilog/obj_dir/
+crates/calyx-builder/target/

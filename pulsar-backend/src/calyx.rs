@@ -1,12 +1,13 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
 use super::PulsarBackend;
-use crate::{build_assignments_2, finish_component, Output};
-use builder::{
-    CalyxAssignmentContainer, CalyxBuilder, CalyxCell, CalyxCellKind,
-    CalyxComponent, CalyxControl, Sequential
-};
+use crate::Output;
 use calyx_backend::Backend;
+use pulsar_calyx_builder::{
+    build_assignments_2, finish_component, CalyxAssignmentContainer,
+    CalyxBuilder, CalyxCell, CalyxCellKind, CalyxComponent, CalyxControl,
+    Sequential
+};
 use pulsar_frontend::ty::Type;
 use pulsar_ir::{
     basic_block::BasicBlockCell,
@@ -18,8 +19,6 @@ use pulsar_ir::{
     Ir
 };
 use std::{io::stderr, path::PathBuf};
-
-pub mod builder;
 
 // This file contains many examples of BAD software engineering.
 // All components are treated very much like functions. They have input ports
@@ -388,7 +387,7 @@ impl CalyxBackend {
         if *ret != Type::Unit {
             let func = component.signature();
             let ret_cell =
-                component.new_unnamed_cell(builder::CalyxCellKind::Register {
+                component.new_unnamed_cell(CalyxCellKind::Register {
                     size: ret.size() * 8
                 });
             component.user_data_mut().ret_cell = Some(ret_cell.clone());

@@ -1,5 +1,8 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
+extern crate calyx_ir;
+extern crate pulsar_utils;
+
 use calyx_ir::RRC;
 use pulsar_utils::environment::Environment;
 use std::{
