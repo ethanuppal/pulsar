@@ -3,6 +3,7 @@ name = "bad-calyx-builder"
 version = "0.0.0"
 authors = ["Ethan Uppal"]
 license = "MIT"
+edition = "2018"
 
 [dependencies]
 calyx-utils = "0.7.1"

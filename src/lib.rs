@@ -1,7 +1,5 @@
 // Copyright (C) 2024 Ethan Uppal. See ../LICENSE for details.
 
-extern crate calyx_ir;
-
 use calyx_ir::RRC;
 use std::{collections::HashMap, fmt::Display, marker::PhantomData, path::PathBuf};
 
