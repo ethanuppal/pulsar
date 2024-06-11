@@ -173,6 +173,10 @@ impl CalyxControlType for Parallel {}
 /// A wrapper around [`calyx_ir::Control`] for scoped building.
 pub struct CalyxControl<T: CalyxControlType> {
     children: Vec<calyx_ir::Control>,
+
+    /// The [`calyx_frontend::Attributes`] for the [`calyx_ir::Control`].
+    pub attributes: calyx_frontend::Attributes,
+
     phantom: PhantomData<T>,
 }
 
@@ -250,6 +254,7 @@ impl<T: CalyxControlType> Default for CalyxControl<T> {
     fn default() -> Self {
         Self {
             children: vec![],
+            attributes: calyx_ir::Attributes::default(),
             phantom: PhantomData,
         }
     }
@@ -267,7 +272,10 @@ impl CalyxControl<Sequential> {
         if self.children.is_empty() {
             calyx_ir::Control::empty()
         } else {
-            calyx_ir::Control::seq(self.children)
+            calyx_ir::Control::Seq(calyx_ir::Seq {
+                stmts: self.children,
+                attributes: self.attributes,
+            })
         }
     }
 }
@@ -284,7 +292,10 @@ impl CalyxControl<Parallel> {
         if self.children.is_empty() {
             calyx_ir::Control::empty()
         } else {
-            calyx_ir::Control::par(self.children)
+            calyx_ir::Control::Par(calyx_ir::Par {
+                stmts: self.children,
+                attributes: self.attributes,
+            })
         }
     }
 }
@@ -378,7 +389,7 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
     /// A memory cell bound to `name`.
     ///
     /// Requires: `name` has not been bound.
-    pub fn named_mem(
+    pub fn new_mem(
         &mut self,
         name: String,
         cell_size: usize,
