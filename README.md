@@ -3,11 +3,10 @@
 ![CI](https://github.com/ethanuppal/pulsar/actions/workflows/ci.yaml/badge.svg)
 [![CodeFactor](https://www.codefactor.io/repository/github/ethanuppal/pulsar/badge)](https://www.codefactor.io/repository/github/ethanuppal/pulsar)
 
-Pulsar is a high-level programming language for building hardware accelerators.
-Currently, I am working toward implementing a [calyx] backend.
-It is currently a very vanilla language because I have not yet determined how it should specialize (but all ADLs in practice are DSLs).
+Pulsar is a hobby PL, which, for fun, I am implementing both software and hardware backends.
+Currently, I am working toward implementing such a hardware backend via the [calyx] infrastructure.
 
-The syntax is a very blatant clone of Swift's with some modifications, and it's also very much a WIP.
+The WIP syntax is a very blatant clone of Swift's with some modifications.
 ```swift
 func increment(x: Int) -> Int {
     return x + 1
@@ -18,7 +17,7 @@ func main() {
 }
 ```
 
-The compiler is tested e2e via [verilator], a hardware simulation tool.
+The [calyx] backend is tested e2e via [verilator], a hardware simulation tool.
 
 ## Crates
 
