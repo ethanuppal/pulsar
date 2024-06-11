@@ -46,7 +46,7 @@ impl CalyxBackend {
         &self, component: &mut CalyxComponent<FunctionContext>, var: Variable,
         cell_size: usize, length: usize
     ) -> CalyxCell {
-        component.named_mem(var.to_string(), cell_size, length, 64)
+        component.new_mem(var.to_string(), cell_size, length, 64)
     }
 
     /// Builds a constant if the operand is a constant and looks up a variable
