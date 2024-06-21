@@ -432,7 +432,6 @@ impl PulsarBackend for CalyxBackend {
                 None,
                 "_".into()
             )
-            .expect("Invalid library path")
         }
     }
 

@@ -3,10 +3,10 @@
 ![CI](https://github.com/ethanuppal/pulsar/actions/workflows/ci.yaml/badge.svg)
 [![CodeFactor](https://www.codefactor.io/repository/github/ethanuppal/pulsar/badge)](https://www.codefactor.io/repository/github/ethanuppal/pulsar)
 
-Pulsar is a programming language for building hardware accelerators.
-In what exactly? I'm not sure yet.
+Pulsar is a hobby PL, which, for fun, I am implementing both software and hardware backends.
+Currently, I am working toward implementing such a hardware backend via the [calyx] infrastructure.
 
-As of right now, I'm using Swift's syntax for that nice syntax highlighting:
+The WIP syntax is a very blatant clone of Swift's with some modifications.
 ```swift
 func increment(x: Int) -> Int {
     return x + 1

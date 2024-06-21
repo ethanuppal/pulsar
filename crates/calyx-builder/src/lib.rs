@@ -654,12 +654,13 @@ impl CalyxBuilder {
     pub fn new(
         prelude: Option<PathBuf>, lib_path: PathBuf,
         entrypoint: Option<String>, cell_name_prefix: String
-    ) -> calyx_utils::CalyxResult<Self> {
+    ) -> Self {
         assert!(!cell_name_prefix.is_empty());
 
         // A workspace is created for the sole purpose of obtaining standard
         // library definitions -- it is immediately turned into a context.
-        let ws = calyx_frontend::Workspace::construct(&prelude, &lib_path)?;
+        let ws =
+            calyx_frontend::Workspace::construct(&prelude, &lib_path).unwrap();
         let ctx = calyx_ir::Context {
             components: vec![],
             lib: ws.lib,
@@ -669,11 +670,11 @@ impl CalyxBuilder {
             metadata: None
         };
 
-        Ok(Self {
+        Self {
             ctx,
             sigs: HashMap::new(),
             cell_name_prefix
-        })
+        }
     }
 
     /// <div class="warning">This builder cannot be used.</div>
