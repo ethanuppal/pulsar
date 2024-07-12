@@ -1,8 +1,12 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
+// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+// redistribute it and/or modify it under the terms of the GNU General Public
+// License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 use super::token::{Token, TokenType};
 use pulsar_utils::{
     error::{ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
-    loc::{Loc, Region, Source}
+    loc::{Loc, Source, Span},
+    rrc::RRC
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -10,7 +14,7 @@ use std::{cell::RefCell, rc::Rc};
 ///
 /// # Example
 /// ```
-/// fn lex(source: Rc<Source>, error_manager: Rc<RefCell<ErrorManager>>) {
+/// fn lex(source: Rc<Source>, error_manager: RRC<ErrorManager>) {
 ///     let lexer = Lexer::new(source, error_manager);
 ///     for token in lexer {
 ///         println! {"{}", token};
@@ -20,7 +24,7 @@ use std::{cell::RefCell, rc::Rc};
 pub struct Lexer {
     loc: Loc,
     buffer: Vec<char>,
-    error_manager: Rc<RefCell<ErrorManager>>
+    error_manager: RRC<ErrorManager>
 }
 
 /// Enables exploration of the lexer buffer, e.g., with [`Lexer::advance`],
@@ -39,9 +43,7 @@ macro_rules! with_unwind {
 
 impl Lexer {
     /// Constructs a lexer for the given `source`.
-    pub fn new(
-        source: Rc<Source>, error_manager: Rc<RefCell<ErrorManager>>
-    ) -> Self {
+    pub fn new(source: Rc<Source>, error_manager: RRC<ErrorManager>) -> Self {
         Lexer {
             loc: Loc {
                 line: 1,
@@ -216,7 +218,7 @@ impl Iterator for Lexer {
                         .of_style(Style::Primary)
                         .at_level(Level::Error)
                         .with_code(ErrorCode::UnrecognizedCharacter)
-                        .at_region(&Region::unit(self.loc.clone()))
+                        .span(&Span::unit(self.loc.clone()))
                         .message("Encountered unrecognized character".into())
                         .build();
                     self.error_manager.borrow_mut().record(error);

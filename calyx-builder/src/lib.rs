@@ -1,7 +1,7 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
-
-extern crate calyx_ir;
-extern crate pulsar_utils;
+// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+// redistribute it and/or modify it under the terms of the GNU General Public
+// License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 
 use calyx_ir::RRC;
 use pulsar_utils::environment::Environment;

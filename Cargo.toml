@@ -1,6 +1,11 @@
 [workspace]
-members = ["pulsar-frontend", "pulsar-ir", "pulsar-backend", "pulsar-utils"]
-exclude = ["crates/calyx-builder"]
+members = [
+    "pulsar-frontend",
+    "pulsar-ir",
+    "pulsar-backend",
+    "pulsar-utils",
+    "calyx-builder",
+]
 
 [workspace.package]
 name = "pulsar"
@@ -27,7 +32,8 @@ pulsar-utils = { path = "pulsar-utils", version = "0.0.0" }
 pulsar-ir = { path = "pulsar-ir", version = "0.0.0" }
 pulsar-frontend = { path = "pulsar-frontend", version = "0.0.0" }
 pulsar-backend = { path = "pulsar-backend", version = "0.0.0" }
-pulsar-calyx-builder = { path = "crates/calyx-builder", version = "0.0.0" }
+calyx-builder = { path = "calyx-builder", version = "0.0.0" }
+inform = "0.1.0"
 
 [package]
 name = "pulsar-lang"
@@ -62,7 +68,7 @@ pulsar-frontend.workspace = true
 pulsar-ir.workspace = true
 pulsar-backend.workspace = true
 pulsar-utils.workspace = true
-pulsar-calyx-builder.workspace = true
+calyx-builder.workspace = true
 paste = "1.0.15"
 
 [dev-dependencies]

@@ -1,10 +1,13 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
+// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+// redistribute it and/or modify it under the terms of the GNU General Public
+// License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 use pulsar_backend::{
     calyx::{CalyxBackend, CalyxBackendInput},
     Output, PulsarBackend
 };
 use pulsar_frontend::{
-    lexer::Lexer, parser::Parser, static_analysis::StaticAnalyzer
+    lexer::Lexer, parser::Parser, type_inferer::TypeInferer
 };
 use pulsar_ir::generator::Generator;
 use pulsar_utils::{error::ErrorManager, loc::Source};
@@ -12,7 +15,7 @@ use std::{
     cell::RefCell, env, fs, io::stdout, path::PathBuf, process::Command, rc::Rc
 };
 
-fn handle_errors(error_manager: Rc<RefCell<ErrorManager>>) -> Result<(), ()> {
+fn handle_errors(error_manager: RRC<ErrorManager>) -> Result<(), ()> {
     if error_manager.borrow().has_errors() {
         error_manager
             .borrow_mut()
@@ -43,7 +46,7 @@ pub fn main() -> Result<(), ()> {
     let program_ast: Vec<_> = parser.into_iter().collect();
     handle_errors(error_manager.clone())?;
 
-    let mut type_inferer = StaticAnalyzer::new(error_manager.clone());
+    let mut type_inferer = TypeInferer::new(error_manager.clone());
     let annotated_ast =
         type_inferer.infer(program_ast).ok_or(()).map_err(|()| {
             let _ = handle_errors(error_manager.clone());

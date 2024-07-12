@@ -87,6 +87,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "calyx-builder"
+version = "0.0.0"
+dependencies = [
+ "calyx-frontend",
+ "calyx-ir",
+ "calyx-utils",
+ "pulsar-utils",
+]
+
+[[package]]
 name = "calyx-frontend"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -328,6 +338,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "inform"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd88519deb5e1cf562ef7b4646ac39268f7952170988d7333aa938285e748423"
+
+[[package]]
 name = "insta"
 version = "1.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -556,32 +572,23 @@ name = "pulsar-backend"
 version = "0.0.0"
 dependencies = [
  "calyx-backend",
+ "calyx-builder",
  "calyx-frontend",
  "calyx-ir",
  "calyx-opt",
  "calyx-utils",
- "pulsar-calyx-builder",
  "pulsar-frontend",
  "pulsar-ir",
- "pulsar-utils 0.0.0",
-]
-
-[[package]]
-name = "pulsar-calyx-builder"
-version = "0.0.0"
-dependencies = [
- "calyx-frontend",
- "calyx-ir",
- "calyx-utils",
- "pulsar-utils 0.0.1",
+ "pulsar-utils",
 ]
 
 [[package]]
 name = "pulsar-frontend"
 version = "0.0.0"
 dependencies = [
+ "inform",
  "lazy_static",
- "pulsar-utils 0.0.0",
+ "pulsar-utils",
 ]
 
 [[package]]
@@ -589,13 +596,14 @@ name = "pulsar-ir"
 version = "0.0.0"
 dependencies = [
  "pulsar-frontend",
- "pulsar-utils 0.0.0",
+ "pulsar-utils",
 ]
 
 [[package]]
 name = "pulsar-lang"
 version = "0.0.0"
 dependencies = [
+ "calyx-builder",
  "calyx-frontend",
  "calyx-ir",
  "calyx-opt",
@@ -606,25 +614,14 @@ dependencies = [
  "paste",
  "proptest",
  "pulsar-backend",
- "pulsar-calyx-builder",
  "pulsar-frontend",
  "pulsar-ir",
- "pulsar-utils 0.0.0",
+ "pulsar-utils",
 ]
 
 [[package]]
 name = "pulsar-utils"
 version = "0.0.0"
-dependencies = [
- "colored",
- "lazy_static",
-]
-
-[[package]]
-name = "pulsar-utils"
-version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64961fcadd4f06ea78ff2c22536d74d4f2f9d65898b1989fdadf7e7330239da7"
 dependencies = [
  "colored",
  "lazy_static",

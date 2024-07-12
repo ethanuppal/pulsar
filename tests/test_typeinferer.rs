@@ -2,7 +2,7 @@
 mod tests {
     use insta::assert_snapshot;
     use pulsar_frontend::{
-        lexer::Lexer, parser::Parser, static_analysis::StaticAnalyzer
+        lexer::Lexer, parser::Parser, type_inferer::TypeInferer
     };
     use pulsar_utils::{error::ErrorManager, loc::Source};
     use std::{cell::RefCell, fs, rc::Rc};
@@ -16,7 +16,7 @@ mod tests {
     }
 
     fn typeinferer_output(
-        filename: &str, error_manager: Rc<RefCell<ErrorManager>>
+        filename: &str, error_manager: RRC<ErrorManager>
     ) -> String {
         let source = read(filename);
         let lexer = Lexer::new(source, error_manager.clone());
@@ -24,7 +24,7 @@ mod tests {
         let parser = Parser::new(tokens, error_manager.clone());
         let program_ast: Vec<_> = parser.into_iter().collect();
         assert_eq!(false, error_manager.borrow().has_errors());
-        let mut type_inferer = StaticAnalyzer::new(error_manager.clone());
+        let mut type_inferer = TypeInferer::new(error_manager.clone());
         let annotated_ast_opt = type_inferer.infer(program_ast);
 
         let mut output = String::new();

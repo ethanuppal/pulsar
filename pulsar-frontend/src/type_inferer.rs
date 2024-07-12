@@ -1,89 +1,68 @@
-use crate::attribute::Attribute;
+//! Implements a standard Hindley-Milner type inference algorithm.
+//!
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use super::{
-    ast::{Expr, ExprValue, Node, NodeValue},
-    token::{Token, TokenType},
-    ty::{
-        StmtTermination, StmtType, StmtTypeCell, Type, TypeCell,
-        ARRAY_TYPE_UNKNOWN_SIZE
-    }
+use super::token::{Token, TokenType};
+use crate::{
+    ast::{node::Handle, stmt::Stmt, ty::Type, AsASTPool},
+    attribute::Attribute
 };
 use pulsar_utils::{
-    disjoint_set::{DisjointSets, NodeTrait},
+    disjoint_sets::DisjointSets,
     environment::Environment,
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
     id::Gen,
-    loc::{Region, RegionProvider},
-    CheapClone
+    loc::{Span, SpanProvider},
+    rrc::RRC
 };
 use std::{
     cell::RefCell, collections::VecDeque, fmt::Debug, iter::zip, rc::Rc
 };
 
-/// A dummy variable bound in the environment for the return type. No valid
-/// identifier contains a space, so we are guaranteed to have no name
-/// collisions.
-const RETURN_ID: &str = " return";
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct TypeNode {
-    cell: TypeCell
+struct TypeConstraint {
+    expected: Handle<Type>,
+    actual: Handle<Type>
 }
 
-impl TypeNode {
-    pub fn from_currently_stable_cell(cell: TypeCell) -> Self {
-        Self { cell }
-    }
-
-    pub fn get(&self) -> Type {
-        self.cell.clone_out()
+impl TypeConstraint {
+    /// Constructs a constraint that sets `expected` equal to `actual`.
+    pub fn new(expected: Handle<Type>, actual: Handle<Type>) -> Self {
+        Self { expected, actual }
     }
 }
 
-impl CheapClone for TypeNode {}
-impl Debug for TypeNode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.cell.as_ref())
-    }
-}
-impl NodeTrait for TypeNode {}
-
-#[derive(Debug)]
-enum TypeConstraint {
-    Equality {
-        lhs: TypeCell,
-        rhs: TypeCell,
-        lhs_ctx: Region,
-        rhs_ctx: Region
-    }
+pub struct TypeInferer<'ast, P: AsASTPool> {
+    env: Environment<String, Handle<Type>>,
+    ast_pool: &'ast mut P,
+    constraints: Vec<TypeConstraint>,
+    error_manager: RRC<ErrorManager>
 }
 
-pub struct StaticAnalyzer {
-    env: Environment<String, TypeCell>,
-    constraints: VecDeque<TypeConstraint>,
-    error_manager: Rc<RefCell<ErrorManager>>
-}
-
-impl StaticAnalyzer {
-    pub fn new(error_manager: Rc<RefCell<ErrorManager>>) -> StaticAnalyzer {
-        StaticAnalyzer {
+impl<'ast, P: AsASTPool> TypeInferer<'ast, P> {
+    pub fn new(
+        error_manager: RRC<ErrorManager>, ast_pool: &'ast mut P
+    ) -> Self {
+        Self {
             env: Environment::new(),
-            constraints: VecDeque::new(),
+            ast_pool,
+            constraints: Vec::new(),
             error_manager
         }
     }
 
     /// Establishes a top-level binding for the type `ty` of `name`, useful for
     /// allowing functions to call other functions or external/FFI declarations.
-    pub fn bind_top_level(&mut self, name: String, ty: Type) {
-        self.env.bind_base(name, TypeCell::new(ty));
+    pub fn bind_top_level(&mut self, name: String, ty: Handle<Type>) {
+        self.env.bind_base(name, ty);
     }
 
     /// Performs control-flow analysis on functions and infers the types of
     /// nodes and expression in the program `program`, returning the
     /// annotated AST if no error occured.
-    pub fn infer(&mut self, mut program: Vec<Node>) -> Option<Vec<Node>> {
+    pub fn infer(&mut self, mut program: Vec<Stmt>) -> Option<Vec<Stmt>> {
         self.constraints.clear();
 
         self.env.push();
@@ -125,14 +104,14 @@ impl StaticAnalyzer {
     }
 
     fn warn_dead_code(
-        &mut self, func_name: &Token, dead_node: &Node, term_node: &Node
+        &mut self, func_name: &Token, dead_node: &Stmt, term_node: &Stmt
     ) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Warning)
                 .with_code(ErrorCode::StaticAnalysisIssue)
-                .at_region(dead_node)
+                .span(dead_node)
                 .message("Statement is never reached".into())
                 .build()
         );
@@ -140,7 +119,7 @@ impl StaticAnalyzer {
             ErrorBuilder::new()
                 .of_style(Style::Secondary)
                 .at_level(Level::Warning)
-                .at_region(term_node)
+                .span(term_node)
                 .continues()
                 .explain(format!(
                     "Returned from function `{}` here",
@@ -156,7 +135,7 @@ impl StaticAnalyzer {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::InvalidTopLevelConstruct)
-                .at_region(func_name)
+                .span(func_name)
                 .message(format!(
                     "Function `{}` does not return from all paths",
                     func_name.value
@@ -172,7 +151,7 @@ impl StaticAnalyzer {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::UnboundName)
-                .at_region(name)
+                .span(name)
                 .message(format!(
                     "Unbound function or variable `{}`",
                     name.value
@@ -198,14 +177,14 @@ impl StaticAnalyzer {
     }
 
     fn report_failed_purity_derivation(
-        &mut self, pure_token: &Token, name: &Token, impure_node: &Node
+        &mut self, pure_token: &Token, name: &Token, impure_node: &Stmt
     ) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::StaticAnalysisIssue)
-                .at_region(impure_node)
+                .span(impure_node)
                 .message(format!(
                     "Impure statement in `pure` function `{}`",
                     name.value
@@ -217,7 +196,7 @@ impl StaticAnalyzer {
                 .of_style(Style::Secondary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::StaticAnalysisIssue)
-                .at_region(pure_token)
+                .span(pure_token)
                 .continues()
                 .explain("Function declared pure here".into())
                 .fix("Consider marking called functions with `pure`".into())
@@ -231,7 +210,7 @@ impl StaticAnalyzer {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::StaticAnalysisIssue)
-                .at_region(name)
+                .span(name)
                 .message(format!(
                     "Cannot call non-function value `{}`",
                     name.value
@@ -254,14 +233,14 @@ impl StaticAnalyzer {
     // }
 
     fn report_unification_failure(
-        &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Region,
-        rhs_ctx: Region, fix: Option<String>
+        &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Span, rhs_ctx: Span,
+        fix: Option<String>
     ) {
         let mut builder = ErrorBuilder::new()
             .of_style(Style::Primary)
             .at_level(Level::Error)
             .with_code(ErrorCode::StaticAnalysisIssue)
-            .at_region(&lhs_ctx)
+            .span(&lhs_ctx)
             .message(format!("Failed to unify types `{}` and `{}`", lhs, rhs))
             .explain(format!("Type inferred here to be `{}`", lhs));
         if let Some(fix) = fix {
@@ -274,7 +253,7 @@ impl StaticAnalyzer {
                     .of_style(Style::Secondary)
                     .at_level(Level::Error)
                     .with_code(ErrorCode::StaticAnalysisIssue)
-                    .at_region(&rhs_ctx)
+                    .span(&rhs_ctx)
                     .continues()
                     .explain(format!("Type inferred here to be `{}`", rhs))
                     .build()
@@ -283,14 +262,13 @@ impl StaticAnalyzer {
     }
 }
 
-impl StaticAnalyzer {
+impl<'ast, P: AsASTPool> TypeInferer<'ast, P> {
     fn new_type_var(&self) -> Type {
         Type::Var(Gen::next("TypeInferer::get_type_var"))
     }
 
     fn add_constraint(
-        &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Region,
-        rhs_ctx: Region
+        &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Span, rhs_ctx: Span
     ) {
         self.constraints.push_back(TypeConstraint::Equality {
             lhs,
@@ -315,8 +293,8 @@ impl StaticAnalyzer {
                     self.add_constraint(
                         expr.ty.clone(),
                         name_ty.clone(),
-                        expr.region(),
-                        name.region()
+                        expr.span(),
+                        name.span()
                     );
                 } else {
                     self.report_unbound_name(name);
@@ -338,8 +316,8 @@ impl StaticAnalyzer {
                             self.add_constraint(
                                 expr.ty.clone(),
                                 TypeCell::new((*ret).clone()),
-                                expr.region(),
-                                name.region()
+                                expr.span(),
+                                name.span()
                             );
 
                             for (arg, param_ty) in zip(args, param_tys) {
@@ -349,9 +327,9 @@ impl StaticAnalyzer {
                                 self.add_constraint(
                                     arg_ty,
                                     TypeCell::new(param_ty),
-                                    arg.region(),
-                                    name.region() /* TODO: store the param
-                                                   * tokens? */
+                                    arg.span(),
+                                    name.span() /* TODO: store the param
+                                                 * tokens? */
                                 )
                             }
                         }
@@ -377,8 +355,8 @@ impl StaticAnalyzer {
                 self.add_constraint(
                     index_ty,
                     Type::int64_singleton(),
-                    index.region(),
-                    array.region()
+                    index.span(),
+                    array.span()
                 );
                 self.add_constraint(
                     TypeCell::new(Type::Array(
@@ -386,8 +364,8 @@ impl StaticAnalyzer {
                         ARRAY_TYPE_UNKNOWN_SIZE
                     )),
                     array_ty,
-                    expr.region(),
-                    expr.region()
+                    expr.span(),
+                    expr.span()
                 );
                 // match array_ty.clone_out() {
                 //     Type::Array(element_type, _) => {
@@ -424,8 +402,8 @@ impl StaticAnalyzer {
                     self.add_constraint(
                         element_ty_var_cell.clone(),
                         element_type,
-                        expr.region(),
-                        element.region()
+                        expr.span(),
+                        element.span()
                     );
                 }
             }
@@ -442,14 +420,14 @@ impl StaticAnalyzer {
                         self.add_constraint(
                             expr.ty.clone(),
                             lhs_ty,
-                            expr.region(),
-                            lhs.region()
+                            expr.span(),
+                            lhs.span()
                         );
                         self.add_constraint(
                             expr.ty.clone(),
                             rhs_ty,
-                            expr.region(),
-                            rhs.region()
+                            expr.span(),
+                            rhs.span()
                         );
 
                         *expr.ty.as_mut() = Type::Int64;
@@ -470,8 +448,8 @@ impl StaticAnalyzer {
                             args: vec![Type::Int64],
                             ret: Box::new(Type::Int64)
                         }),
-                        f.region(),
-                        map_token.region()
+                        f.span(),
+                        map_token.span()
                     );
                     // arr_ty = Int64[?]
                     self.add_constraint(
@@ -480,15 +458,15 @@ impl StaticAnalyzer {
                             Type::int64_singleton(),
                             ARRAY_TYPE_UNKNOWN_SIZE
                         )),
-                        arr.region(),
-                        map_token.region()
+                        arr.span(),
+                        map_token.span()
                     );
                     // expr.ty = arr_ty
                     self.add_constraint(
                         expr.ty.clone(),
                         arr_ty,
-                        map_token.region(),
-                        arr.region()
+                        map_token.span(),
+                        arr.span()
                     );
                 } else {
                     self.report_unbound_name(f);
@@ -501,11 +479,11 @@ impl StaticAnalyzer {
     }
 
     fn visit_node(
-        &mut self, node: &Node, top_level_pass: bool
+        &mut self, node: &Stmt, top_level_pass: bool
     ) -> Option<StmtTypeCell> {
         match (&node.value, top_level_pass) {
             (
-                NodeValue::Function {
+                StmtValue::Function {
                     name,
                     params,
                     ret,
@@ -533,7 +511,7 @@ impl StaticAnalyzer {
                 );
             }
             (
-                NodeValue::Function {
+                StmtValue::Function {
                     name,
                     params,
                     ret,
@@ -566,7 +544,7 @@ impl StaticAnalyzer {
                     if func_ty.as_ref().termination == StmtTermination::Terminal
                         && !warned_dead_code
                         && !just_found_term
-                        && !node.attributes.has(Attribute::Generated)
+                        && !node.has_attribute(Attribute::Generated)
                     {
                         self.warn_dead_code(name, node, term_node.unwrap());
                         warned_dead_code = true;
@@ -588,7 +566,7 @@ impl StaticAnalyzer {
                 self.env.pop();
             }
             (
-                NodeValue::LetBinding {
+                StmtValue::LetBinding {
                     name,
                     hint: hint_opt,
                     value
@@ -600,8 +578,8 @@ impl StaticAnalyzer {
                     self.add_constraint(
                         hint.clone(),
                         value_ty.clone(),
-                        name.region(),
-                        value.region()
+                        name.span(),
+                        value.span()
                     );
                 }
                 self.env.bind(name.value.clone(), value_ty);
@@ -610,7 +588,7 @@ impl StaticAnalyzer {
                     StmtType::from(StmtTermination::Nonterminal, expr_is_pure);
             }
             (
-                NodeValue::Return {
+                StmtValue::Return {
                     keyword_token: token,
                     value: value_opt
                 },
@@ -618,15 +596,15 @@ impl StaticAnalyzer {
             ) => {
                 let ((value_ty, value_is_pure), value_start) =
                     if let Some(value) = value_opt {
-                        (self.visit_expr(value)?, value.region())
+                        (self.visit_expr(value)?, value.span())
                     } else {
-                        ((Type::unit_singleton(), true), token.region())
+                        ((Type::unit_singleton(), true), token.span())
                     };
                 self.add_constraint(
                     value_ty.clone(),
                     self.env.find(RETURN_ID.into()).unwrap().clone(),
                     value_start,
-                    token.region()
+                    token.span()
                 );
                 *node.ty.as_mut() =
                     StmtType::from(StmtTermination::Terminal, value_is_pure);
@@ -639,7 +617,7 @@ impl StaticAnalyzer {
     /// Whenever possible, pass `lhs` as the type to be unified into `rhs`.
     fn unify(
         &mut self, dsu: &mut DisjointSets<TypeNode>, lhs: TypeCell,
-        rhs: TypeCell, lhs_ctx: Region, rhs_ctx: Region
+        rhs: TypeCell, lhs_ctx: Span, rhs_ctx: Span
     ) -> Result<(), String> {
         let lhs_tn = TypeNode::from_currently_stable_cell(lhs.clone());
         let rhs_tn = TypeNode::from_currently_stable_cell(rhs.clone());
@@ -709,7 +687,7 @@ impl StaticAnalyzer {
                                     .of_style(Style::Primary)
                                     .at_level(Level::Error)
                                     .with_code(ErrorCode::StaticAnalysisIssue)
-                                    .at_region(&lhs_ctx)
+                                    .span(&lhs_ctx)
                                     .message(format!(
                                         "Array sizes don't match: {} != {}",
                                         lhs_size, rhs_size
@@ -721,7 +699,7 @@ impl StaticAnalyzer {
                                         .of_style(Style::Secondary)
                                         .at_level(Level::Error)
                                         .with_code(ErrorCode::StaticAnalysisIssue)
-                                        .at_region(&rhs_ctx)
+                                        .span(&rhs_ctx)
                                         .message("...".into())
                                         .explain(format!("Inferred to have size {} here based on environment", rhs_size))
                                         .build()

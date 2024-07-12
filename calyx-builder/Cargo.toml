@@ -1,5 +1,5 @@
 [package]
-name = "pulsar-frontend"
+name = "calyx-builder"
 version.workspace = true
 edition.workspace = true
 description.workspace = true
@@ -12,6 +12,7 @@ categories.workspace = true
 readme.workspace = true
 
 [dependencies]
-lazy_static.workspace = true
+calyx-utils = "0.7.1"
+calyx-ir = "0.7.1"
+calyx-frontend = "0.7.1"
 pulsar-utils.workspace = true
-inform.workspace = true

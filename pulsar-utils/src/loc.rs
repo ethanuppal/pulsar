@@ -1,4 +1,7 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
+// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+// redistribute it and/or modify it under the terms of the GNU General Public
+// License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 use std::{cmp::Ordering, fmt::Display, rc::Rc};
 
 /// Different sources of text data.
@@ -205,18 +208,18 @@ impl PartialOrd for Loc {
     }
 }
 
-/// The location enclosed by a region begins at `start` and ends exclusively
+/// The location enclosed by a span begins at `start` and ends exclusively
 /// at `end`. It is required that both locations come from the same source and
 /// that `end` monotonically proceeds `start` (so `start` and `end` can compare
 /// equal). This invariant is enforced when constructing through
-/// [`Region::new`].
+/// [`Span::new`].
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
-pub struct Region {
-    /// An inclusive lower bound (see [`Loc::partial_cmp`]) on the region
+pub struct Span {
+    /// An inclusive lower bound (see [`Loc::partial_cmp`]) on the span
     /// enclosed.
     pub start: Loc,
 
-    /// An exclusive upper bound (see [`Loc::partial_cmp`]) on the region
+    /// An exclusive upper bound (see [`Loc::partial_cmp`]) on the span
     /// enclosed.
     pub end: Loc
 }
@@ -224,7 +227,7 @@ pub struct Region {
 /// The line section with `start` and `end` represents the characters at
 /// positions from lower bound `start` to exclusive upper bound `end` on a line.
 /// The core invariant that `end >= start` is enforced by [`LineSection::new`].
-pub struct LineSection {
+pub struct LineSpan {
     /// The initial position on the line.
     pub start: isize,
 
@@ -234,7 +237,7 @@ pub struct LineSection {
     pub end: isize
 }
 
-impl LineSection {
+impl LineSpan {
     pub fn new(start: isize, end: isize) -> Self {
         assert!(start <= end);
         Self { start, end }
@@ -245,25 +248,25 @@ impl LineSection {
     }
 }
 
-impl Region {
-    /// A region from `start` up to (but not including) `end`.
-    pub fn new(start: Loc, end: Loc) -> Region {
-        assert!(start <= end, "`Region::from`: `start` and `end` must from the same source and `end` must be at least after `start`.");
-        Region { start, end }
+impl Span {
+    /// A span from `start` up to (but not including) `end`.
+    pub fn new(start: Loc, end: Loc) -> Span {
+        assert!(start <= end, "`Span::from`: `start` and `end` must from the same source and `end` must be at least after `start`.");
+        Span { start, end }
     }
 
-    /// A region at `start` of length 1.
+    /// A span at `start` of length 1.
     ///
     /// Requires: the `start.line` contains at least one more character after
     /// `start.col`.
-    pub fn unit(start: Loc) -> Region {
+    pub fn unit(start: Loc) -> Span {
         let mut end = start.clone();
         end.pos += 1;
         end.col += 1;
-        Region::new(start, end)
+        Span::new(start, end)
     }
 
-    /// The source where this region occurs.
+    /// The source where this span occurs.
     pub fn source(&self) -> Rc<Source> {
         self.start.source.clone()
     }
@@ -276,15 +279,23 @@ impl Region {
         self.end.line
     }
 
+    /// Extends this span up to the end of `other`.
+    ///
+    /// Requires: `other` begins no later than `self`.
+    pub fn extend(self, other: Span) -> Span {
+        assert!(self.start <= other.start);
+        Span::new(self.start, other.end)
+    }
+
     /// Given a set of *complete* `lines` from the same source as `source()`
     /// and the line number of the first line in `lines`, `start_line`, this
-    /// function computes the intersection of this region and the given
+    /// function computes the intersection of this span and the given
     /// lines. If the output vector is non-empty, the first entry in the output
-    /// vector corresponds to the first line of this region, which is not
-    /// necessarily the first line in `lines`. See [`LineSection`].
+    /// vector corresponds to the first line of this span, which is not
+    /// necessarily the first line in `lines`. See [`LineSpan`].
     pub fn find_intersection(
         &self, lines: &[String], start_line: isize
-    ) -> Vec<LineSection> {
+    ) -> Vec<LineSpan> {
         let mut result = vec![];
         for (i, line) in lines.iter().enumerate() {
             let actual_line = start_line + (i as isize);
@@ -302,34 +313,34 @@ impl Region {
                     end_pos = self.end.col - 1;
                 }
 
-                result.push(LineSection::new(start_pos, end_pos));
+                result.push(LineSpan::new(start_pos, end_pos));
             }
         }
         result
     }
 }
 
-impl Display for Region {
+impl Display for Span {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{}, {})", self.start, self.end)
     }
 }
 
-pub trait RegionProvider {
-    /// The starting location of this region.
+pub trait SpanProvider {
+    /// The starting location of this span.
     fn start(&self) -> Loc;
 
     /// Must be in the same source and monotonically after
-    /// [`RegionProvider::start`]. See [`Region`] for details.
+    /// [`SpanProvider::start`]. See [`Span`] for details.
     fn end(&self) -> Loc;
 
-    /// The region of this object.
-    fn region(&self) -> Region {
-        Region::new(self.start(), self.end())
+    /// The span of this object.
+    fn span(&self) -> Span {
+        Span::new(self.start(), self.end())
     }
 }
 
-impl RegionProvider for Region {
+impl SpanProvider for Span {
     fn start(&self) -> Loc {
         self.start.clone()
     }

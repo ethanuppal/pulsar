@@ -14,7 +14,7 @@ mod tests {
     }
 
     fn parser_output(
-        filename: &str, error_manager: Rc<RefCell<ErrorManager>>
+        filename: &str, error_manager: RRC<ErrorManager>
     ) -> String {
         let source = read(filename);
         let lexer = Lexer::new(source, error_manager.clone());

@@ -2,7 +2,7 @@
 mod tests {
     use insta::assert_snapshot;
     use pulsar_frontend::{
-        ast::{Expr, ExprValue, Node, NodeValue},
+        ast::{Expr, ExprValue, Stmt, StmtValue},
         token::{Token, TokenType},
         ty::Type
     };
@@ -48,8 +48,8 @@ mod tests {
 
     #[test]
     fn test_format_function() {
-        let body = vec![Node::new(
-            NodeValue::LetBinding {
+        let body = vec![Stmt::new(
+            StmtValue::LetBinding {
                 name: Token {
                     ty: TokenType::Identifier,
                     value: "x".into(),
@@ -66,7 +66,7 @@ mod tests {
             dumb_token()
         )];
         assert_snapshot!(
-            Node::new(NodeValue::Function { name: Token {
+            Stmt::new(StmtValue::Function { name: Token {
                 ty: TokenType::Identifier,
                 value: "foo".into(),
                 loc: Loc::default()
@@ -81,8 +81,8 @@ mod tests {
         "###
         );
 
-        assert_snapshot!(Node::new(
-            NodeValue::Function {
+        assert_snapshot!(Stmt::new(
+            StmtValue::Function {
                 name: Token {
                     ty: TokenType::Identifier,
                     value: "foo".into(),
@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn test_format_let_binding() {
         assert_snapshot!(
-            Node::new(NodeValue::LetBinding { name: Token {
+            Stmt::new(StmtValue::LetBinding { name: Token {
                 ty: TokenType::Identifier,
                 value: "x".into(),
                 loc: Loc::default()

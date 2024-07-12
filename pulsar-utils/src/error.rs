@@ -1,12 +1,18 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use super::loc::{Region, RegionProvider};
+// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+// redistribute it and/or modify it under the terms of the GNU General Public
+// License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+
+use crate::rrc::RRC;
+
+use super::loc::{Span, SpanProvider};
 use colored::*;
 use std::{cell::RefCell, fmt::Display, io, rc::Rc};
 
 #[repr(i32)]
 #[derive(Clone, Copy, Debug)]
 pub enum ErrorCode {
-    UnknownError,
+    WompWomp,
     UnrecognizedCharacter,
     UnexpectedEOF,
     UnexpectedToken,
@@ -27,7 +33,7 @@ impl Display for ErrorCode {
 
 impl Default for ErrorCode {
     fn default() -> Self {
-        Self::UnknownError
+        Self::WompWomp
     }
 }
 
@@ -89,7 +95,7 @@ pub struct Error {
     style: Style,
     level: Level,
     code: ErrorCode,
-    region: Option<Region>,
+    span: Option<Span>,
     message: String,
     explain: Option<String>,
     fix: Option<String>
@@ -101,37 +107,36 @@ impl Display for Error {
         // root of an error message and not auxillary information
         if self.style == Style::Primary {
             write!(f, "{}: ", self.level.form_header(self.code).bold(),)?;
-            if self.region.is_some() {
+            if self.span.is_some() {
                 write!(
                     f,
                     "{}: ",
-                    self.region.as_ref().unwrap().start.to_string().underline()
+                    self.span.as_ref().unwrap().start.to_string().underline()
                 )?;
             }
         }
         writeln!(f, "{}", self.message.bold())?;
 
-        // If there is no region associated with this error, then we have
+        // If there is no span associated with this error, then we have
         // nothing more to print
-        if self.region.is_none() {
+        if self.span.is_none() {
             return Ok(());
         }
 
-        // Otherwise, we print the region via a sequence of lines from the
+        // Otherwise, we print the span via a sequence of lines from the
         // source.
-        let region = self.region.as_ref().unwrap();
-        let region_extra_lines = (region.end.line - region.start.line) as usize;
+        let span = self.span.as_ref().unwrap();
+        let span_extra_lines = (span.end.line - span.start.line) as usize;
         let show_lines_before = 1;
         let show_lines_after = 1;
         let mut already_explained = false;
         writeln!(f, "{}", "     │  ".dimmed())?;
-        let (lines, current_line_pos) = region
+        let (lines, current_line_pos) = span
             .start
-            .lines(show_lines_before, region_extra_lines + show_lines_after);
-        let show_start_line =
-            region.start_line() - (show_lines_before as isize);
-        let region_line_sections =
-            region.find_intersection(&lines, show_start_line);
+            .lines(show_lines_before, span_extra_lines + show_lines_after);
+        let show_start_line = span.start_line() - (show_lines_before as isize);
+        let span_line_sections =
+            span.find_intersection(&lines, show_start_line);
         for (i, line) in lines.iter().enumerate() {
             if i > 0 {
                 writeln!(f)?;
@@ -141,14 +146,13 @@ impl Display for Error {
                 "{}",
                 format!(
                     "{: >4} │  ",
-                    i + (region.start.line as usize) - current_line_pos
+                    i + (span.start.line as usize) - current_line_pos
                 )
                 .dimmed()
             )?;
-            if i >= current_line_pos
-                && i <= current_line_pos + region_extra_lines
+            if i >= current_line_pos && i <= current_line_pos + span_extra_lines
             {
-                let line_section = &region_line_sections[i - current_line_pos];
+                let line_section = &span_line_sections[i - current_line_pos];
                 let split_first = line_section.start;
                 let (part1, rest) = line.split_at(split_first as usize);
                 if !line.is_empty() {
@@ -214,7 +218,7 @@ impl Default for Error {
             style: Style::Primary,
             level: Level::Error,
             code: ErrorCode::default(),
-            region: None,
+            span: None,
             message: String::default(),
             explain: None,
             fix: None
@@ -253,15 +257,15 @@ impl ErrorBuilder {
         self
     }
 
-    /// Locates the error at the region given by `region_provider`.
-    pub fn at_region<R: RegionProvider>(mut self, region_provider: &R) -> Self {
-        self.error.region = Some(region_provider.region());
+    /// Locates the error at the span given by `span_provider`.
+    pub fn span<R: SpanProvider>(mut self, span_provider: &R) -> Self {
+        self.error.span = Some(span_provider.span());
         self
     }
 
     /// Identifies the error as having no location.
     pub fn without_loc(mut self) -> Self {
-        self.error.region = None;
+        self.error.span = None;
         self
     }
 
@@ -309,7 +313,7 @@ pub struct ErrorManager {
 impl ErrorManager {
     /// Constructs a shared error manager that can record up to `max_count`
     /// primary errors.
-    pub fn with_max_count(max_count: usize) -> Rc<RefCell<ErrorManager>> {
+    pub fn with_max_count(max_count: usize) -> RRC<ErrorManager> {
         Rc::new(RefCell::new(ErrorManager {
             max_count,
             primary_count: 0,

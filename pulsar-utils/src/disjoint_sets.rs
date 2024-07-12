@@ -1,27 +1,26 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
+// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+// redistribute it and/or modify it under the terms of the GNU General Public
+// License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 use std::{collections::HashMap, fmt::Debug, hash::Hash, iter::Map};
-
-pub trait NodeTrait: Eq + Hash + Clone {}
 
 /// For a node `x`, when the node data is `(p, r)`, `x`'s parent is `p` and
 /// `x`'s rank is `r`.
 #[derive(Clone)]
-pub struct NodeData<T> {
+pub struct NodeData<T: Eq + Hash + Clone> {
     parent: T,
     rank: usize
 }
 
-/// A collection of disjoint sets over cheaply-cloned objects.
-pub struct DisjointSets<T: NodeTrait> {
+/// A collection of disjoint sets.
+pub struct DisjointSets<T: Eq + Hash + Clone> {
     nodes: HashMap<T, NodeData<T>>
 }
 
-impl<T: NodeTrait> DisjointSets<T> {
+impl<T: Eq + Hash + Clone> DisjointSets<T> {
     /// Constructs an empty disjoint set.
     pub fn new() -> Self {
-        Self {
-            nodes: HashMap::new()
-        }
+        Self::default()
     }
 
     /// Adds a disjoint singleton `{v}` if `v` has not already been added.`
@@ -86,7 +85,15 @@ impl<T: NodeTrait> DisjointSets<T> {
     }
 }
 
-impl<T: NodeTrait> Debug for DisjointSets<T>
+impl<T: Eq + Hash + Clone> Default for DisjointSets<T> {
+    fn default() -> Self {
+        Self {
+            nodes: HashMap::default()
+        }
+    }
+}
+
+impl<T: Eq + Hash + Clone> Debug for DisjointSets<T>
 where
     T: Debug
 {
@@ -101,7 +108,7 @@ where
     }
 }
 
-impl<'a, T: NodeTrait> IntoIterator for &'a DisjointSets<T> {
+impl<'a, T: Eq + Hash + Clone> IntoIterator for &'a DisjointSets<T> {
     type Item = (&'a T, &'a T);
     type IntoIter = Map<
         std::collections::hash_map::Iter<'a, T, NodeData<T>>,

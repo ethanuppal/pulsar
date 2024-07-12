@@ -1,18 +1,28 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
+
 use super::{
-    ast::{Expr, ExprValue, Node},
     op::{Op, Precedence},
-    token::{Token, TokenType},
-    ty::{Type, TypeCell}
+    token::{Token, TokenType}
 };
 use crate::{
-    ast::{NodeValue, TokenRegionProvider},
+    ast::{
+        expr::{Expr, ExprValue},
+        node::{AsNodePool, Handle, NodeInterface},
+        stmt::{Stmt, StmtValue},
+        ty::{Type, TypeValue},
+        AsASTPool
+    },
+    attribute::{Attribute, Attributes},
     op::Associativity
 };
-use pulsar_utils::error::{
-    Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style
+use pulsar_utils::{
+    error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
+    rrc::RRC
 };
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::fmt::Display;
 
 enum Ctx {
     In(String),
@@ -37,21 +47,24 @@ impl Display for Ctx {
     }
 }
 
-pub struct Parser {
+pub struct Parser<'ast, P: AsASTPool> {
     pos: usize,
     buffer: Vec<Token>,
-    error_manager: Rc<RefCell<ErrorManager>>
+    error_manager: RRC<ErrorManager>,
+    ast_pool: &'ast mut P
 }
 
-impl Parser {
+impl<'ast, P: AsASTPool> Parser<'ast, P> {
     /// Constructs a parser for the given token buffer `buffer`.
     pub fn new(
-        buffer: Vec<Token>, error_manager: Rc<RefCell<ErrorManager>>
-    ) -> Parser {
-        Parser {
+        buffer: Vec<Token>, error_manager: RRC<ErrorManager>,
+        ast_pool: &'ast mut P
+    ) -> Self {
+        Self {
             pos: 0,
             buffer,
-            error_manager
+            error_manager,
+            ast_pool
         }
     }
 
@@ -149,7 +162,7 @@ impl Parser {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::UnexpectedEOF)
-                .at_region(self.buffer.last().unwrap())
+                .span(self.buffer.last().unwrap())
                 .explain(format!("Unexpected EOF {}", context))
                 .build()
         );
@@ -166,7 +179,7 @@ impl Parser {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::UnexpectedToken)
-                .at_region(actual)
+                .span(actual)
                 .message(format!("Expected '{:?}' {}", expected_ty, context))
                 .explain(format!("Received '{:?}' here", actual.ty))
                 .build()
@@ -182,7 +195,7 @@ impl Parser {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::UnexpectedToken)
-                .at_region(actual)
+                .span(actual)
                 .message(format!(
                     "Expected one of {} {}",
                     expected_tys
@@ -204,7 +217,7 @@ impl Parser {
             ErrorBuilder::new()
                 .of_style(Style::Secondary)
                 .at_level(Level::Error)
-                .at_region(refback)
+                .span(refback)
                 .continues()
                 .explain(explain)
                 .build()
@@ -218,7 +231,7 @@ impl Parser {
             .of_style(Style::Primary)
             .at_level(Level::Error)
             .with_code(ErrorCode::InvalidTopLevelConstruct)
-            .at_region(token)
+            .span(token)
             .message(format!("Unexpected {:?} at top level", token.ty))
             .fix(
                 "Allowed constructs at top level include functions and imports"
@@ -236,7 +249,7 @@ impl Parser {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::ConstructShouldBeTopLevel)
-                .at_region(token)
+                .span(token)
                 .message("Unexpected top-level construct".into())
                 .fix("Did you mean to place it at the top level?".into())
                 .build()
@@ -251,7 +264,7 @@ impl Parser {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::InvalidTokenForStatement)
-                .at_region(token)
+                .span(token)
                 .message("Invalid token at the start of a statement".into())
                 .build()
         );
@@ -265,7 +278,7 @@ impl Parser {
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::InvalidOperatorSyntax)
-                .at_region(token)
+                .span(token)
                 .message(format!(
                     "{} is not an {} operator",
                     token.value, usage
@@ -314,35 +327,21 @@ macro_rules! contained_in {
                 );
                 return None;
             }
-            Some(result)
+            Some((open_token, result, close_token.unwrap()))
         }
     };
 }
 
-/// See [`parse_full_expr!`] and [`parse_full_node!`].
-macro_rules! parse_full_abstract {
-    ($self:ident.$method:ident<$type:ty>($($arg:expr),*)) => {{
+/// Constructs a function returning `Option<N>` for some [`NodeInterface`] `N`
+/// given a function returning `Option<N::V>`, assuming that [`AST`] implements
+/// [`NodePool`] for `N`. For example. `parse_full_node!(self.foo())`.
+macro_rules! parse_full_node {
+    ($self:ident.$method:ident($($arg:expr),*)) => {{
         let start_token = $self.current().clone();
         let value = $self.$method($($arg),*);
         let end_token = $self.previous().clone();
-        value.map(|v| <$type>::new(v, start_token, end_token))
+        value.map(|v| $self.ast_pool.new(v, start_token, end_token))
     }};
-}
-
-/// `parse_full_expr!(self.method_returning_expr_value())` wraps the
-/// [`ExprValue`] as an [`Expr`] by keeping track of the surrounding tokens.
-macro_rules! parse_full_expr {
-    ($self:ident.$method:ident($($arg:expr),*)) => {
-        parse_full_abstract!($self.$method<Expr>($($arg),*))
-    };
-}
-
-/// `parse_full_node!(self.method_returning_node_value())` wraps the
-/// [`NodeValue`] as an [`Node`] by keeping track of the surrounding tokens.
-macro_rules! parse_full_node {
-    ($self:ident.$method:ident($($arg:expr),*)) => {
-        parse_full_abstract!($self.$method<Node>($($arg),*))
-    };
 }
 
 impl TokenType {
@@ -351,7 +350,7 @@ impl TokenType {
     }
 }
 
-impl Parser {
+impl<'ast, P: AsASTPool> Parser<'ast, P> {
     /// Advances until EOF, or when specified by `current_exit`, or when a
     /// top-level construct is potentially found.
     fn synchronize(
@@ -363,7 +362,7 @@ impl Parser {
                     .of_style(Style::Primary)
                     .at_level(Level::Info)
                     .with_code(ErrorCode::UnexpectedToken)
-                    .at_region(self.current())
+                    .span(self.current())
                     .message(
                         "Attempting to recover understanding of code".into()
                     )
@@ -384,21 +383,21 @@ impl Parser {
         self.synchronize(|_| false, "Seeking top-level construct".into());
     }
 
-    fn parse_primary_type(&mut self, name: Option<&str>) -> Option<Type> {
+    fn parse_primary_type(&mut self, name: Option<&str>) -> Option<TypeValue> {
         let context = match name {
             Some(name) => Ctx::In(name.into()),
             None => Ctx::For("primary type".into())
         };
         let type_token = self.expect(TokenType::Identifier, context)?;
         Some(match type_token.value.as_str() {
-            "Int64" | "Int" => Type::Int64,
-            "Unit" => Type::Unit,
-            other => Type::Name(other.into())
+            "Int64" | "Int" => TypeValue::Int64,
+            "Unit" => TypeValue::Unit,
+            other => TypeValue::Name(other.into())
         })
     }
 
-    fn parse_array_type(&mut self, inner: Type) -> Option<Type> {
-        let size_token = contained_in! { self;
+    fn parse_array_type(&mut self, inner: Handle<Type>) -> Option<TypeValue> {
+        let (_, size_token, close_token) = contained_in! { self;
             TokenType::LeftBracket, "array type", TokenType::RightBracket;
             self.expect(TokenType::Integer, Ctx::For("array size".into()))?
         }?;
@@ -414,7 +413,7 @@ impl Parser {
                     .of_style(Style::Primary)
                     .at_level(Level::Error)
                     .with_code(ErrorCode::MalformedType)
-                    .at_region(&size_token)
+                    .span(&size_token)
                     .message("Array size cannot be negative".into())
                     .build()
             );
@@ -425,36 +424,35 @@ impl Parser {
                     .of_style(Style::Primary)
                     .at_level(Level::Warning)
                     .with_code(ErrorCode::MalformedType)
-                    .at_region(&size_token)
+                    .span(&size_token)
                     .message("Array size is zero".into())
                     .build()
             );
         }
 
-        let result = Type::Array(TypeCell::new(inner), size as isize);
+        let result_value = TypeValue::Array(inner, size as isize);
         if self.is_at(TokenType::LeftBracket) {
+            let result = self.ast_pool.new(
+                result_value,
+                self.ast_pool.get(inner).start_token().clone(),
+                close_token
+            );
             self.parse_array_type(result)
         } else {
-            Some(result)
+            Some(result_value)
         }
     }
 
-    fn parse_type(&mut self, name: Option<&str>) -> Option<Type> {
+    fn parse_type(&mut self, name: Option<&str>) -> Option<TypeValue> {
         if self.is_eof() {
-            self.report_unexpected_eof(Ctx::In(
-                match name {
-                    Some(name) => name,
-                    None => "type"
-                }
-                .into()
-            ));
+            self.report_unexpected_eof(Ctx::In(name.unwrap_or("type").into()));
             return None;
         }
-        let primary = self.parse_primary_type(name)?;
+        let primary = parse_full_node!(self.parse_primary_type(name))?;
         if self.is_at(TokenType::LeftBracket) {
             self.parse_array_type(primary)
         } else {
-            Some(primary)
+            Some(self.ast_pool.get(primary).value.clone())
         }
     }
 
@@ -532,11 +530,11 @@ impl Parser {
         let op_token = self.take();
         let rhs = self.parse_expr()?;
 
-        Some(ExprValue::PrefixOp(op_token, Box::new(rhs)))
+        Some(ExprValue::PrefixOp(op_token, rhs))
     }
 
     fn parse_postfix_binary_expr_value(
-        &mut self, mut lhs: Expr
+        &mut self, mut lhs: Handle<Expr>
     ) -> Option<ExprValue> {
         while let Some(postfix_bop) =
             self.current_op_opt().and_then(|op| op.postfix_binary)
@@ -550,18 +548,18 @@ impl Parser {
                         "second subexpression in postfix binary expression"
                             .into()
                     ),
-                    |name| Ctx::In(name)
+                    Ctx::In
                 )
             )?;
-            let start_token = lhs.start_token().clone();
+            let start_token = self.ast_pool.get(lhs).start_token().clone();
             let end_token = op2.clone();
-            lhs = Expr::new(
-                ExprValue::PostfixBop(Box::new(lhs), op1, Box::new(rhs), op2),
+            lhs = self.ast_pool.new(
+                ExprValue::PostfixBop(lhs, op1, rhs, op2),
                 start_token,
                 end_token
             );
         }
-        Some(lhs.value)
+        Some(self.ast_pool.get(lhs).value.clone())
     }
 
     /// Warning: do not call this function unless it is wrapped in
@@ -610,7 +608,8 @@ impl Parser {
             self.parse_unary_prefix_expr_value(prefix_op)
         } else if self.is_at(TokenType::LeftPar) {
             let open_paren = self.take();
-            let expr_value = self.parse_expr()?.value;
+            let temp_wrapped = self.parse_expr()?;
+            let expr_value = self.ast_pool.get(temp_wrapped).value.clone();
             let closing_paren =
                 self.expect(TokenType::RightPar, Ctx::In("expression".into()));
             if closing_paren.is_none() {
@@ -661,7 +660,7 @@ impl Parser {
                 map_token.clone(),
                 parallel_factor_token.value.parse::<usize>().unwrap(),
                 f,
-                Box::new(arr)
+                arr
             ))
         } else if self.is_at(TokenType::Identifier)
             && self.next_is(TokenType::LeftPar)
@@ -674,21 +673,21 @@ impl Parser {
     }
 
     fn parse_primary_expr_value(&mut self) -> Option<ExprValue> {
-        let primary = parse_full_expr!(self.parse_primary_expr_value_aux())?;
+        let primary = parse_full_node!(self.parse_primary_expr_value_aux())?;
         if self
             .current_op_opt()
             .map_or(false, |op| op.is_postfix_binary())
         {
             self.parse_postfix_binary_expr_value(primary)
         } else {
-            Some(primary.value)
+            Some(self.ast_pool.get(primary).value.clone())
         }
     }
 
     /// Implements [operator-precedence parsing](https://en.wikipedia.org/wiki/Operator-precedence_parser).
     fn parse_infix_binary_expr(
-        &mut self, mut lhs: Expr, min_precedence: Precedence
-    ) -> Option<Expr> {
+        &mut self, mut lhs: Handle<Expr>, min_precedence: Precedence
+    ) -> Option<Handle<Expr>> {
         let mut lookahead = self.current().clone();
         while !self.is_eof()
             && Op::from(lookahead.ty)
@@ -701,7 +700,7 @@ impl Parser {
                 .and_then(|op| op.infix_binary)
                 .expect("while cond guarantees");
 
-            let mut rhs = parse_full_expr!(self.parse_primary_expr_value())?;
+            let mut rhs = parse_full_node!(self.parse_primary_expr_value())?;
             if self.is_eof() {
                 break;
             }
@@ -730,10 +729,10 @@ impl Parser {
                 rhs = self.parse_infix_binary_expr(rhs, new_min_precedence)?;
                 lookahead = self.current().clone();
             }
-            let start_token = lhs.start_token().clone();
-            let end_token = rhs.end_token().clone();
-            lhs = Expr::new(
-                ExprValue::InfixBop(Box::new(lhs), op_token, Box::new(rhs)),
+            let start_token = self.ast_pool.get(lhs).start_token().clone();
+            let end_token = self.ast_pool.get(rhs).end_token().clone();
+            lhs = self.ast_pool.new(
+                ExprValue::InfixBop(lhs, op_token, rhs),
                 start_token,
                 end_token
             );
@@ -741,9 +740,9 @@ impl Parser {
         Some(lhs)
     }
 
-    fn parse_expr(&mut self) -> Option<Expr> {
+    fn parse_expr(&mut self) -> Option<Handle<Expr>> {
         self.consume_ignored();
-        let primary = parse_full_expr!(self.parse_primary_expr_value())?;
+        let primary = parse_full_node!(self.parse_primary_expr_value())?;
         if let Some(op) = self.current_op_opt() {
             if op.is_infix_binary() {
                 self.parse_infix_binary_expr(primary, -1)
@@ -756,7 +755,7 @@ impl Parser {
         }
     }
 
-    fn parse_let(&mut self) -> Option<NodeValue> {
+    fn parse_let(&mut self) -> Option<StmtValue> {
         self.expect(TokenType::Let, Ctx::Begin("let binding".into()))?;
 
         let name = self.expect(
@@ -767,9 +766,9 @@ impl Parser {
         let mut hint = None;
         if self.current().ty == TokenType::Colon {
             self.advance();
-            hint = Some(TypeCell::new(
-                self.parse_type("let binding type hint".into())?
-            ));
+            hint = Some(parse_full_node!(
+                self.parse_type("let binding type hint".into())
+            )?);
         }
 
         self.expect(
@@ -779,24 +778,20 @@ impl Parser {
 
         let value = self.parse_expr()?;
 
-        Some(NodeValue::LetBinding {
-            name,
-            hint,
-            value: Box::new(value)
-        })
+        Some(StmtValue::LetBinding { name, hint, value })
     }
 
-    fn parse_return(&mut self) -> Option<NodeValue> {
+    fn parse_return(&mut self) -> Option<StmtValue> {
         let token = self
             .expect(TokenType::Return, Ctx::Begin("return statement".into()))?;
 
         let value = if self.is_at(TokenType::Newline) {
             None
         } else {
-            Some(Box::new(self.parse_expr()?))
+            Some(self.parse_expr()?)
         };
 
-        Some(NodeValue::Return {
+        Some(StmtValue::Return {
             keyword_token: token,
             value
         })
@@ -804,7 +799,7 @@ impl Parser {
 
     /// Parses a brace-enclosed list of statements, e.g., `parse_block("function
     /// body")`.
-    fn parse_block(&mut self, name: &str) -> Option<Vec<Node>> {
+    fn parse_block(&mut self, name: &str) -> Option<Vec<Handle<Stmt>>> {
         self.consume_ignored();
 
         let mut nodes = vec![];
@@ -832,13 +827,13 @@ impl Parser {
         }
     }
 
-    fn parse_func(&mut self) -> Option<NodeValue> {
+    fn parse_func(&mut self) -> Option<StmtValue> {
         let mut pure_token = None;
         if self.is_at(TokenType::Pure) {
             pure_token = Some(self.take());
         }
 
-        self.expect(
+        let func = self.expect(
             TokenType::Func,
             Ctx::Begin("function declaration".into())
         )?;
@@ -878,7 +873,8 @@ impl Parser {
                 TokenType::Colon,
                 Ctx::After(format!("parameter name in `{}`", name.value))
             )?;
-            let ty = self.parse_type("parameter type".into())?;
+            let ty =
+                parse_full_node!(self.parse_type("parameter type".into()))?;
             params.push((name, ty));
 
             self.consume_ignored();
@@ -894,28 +890,33 @@ impl Parser {
             return None;
         }
 
-        let mut ret = Type::Unit;
+        let mut ret: Handle<Type> = self.ast_pool.new_with_attributes(
+            TypeValue::Unit,
+            func.clone(),
+            func.clone(),
+            Attributes::from([Attribute::Generated])
+        );
         if self.is_at(TokenType::Arrow) {
             self.advance();
-            ret = self.parse_type("function return type".into())?;
+            ret = parse_full_node!(
+                self.parse_type("function return type".into())
+            )?;
         }
 
         let mut body = self.parse_block("function body")?;
-        if ret == Type::Unit {
-            body.push(
-                Node::new(
-                    NodeValue::Return {
-                        keyword_token: name.clone(),
-                        value: None
-                    },
-                    name.clone(),
-                    name.clone()
-                )
-                .mark_generated()
-            );
+        if self.ast_pool.get(ret).value == TypeValue::Unit {
+            body.push(self.ast_pool.new_with_attributes(
+                StmtValue::Return {
+                    keyword_token: name.clone(),
+                    value: None
+                },
+                name.clone(),
+                name.clone(),
+                Attributes::from([Attribute::Generated])
+            ));
         }
 
-        Some(NodeValue::Function {
+        Some(StmtValue::Function {
             name: name.clone(),
             params,
             ret,
@@ -941,7 +942,7 @@ impl Parser {
     }
 
     /// Requires: `!self.is_eof()`.
-    fn parse_stmt_value(&mut self, top_level: bool) -> Option<NodeValue> {
+    fn parse_stmt_value(&mut self, top_level: bool) -> Option<StmtValue> {
         self.consume_ignored();
         if self.is_eof() || self.error_manager.borrow().is_full() {
             return None;
@@ -985,7 +986,7 @@ impl Parser {
         }
     }
 
-    fn parse_stmt(&mut self, top_level: bool) -> Option<Node> {
+    fn parse_stmt(&mut self, top_level: bool) -> Option<Handle<Stmt>> {
         if self.is_eof() {
             return None;
         }
@@ -998,10 +999,10 @@ impl Parser {
     }
 }
 
-impl Iterator for Parser {
-    type Item = Node;
+impl<'ast, P: AsASTPool> Iterator for Parser<'ast, P> {
+    type Item = Handle<Stmt>;
 
-    fn next(&mut self) -> Option<Node> {
+    fn next(&mut self) -> Option<Handle<Stmt>> {
         self.parse_stmt(true)
     }
 }

@@ -1,13 +1,15 @@
 //! The IR can be structured or unstructured, dependending on the requirements
 //! of the backend.
 //!
-//! Copyright (C) 2024 Ethan Uppal. All rights reserved.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
 use self::{label::LabelName, operand::Operand, variable::Variable};
 use std::fmt::Display;
 
-pub mod basic_block;
-pub mod branch_condition;
+pub mod control;
 pub mod control_flow_graph;
 pub mod generator;
 pub mod label;

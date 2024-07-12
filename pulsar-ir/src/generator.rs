@@ -1,4 +1,7 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
+// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+// redistribute it and/or modify it under the terms of the GNU General Public
+// License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 use super::{
     basic_block::BasicBlockCell,
     control_flow_graph::ControlFlowGraph,
@@ -8,7 +11,7 @@ use super::{
     Ir
 };
 use pulsar_frontend::{
-    ast::{Expr, ExprValue, Node, NodeValue, Param},
+    ast::{Expr, ExprValue, Param, Stmt, StmtValue},
     token::{Token, TokenType},
     ty::Type
 };
@@ -53,12 +56,12 @@ impl Display for GeneratedTopLevel {
 }
 
 pub struct Generator {
-    program: Box<dyn Iterator<Item = Node>>,
+    program: Box<dyn Iterator<Item = Stmt>>,
     env: Environment<String, Variable>
 }
 
 impl Generator {
-    pub fn new(program: Vec<Node>) -> Self {
+    pub fn new(program: Vec<Stmt>) -> Self {
         Self {
             program: Box::new(program.into_iter()),
             env: Environment::new()
@@ -188,9 +191,9 @@ impl Generator {
         }
     }
 
-    fn gen_node(&mut self, node: &Node, block: BasicBlockCell) {
+    fn gen_node(&mut self, node: &Stmt, block: BasicBlockCell) {
         match &node.value {
-            NodeValue::LetBinding {
+            StmtValue::LetBinding {
                 name,
                 hint: _,
                 value
@@ -200,7 +203,7 @@ impl Generator {
                 self.env.bind(name.value.clone(), name_var);
                 block.as_mut().add(Ir::Assign(name_var, value_operand));
             }
-            NodeValue::Return {
+            StmtValue::Return {
                 keyword_token: _,
                 value
             } => {
@@ -215,7 +218,7 @@ impl Generator {
 
     fn gen_func(
         &mut self, name: &Token, params: &Vec<Param>, ret: Type, is_pure: bool,
-        body: &Vec<Node>
+        body: &Vec<Stmt>
     ) -> GeneratedTopLevel {
         self.env.push();
         let cfg = ControlFlowGraph::new();
@@ -249,7 +252,7 @@ impl Iterator for Generator {
 
     fn next(&mut self) -> Option<GeneratedTopLevel> {
         match self.program.next()?.value {
-            NodeValue::Function {
+            StmtValue::Function {
                 name,
                 params,
                 ret,

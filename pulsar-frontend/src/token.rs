@@ -1,7 +1,12 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use core::{fmt, fmt::Debug};
-use pulsar_utils::loc::{Loc, RegionProvider};
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
+use core::{fmt, fmt::Debug};
+use pulsar_utils::loc::{Loc, SpanProvider};
+
+///
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TokenType {
     Identifier,
@@ -107,6 +112,7 @@ impl fmt::Display for TokenType {
     }
 }
 
+/// A lexical unit of source code.
 #[derive(Clone)]
 pub struct Token {
     pub ty: TokenType,
@@ -144,7 +150,7 @@ impl Debug for Token {
     }
 }
 
-impl RegionProvider for Token {
+impl SpanProvider for Token {
     fn start(&self) -> Loc {
         self.loc.clone()
     }
