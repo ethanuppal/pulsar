@@ -10,9 +10,9 @@ use super::{
 use crate::{
     ast::{
         expr::{Expr, ExprValue},
-        node::{AsNodePool, Handle, NodeInterface},
+        node::NodeInterface,
         stmt::{Stmt, StmtValue},
-        ty::{Type, TypeValue},
+        ty::{LiquidTypeValue, Type, TypeValue},
         AsASTPool
     },
     attribute::{Attribute, Attributes},
@@ -20,7 +20,7 @@ use crate::{
 };
 use pulsar_utils::{
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
-    rrc::RRC
+    pool::Handle
 };
 use std::fmt::Display;
 
@@ -47,24 +47,24 @@ impl Display for Ctx {
     }
 }
 
-pub struct Parser<'ast, P: AsASTPool> {
+pub struct Parser<'ast, 'err, P: AsASTPool> {
     pos: usize,
     buffer: Vec<Token>,
-    error_manager: RRC<ErrorManager>,
-    ast_pool: &'ast mut P
+    ast_pool: &'ast mut P,
+    error_manager: &'err mut ErrorManager
 }
 
-impl<'ast, P: AsASTPool> Parser<'ast, P> {
+impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     /// Constructs a parser for the given token buffer `buffer`.
     pub fn new(
-        buffer: Vec<Token>, error_manager: RRC<ErrorManager>,
-        ast_pool: &'ast mut P
+        buffer: Vec<Token>, ast_pool: &'ast mut P,
+        error_manager: &'err mut ErrorManager
     ) -> Self {
         Self {
             pos: 0,
             buffer,
-            error_manager,
-            ast_pool
+            ast_pool,
+            error_manager
         }
     }
 
@@ -289,7 +289,7 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
     }
 
     fn report(&mut self, error: Error) {
-        self.error_manager.borrow_mut().record(error);
+        self.error_manager.record(error);
     }
 }
 
@@ -346,11 +346,11 @@ macro_rules! parse_full_node {
 
 impl TokenType {
     fn begins_top_level_construct(&self) -> bool {
-        matches!(self, Self::Func | Self::Pure) // || Self::Import
+        matches!(self, Self::Func) // || Self::Import
     }
 }
 
-impl<'ast, P: AsASTPool> Parser<'ast, P> {
+impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     /// Advances until EOF, or when specified by `current_exit`, or when a
     /// top-level construct is potentially found.
     fn synchronize(
@@ -430,11 +430,18 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
             );
         }
 
-        let result_value = TypeValue::Array(inner, size as isize);
+        let result_value = TypeValue::Array(
+            inner,
+            self.ast_pool.generate(
+                LiquidTypeValue::Equal(size as usize),
+                size_token.clone(),
+                size_token.clone()
+            )
+        );
         if self.is_at(TokenType::LeftBracket) {
             let result = self.ast_pool.new(
                 result_value,
-                self.ast_pool.get(inner).start_token().clone(),
+                inner.start_token().clone(),
                 close_token
             );
             self.parse_array_type(result)
@@ -452,7 +459,7 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
         if self.is_at(TokenType::LeftBracket) {
             self.parse_array_type(primary)
         } else {
-            Some(self.ast_pool.get(primary).value.clone())
+            Some(primary.value.clone())
         }
     }
 
@@ -551,7 +558,7 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
                     Ctx::In
                 )
             )?;
-            let start_token = self.ast_pool.get(lhs).start_token().clone();
+            let start_token = lhs.start_token().clone();
             let end_token = op2.clone();
             lhs = self.ast_pool.new(
                 ExprValue::PostfixBop(lhs, op1, rhs, op2),
@@ -559,7 +566,7 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
                 end_token
             );
         }
-        Some(self.ast_pool.get(lhs).value.clone())
+        Some(lhs.value.clone())
     }
 
     /// Warning: do not call this function unless it is wrapped in
@@ -609,7 +616,7 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
         } else if self.is_at(TokenType::LeftPar) {
             let open_paren = self.take();
             let temp_wrapped = self.parse_expr()?;
-            let expr_value = self.ast_pool.get(temp_wrapped).value.clone();
+            let expr_value = temp_wrapped.value.clone();
             let closing_paren =
                 self.expect(TokenType::RightPar, Ctx::In("expression".into()));
             if closing_paren.is_none() {
@@ -621,47 +628,6 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
             } else {
                 Some(expr_value)
             }
-        } else if self.is_at(TokenType::HardwareMap) {
-            let map_token = self.expect(
-                TokenType::HardwareMap,
-                Ctx::Begin("hardware map".into())
-            )?;
-            self.expect(
-                TokenType::LeftAngle,
-                Ctx::In("hardware map expression".into())
-            )?;
-            let parallel_factor_token = self.expect(
-                TokenType::Integer,
-                Ctx::In("hardware map expression".into())
-            )?;
-            self.expect(
-                TokenType::RightAngle,
-                Ctx::In("hardware map expression".into())
-            )?;
-            self.expect(
-                TokenType::LeftPar,
-                Ctx::In("hardware map expression".into())
-            )?;
-            let f = self.expect(
-                TokenType::Identifier,
-                Ctx::In("hardware map expression".into())
-            )?;
-            self.expect(
-                TokenType::Comma,
-                Ctx::In("hardware map expression".into())
-            )?;
-            let arr = self.parse_expr()?;
-            self.expect(
-                TokenType::RightPar,
-                Ctx::In("hardware map expression".into())
-            )?;
-            // TODO: check for negatives
-            Some(ExprValue::HardwareMap(
-                map_token.clone(),
-                parallel_factor_token.value.parse::<usize>().unwrap(),
-                f,
-                arr
-            ))
         } else if self.is_at(TokenType::Identifier)
             && self.next_is(TokenType::LeftPar)
         {
@@ -680,7 +646,7 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
         {
             self.parse_postfix_binary_expr_value(primary)
         } else {
-            Some(self.ast_pool.get(primary).value.clone())
+            Some(primary.value.clone())
         }
     }
 
@@ -729,8 +695,8 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
                 rhs = self.parse_infix_binary_expr(rhs, new_min_precedence)?;
                 lookahead = self.current().clone();
             }
-            let start_token = self.ast_pool.get(lhs).start_token().clone();
-            let end_token = self.ast_pool.get(rhs).end_token().clone();
+            let start_token = lhs.start_token().clone();
+            let end_token = rhs.end_token().clone();
             lhs = self.ast_pool.new(
                 ExprValue::InfixBop(lhs, op_token, rhs),
                 start_token,
@@ -792,7 +758,7 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
         };
 
         Some(StmtValue::Return {
-            keyword_token: token,
+            ret_token: token,
             value
         })
     }
@@ -828,11 +794,6 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
     }
 
     fn parse_func(&mut self) -> Option<StmtValue> {
-        let mut pure_token = None;
-        if self.is_at(TokenType::Pure) {
-            pure_token = Some(self.take());
-        }
-
         let func = self.expect(
             TokenType::Func,
             Ctx::Begin("function declaration".into())
@@ -890,12 +851,9 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
             return None;
         }
 
-        let mut ret: Handle<Type> = self.ast_pool.new_with_attributes(
-            TypeValue::Unit,
-            func.clone(),
-            func.clone(),
-            Attributes::from([Attribute::Generated])
-        );
+        let mut ret: Handle<Type> =
+            self.ast_pool
+                .generate(TypeValue::Unit, func.clone(), func.clone());
         if self.is_at(TokenType::Arrow) {
             self.advance();
             ret = parse_full_node!(
@@ -904,23 +862,23 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
         }
 
         let mut body = self.parse_block("function body")?;
-        if self.ast_pool.get(ret).value == TypeValue::Unit {
-            body.push(self.ast_pool.new_with_attributes(
+        if matches!(ret.value, TypeValue::Unit) {
+            body.push(self.ast_pool.generate(
                 StmtValue::Return {
-                    keyword_token: name.clone(),
+                    ret_token: name.clone(),
                     value: None
                 },
                 name.clone(),
-                name.clone(),
-                Attributes::from([Attribute::Generated])
+                name.clone()
             ));
         }
 
         Some(StmtValue::Function {
             name: name.clone(),
+            open_paren,
             params,
+            close_paren: close_paren.unwrap(),
             ret,
-            pure_token,
             body
         })
     }
@@ -944,13 +902,13 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
     /// Requires: `!self.is_eof()`.
     fn parse_stmt_value(&mut self, top_level: bool) -> Option<StmtValue> {
         self.consume_ignored();
-        if self.is_eof() || self.error_manager.borrow().is_full() {
+        if self.is_eof() || self.error_manager.is_full() {
             return None;
         }
 
         let current_ty = self.current().ty;
         match (current_ty, top_level) {
-            (TokenType::Func, true) | (TokenType::Pure, true) => {
+            (TokenType::Func, true) => {
                 if let Some(func) = self.parse_func() {
                     return Some(func);
                 }
@@ -999,7 +957,7 @@ impl<'ast, P: AsASTPool> Parser<'ast, P> {
     }
 }
 
-impl<'ast, P: AsASTPool> Iterator for Parser<'ast, P> {
+impl<'ast, 'err, P: AsASTPool> Iterator for Parser<'ast, 'err, P> {
     type Item = Handle<Stmt>;
 
     fn next(&mut self) -> Option<Handle<Stmt>> {

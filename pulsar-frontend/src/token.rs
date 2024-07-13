@@ -18,7 +18,6 @@ pub enum TokenType {
     Func,
     Let,
     Return,
-    HardwareMap,
     Plus,
     Minus,
     Times,
@@ -36,8 +35,6 @@ pub enum TokenType {
     Colon,
     Comma,
     Arrow,
-    Directive,
-    Pure,
     Newline
 }
 
@@ -56,7 +53,6 @@ impl Debug for TokenType {
                 Self::Func => "func",
                 Self::Let => "let",
                 Self::Return => "return",
-                Self::HardwareMap => "map",
                 Self::Plus => "plus",
                 Self::Minus => "minus",
                 Self::Times => "times",
@@ -74,8 +70,6 @@ impl Debug for TokenType {
                 Self::Dots => "dots",
                 Self::Comma => "comma",
                 Self::Arrow => "arrow",
-                Self::Directive => "directive",
-                Self::Pure => "pure",
                 Self::Newline => "newline"
             }
         )

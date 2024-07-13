@@ -2,29 +2,29 @@
 // redistribute it and/or modify it under the terms of the GNU General Public
 // License as published by the Free Software Foundation, either version 3 of the
 // License, or (at your option) any later version.
+
 use super::token::{Token, TokenType};
 use pulsar_utils::{
     error::{ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
-    loc::{Loc, Source, Span},
-    rrc::RRC
+    loc::{Loc, Source, Span}
 };
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 /// Produces tokens from an input source.
 ///
 /// # Example
 /// ```
-/// fn lex(source: Rc<Source>, error_manager: RRC<ErrorManager>) {
+/// fn lex(source: Rc<Source>, error_manager: &mut ErrorManager) {
 ///     let lexer = Lexer::new(source, error_manager);
 ///     for token in lexer {
 ///         println! {"{}", token};
 ///     }
 /// }
 /// ```
-pub struct Lexer {
+pub struct Lexer<'err> {
     loc: Loc,
     buffer: Vec<char>,
-    error_manager: RRC<ErrorManager>
+    error_manager: &'err mut ErrorManager
 }
 
 /// Enables exploration of the lexer buffer, e.g., with [`Lexer::advance`],
@@ -41,9 +41,11 @@ macro_rules! with_unwind {
     };
 }
 
-impl Lexer {
+impl<'err> Lexer<'err> {
     /// Constructs a lexer for the given `source`.
-    pub fn new(source: Rc<Source>, error_manager: RRC<ErrorManager>) -> Self {
+    pub fn new(
+        source: Rc<Source>, error_manager: &'err mut ErrorManager
+    ) -> Self {
         Lexer {
             loc: Loc {
                 line: 1,
@@ -134,26 +136,6 @@ impl Lexer {
         }
         self.make_token(TokenType::Identifier, length)
     }
-
-    /// Requires: ` current() == '@'`.
-    fn make_directive_token(&mut self) -> Option<Token> {
-        let mut length = 1;
-        with_unwind! { self in
-            self.advance();
-            if self.is_eof()
-                || !(self.current().is_alphanumeric() || self.current() == '_')
-            {
-                return None;
-            }
-            while !self.is_eof()
-                && (self.current().is_alphanumeric() || self.current() == '_')
-            {
-                    self.advance();
-                    length += 1;
-            }
-        }
-        Some(self.make_token(TokenType::Directive, length))
-    }
 }
 
 macro_rules! lex {
@@ -172,11 +154,11 @@ macro_rules! lex {
     };
 }
 
-impl Iterator for Lexer {
+impl<'err> Iterator for Lexer<'err> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Token> {
-        if self.is_eof() || self.error_manager.borrow().has_errors() {
+        if self.is_eof() || self.error_manager.has_errors() {
             return None;
         }
 
@@ -204,15 +186,11 @@ impl Iterator for Lexer {
             | "func" => { TokenType::Func }
             | "let" => { TokenType::Let }
             | "return" => { TokenType::Return }
-            | "pure" => { TokenType::Pure }
-            | "map" => { TokenType::HardwareMap }
             | _ {
                 if self.current().is_numeric() {
                     Some(self.make_number_token())
                 } else if self.current().is_alphabetic() || self.current() == '_' {
                     Some(self.make_identifier_token())
-                } else if self.current() == '@' {
-                    self.make_directive_token()
                 } else {
                     let error = ErrorBuilder::new()
                         .of_style(Style::Primary)
@@ -221,7 +199,7 @@ impl Iterator for Lexer {
                         .span(&Span::unit(self.loc.clone()))
                         .message("Encountered unrecognized character".into())
                         .build();
-                    self.error_manager.borrow_mut().record(error);
+                    self.error_manager.record(error);
                     None
                 }
             }

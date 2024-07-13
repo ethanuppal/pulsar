@@ -4,15 +4,12 @@
 // License, or (at your option) any later version.
 
 use super::{
-    expr::Expr,
-    node::{Handle, Node},
-    pretty_print::{PrettyPrint, PrettyPrinter},
-    stmt_ty::StmtType,
-    ty::Type,
-    AsASTPool
+    expr::Expr, node::Node, pretty_print::PrettyPrint, stmt_ty::StmtType,
+    ty::Type
 };
 use crate::token::Token;
-use std::fmt::Write;
+use pulsar_utils::pool::Handle;
+use std::fmt::{Display, Write};
 
 pub type Param = (Token, Handle<Type>);
 
@@ -21,8 +18,9 @@ pub enum StmtValue {
     Function {
         name: Token,
         params: Vec<Param>,
+        open_paren: Token,
         ret: Handle<Type>,
-        pure_token: Option<Token>,
+        close_paren: Token,
         body: Vec<Handle<Stmt>>
     },
     LetBinding {
@@ -31,7 +29,7 @@ pub enum StmtValue {
         value: Handle<Expr>
     },
     Return {
-        keyword_token: Token,
+        ret_token: Token,
         value: Option<Handle<Expr>>
     }
 }
@@ -39,38 +37,34 @@ pub enum StmtValue {
 pub type Stmt = Node<StmtValue, StmtType>;
 
 impl PrettyPrint for Stmt {
-    fn fmt<P: AsASTPool>(
-        &self, f: &mut inform::fmt::IndentFormatter<'_, '_>, ast_pool: &P
+    fn pretty_print(
+        &self, f: &mut inform::fmt::IndentFormatter<'_, '_>
     ) -> core::fmt::Result {
         match self.value {
             StmtValue::Function {
                 ref name,
+                open_paren: _,
                 ref params,
+                close_paren: _,
                 ret,
-                ref pure_token,
                 ref body
             } => {
                 let insert_newline = if body.is_empty() { "" } else { "\n" };
                 writeln!(
                     f,
-                    "{}func {}({}) -> {} {{{}",
-                    if pure_token.is_some() { "pure " } else { "" },
+                    "func {}({}) -> {} {{{}",
                     name.value,
                     params
                         .iter()
-                        .map(|(name, ty)| format!(
-                            "{}: {}",
-                            name.value,
-                            ast_pool.fmtr(*ty)
-                        ))
+                        .map(|(name, ty)| format!("{}: {}", name.value, ty))
                         .collect::<Vec<_>>()
                         .join(", "),
-                    ast_pool.fmtr(ret),
+                    ret,
                     insert_newline,
                 )?;
                 f.increase_indent();
                 for node in body {
-                    ast_pool.fmt(f, *node)?;
+                    node.pretty_print(f)?;
                     writeln!(f)?
                 }
                 f.decrease_indent();
@@ -82,29 +76,28 @@ impl PrettyPrint for Stmt {
                 value
             } => {
                 let hint_str = if let Some(hint) = hint_opt {
-                    format!(": {}", ast_pool.fmtr(hint))
+                    format!(": {}", hint)
                 } else {
                     "".into()
                 };
-                write!(
-                    f,
-                    "let {}{} = {}",
-                    name.value,
-                    hint_str,
-                    ast_pool.fmtr(value)
-                )?;
+                write!(f, "let {}{} = {}", name.value, hint_str, value)?;
             }
             StmtValue::Return {
-                keyword_token: _,
+                ret_token: _,
                 value: value_opt
             } => {
                 write!(f, "return")?;
-
                 if let Some(value) = value_opt {
-                    write!(f, " {}", ast_pool.fmtr(value))?;
+                    write!(f, " {}", value)?;
                 }
             }
         }
         Ok(())
+    }
+}
+
+impl Display for Stmt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        PrettyPrint::fmt(self, f)
     }
 }

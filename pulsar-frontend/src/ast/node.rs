@@ -7,10 +7,12 @@ use crate::{
     attribute::{Attribute, Attributes},
     token::{Token, TokenType}
 };
-use pulsar_utils::loc::{Loc, SpanProvider};
+use pulsar_utils::{
+    loc::{Loc, SpanProvider},
+    pool::{AsPool, Handle, Pool}
+};
 use std::{
     fmt::{self, Display},
-    hash::Hash,
     marker::PhantomData
 };
 
@@ -127,65 +129,8 @@ impl<V: Display, T> Display for Node<V, T> {
     }
 }
 
-/// Pointer to an AST node in a pool.
-pub struct Handle<T: NodeInterface> {
-    index: usize,
-    generic: PhantomData<T>
-}
-
-impl<T: NodeInterface> From<usize> for Handle<T> {
-    fn from(value: usize) -> Self {
-        Self {
-            index: value,
-            generic: PhantomData::default()
-        }
-    }
-}
-
-impl<T: NodeInterface> Clone for Handle<T> {
-    fn clone(&self) -> Self {
-        Self {
-            index: self.index.clone(),
-            generic: PhantomData::default()
-        }
-    }
-}
-
-impl<T: NodeInterface> Copy for Handle<T> {}
-
-impl<T: NodeInterface> PartialEq for Handle<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.index == other.index
-    }
-}
-
-impl<T: NodeInterface> Eq for Handle<T> {}
-
-impl<T: NodeInterface> Hash for Handle<T> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.index.hash(state);
-    }
-}
-
-/// Allocator for AST nodes. See the [`NodePool`] trait.
-pub struct BaseNodePool<N: NodeInterface> {
-    contents: Vec<N>,
-    metadata: Vec<N::T>
-}
-
-impl<N: NodeInterface> Default for BaseNodePool<N> {
-    fn default() -> Self {
-        Self {
-            contents: Vec::default(),
-            metadata: Vec::default()
-        }
-    }
-}
-
-pub trait AsNodePool<N: NodeInterface>: Sized {
-    fn base_ref(&self) -> &BaseNodePool<N>;
-    fn base_mut(&mut self) -> &mut BaseNodePool<N>;
-
+/// Can be used as a [`NodePool`].
+pub trait AsNodePool<N: NodeInterface>: AsPool<N, N::T> {
     fn new(
         &mut self, value: N::V, start_token: Token, end_token: Token
     ) -> Handle<N> {
@@ -201,46 +146,35 @@ pub trait AsNodePool<N: NodeInterface>: Sized {
         &mut self, value: N::V, start_token: Token, end_token: Token,
         attributes: Attributes
     ) -> Handle<N> {
-        let index = self.base_ref().contents.len();
-        self.base_mut().contents.push(N::new_with_attributes(
+        self.add(N::new_with_attributes(
             value,
             start_token,
             end_token,
             attributes
-        ));
-        unsafe {
-            let new_length = self.base_ref().contents.len();
-            self.base_mut().metadata.reserve(1);
-            self.base_mut().metadata.set_len(new_length);
-        }
-        Handle::from(index)
+        ))
     }
 
-    fn get(&self, handle: Handle<N>) -> &N {
-        &self.base_ref().contents[handle.index]
+    fn generate(
+        &mut self, value: N::V, start_token: Token, end_token: Token
+    ) -> Handle<N> {
+        self.new_with_attributes(
+            value,
+            start_token,
+            end_token,
+            Attributes::from([Attribute::Generated])
+        )
     }
 
-    fn get_mut(&mut self, handle: Handle<N>) -> &mut N {
-        &mut self.base_mut().contents[handle.index]
-    }
-
-    fn ty<'a, 'b: 'a>(&'b self, handle: Handle<N>) -> &'a N::T
+    fn get_ty<'a, 'b: 'a>(&'b self, handle: Handle<N>) -> &'a N::T
     where
         N: 'a {
-        &self.base_ref().metadata[handle.index]
+        self.get_metadata(handle)
     }
 
     fn set_ty(&mut self, handle: Handle<N>, ty: N::T) {
-        self.base_mut().metadata[handle.index] = ty;
+        self.set_metadata(handle, ty);
     }
 }
 
-impl<N: NodeInterface> AsNodePool<N> for BaseNodePool<N> {
-    fn base_ref(&self) -> &BaseNodePool<N> {
-        self
-    }
-
-    fn base_mut(&mut self) -> &mut BaseNodePool<N> {
-        self
-    }
-}
+/// Memory pool for AST nodes.
+type NodePool<N: NodeInterface> = Pool<N::V, N::T>;

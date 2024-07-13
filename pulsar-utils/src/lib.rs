@@ -12,6 +12,6 @@ pub mod disjoint_sets;
 pub mod environment;
 pub mod error;
 pub mod format;
-pub mod id;
 pub mod loc;
+pub mod pool;
 pub mod rrc;

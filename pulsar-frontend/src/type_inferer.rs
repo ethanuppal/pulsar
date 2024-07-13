@@ -7,72 +7,103 @@
 
 use super::token::{Token, TokenType};
 use crate::{
-    ast::{node::Handle, stmt::Stmt, ty::Type, AsASTPool},
+    ast::{
+        expr::Expr,
+        node::NodeInterface,
+        stmt::{Stmt, StmtValue},
+        stmt_ty::StmtType,
+        ty::{LiquidType, Type, TypeValue},
+        AsASTPool
+    },
     attribute::Attribute
 };
 use pulsar_utils::{
     disjoint_sets::DisjointSets,
     environment::Environment,
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
-    id::Gen,
-    loc::{Span, SpanProvider},
-    rrc::RRC
+    loc::Span,
+    pool::{AsPool, Handle}
 };
 use std::{
-    cell::RefCell, collections::VecDeque, fmt::Debug, iter::zip, rc::Rc
+    collections::{HashMap, HashSet},
+    iter::zip
 };
 
-struct TypeConstraint {
-    expected: Handle<Type>,
-    actual: Handle<Type>
+struct UnificationConstraint<T> {
+    expected: Handle<T>,
+    actual: Handle<T>,
+    source: Option<Handle<Self>>
 }
 
-impl TypeConstraint {
+impl<T> UnificationConstraint<T> {
     /// Constructs a constraint that sets `expected` equal to `actual`.
-    pub fn new(expected: Handle<Type>, actual: Handle<Type>) -> Self {
-        Self { expected, actual }
+    pub fn new(expected: Handle<T>, actual: Handle<T>) -> Self {
+        Self {
+            expected,
+            actual,
+            source: None
+        }
+    }
+
+    pub fn derived(
+        expected: Handle<T>, actual: Handle<T>, source: Handle<Self>
+    ) -> Self {
+        Self {
+            expected,
+            actual,
+            source: Some(source)
+        }
     }
 }
 
-pub struct TypeInferer<'ast, P: AsASTPool> {
-    env: Environment<String, Handle<Type>>,
-    ast_pool: &'ast mut P,
-    constraints: Vec<TypeConstraint>,
-    error_manager: RRC<ErrorManager>
+type TypeConstraint = UnificationConstraint<Type>;
+type LiquidTypeConstraint = UnificationConstraint<LiquidType>;
+
+pub trait AsInferencePool:
+    AsASTPool + AsPool<TypeConstraint, ()> + AsPool<LiquidTypeConstraint, ()> {
 }
 
-impl<'ast, P: AsASTPool> TypeInferer<'ast, P> {
+pub struct TypeInferer<'pool, 'err, P: AsInferencePool> {
+    ast: Vec<Handle<Stmt>>,
+    env: Environment<String, Handle<Type>>,
+    type_constraints: Vec<Handle<TypeConstraint>>,
+    liquid_type_constraints: Vec<Handle<LiquidTypeConstraint>>,
+    pool: &'pool mut P,
+    error_manager: &'err mut ErrorManager
+}
+
+impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
     pub fn new(
-        error_manager: RRC<ErrorManager>, ast_pool: &'ast mut P
+        ast: Vec<Handle<Stmt>>, pool: &'pool mut P,
+        error_manager: &'err mut ErrorManager
     ) -> Self {
         Self {
+            ast,
             env: Environment::new(),
-            ast_pool,
-            constraints: Vec::new(),
+            type_constraints: Vec::new(),
+            liquid_type_constraints: Vec::new(),
+            pool,
             error_manager
         }
     }
 
     /// Establishes a top-level binding for the type `ty` of `name`, useful for
     /// allowing functions to call other functions or external/FFI declarations.
-    pub fn bind_top_level(&mut self, name: String, ty: Handle<Type>) {
-        self.env.bind_base(name, ty);
+    pub fn bind_top_level<S: AsRef<str>>(&mut self, name: S, ty: Handle<Type>) {
+        self.env.bind_base(name.as_ref().to_string(), ty);
     }
 
     /// Performs control-flow analysis on functions and infers the types of
     /// nodes and expression in the program `program`, returning the
     /// annotated AST if no error occured.
-    pub fn infer(&mut self, mut program: Vec<Stmt>) -> Option<Vec<Stmt>> {
-        self.constraints.clear();
+    pub fn infer(mut self) -> Option<Vec<Stmt>> {
+        for top_level in &self.ast {
+            self.register_top_level_bindings(*top_level);
+        }
 
-        self.env.push();
-        for node in &mut program {
-            self.visit_node(node, true)?;
+        for stmt in &mut self.ast {
+            self.visit_stmt(*stmt)?;
         }
-        for node in &mut program {
-            self.visit_node(node, false)?;
-        }
-        self.env.pop();
 
         let substitution = self.unify_constraints()?;
         for (ty, sub_ty) in &substitution {
@@ -100,7 +131,7 @@ impl<'ast, P: AsASTPool> TypeInferer<'ast, P> {
     }
 
     fn report(&mut self, error: Error) {
-        self.error_manager.borrow_mut().record(error);
+        self.error_manager.record(error);
     }
 
     fn warn_dead_code(
@@ -262,26 +293,54 @@ impl<'ast, P: AsASTPool> TypeInferer<'ast, P> {
     }
 }
 
-impl<'ast, P: AsASTPool> TypeInferer<'ast, P> {
-    fn new_type_var(&self) -> Type {
-        Type::Var(Gen::next("TypeInferer::get_type_var"))
+impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
+    fn register_top_level_bindings(&mut self, stmt: Handle<Stmt>) {
+        if let StmtValue::Function {
+            ref name,
+            open_paren: _,
+            ref params,
+            ref close_paren,
+            ret,
+            body: _
+        } = stmt.value.clone()
+        {
+            let args = params
+                .iter()
+                .map(|(_, arg_type)| self.ast_pool.duplicate(*arg_type))
+                .collect();
+            let ret_type = ret;
+            let func_type = self.ast_pool.new(
+                TypeValue::Function { args, ret },
+                name.clone(),
+                if ret_type.has_attribute(Attribute::Generated) {
+                    close_paren
+                } else {
+                    ret_type.end_token()
+                }
+                .clone()
+            );
+            self.bind_top_level(&name.value, func_type);
+        }
     }
 
-    fn add_constraint(
-        &mut self, lhs: TypeCell, rhs: TypeCell, lhs_ctx: Span, rhs_ctx: Span
-    ) {
-        self.constraints.push_back(TypeConstraint::Equality {
-            lhs,
-            rhs,
-            lhs_ctx,
-            rhs_ctx
-        });
+    fn new_constraint(&mut self, expected: Handle<Type>, actual: Handle<Type>) {
+        self.type_constraints
+            .push(TypeConstraint::new(expected, actual));
+    }
+
+    fn derive_constraint(&mut self, source: Handle<TypeConstraint>) {
+        self.type_constraints
+            .push(TypeConstraint::derived(expected, actual, source));
+    }
+
+    fn new_type_var(&self) -> Type {
+        Type::Var(Gen::next("TypeInferer::get_type_var"))
     }
 
     /// Extracts constraints from the expression `expr` and returns either a
     /// type variable or fully resolved type for it, along with a derivation of
     /// purity.
-    fn visit_expr(&mut self, expr: &Expr) -> Option<(TypeCell, bool)> {
+    fn visit_expr(&mut self, expr: Handle<Expr>) -> Option<Handle<Type>> {
         let mut expr_is_pure = true;
         match &expr.value {
             ExprValue::ConstantInt(_) => {
@@ -478,140 +537,65 @@ impl<'ast, P: AsASTPool> TypeInferer<'ast, P> {
         Some((expr.ty.clone(), expr_is_pure))
     }
 
-    fn visit_node(
-        &mut self, node: &Stmt, top_level_pass: bool
-    ) -> Option<StmtTypeCell> {
-        match (&node.value, top_level_pass) {
-            (
-                StmtValue::Function {
-                    name,
-                    params,
-                    ret,
-                    pure_token,
-                    body: _
-                },
-                true
-            ) => {
-                // On top-level pass, bind all functions to their types
-                self.env.bind(
-                    name.value.clone(),
-                    TypeCell::new(Type::Function {
-                        is_pure: pure_token.is_some(),
-                        args: params
-                            .iter()
-                            .map(|p| p.1.clone())
-                            .collect::<Vec<_>>(),
-                        ret: Box::new(ret.clone())
-                    })
-                );
-                // since we don't know termination, assume nonterminal
-                *node.ty.as_mut() = StmtType::from(
-                    StmtTermination::Nonterminal,
-                    pure_token.is_some()
-                );
-            }
-            (
-                StmtValue::Function {
-                    name,
-                    params,
-                    ret,
-                    pure_token,
-                    body
-                },
-                false
-            ) => {
-                self.env.push();
-                self.env.bind(RETURN_ID.into(), TypeCell::new(ret.clone()));
-                for (name, ty) in params {
-                    self.env
-                        .bind(name.value.clone(), TypeCell::new(ty.clone()));
-                }
+    fn visit_stmt(&mut self, stmt: Handle<Stmt>) -> Option<StmtType> {
+        let stmt_type = match &stmt.value {
+            StmtValue::Function {
+                name,
+                params,
+                open_paren: _,
+                ret,
+                close_paren: _,
+                body
+            } => {
+                let mut return_type = StmtType::Nonterminal;
+                let mut return_stmt = None;
 
-                let func_ty = node.ty.clone();
-                let mut warned_dead_code = false;
-                let mut term_node = None;
-                for node in body {
-                    let node_ty = self.visit_node(node, false)?;
-                    let mut just_found_term = false;
-                    if node_ty.as_ref().termination == StmtTermination::Terminal
-                        && term_node.is_none()
-                    {
-                        term_node = Some(node);
-                        func_ty.as_mut().termination =
-                            StmtTermination::Terminal;
-                        just_found_term = true;
+                self.env.push();
+                for (param_name, param_type) in params {
+                    self.env.bind(param_name.value.clone(), *param_type);
+                }
+                for stmt in body {
+                    if let Some(return_stmt) = return_stmt {
+                        self.warn_dead_code(name, &stmt, return_stmt)
                     }
-                    if func_ty.as_ref().termination == StmtTermination::Terminal
-                        && !warned_dead_code
-                        && !just_found_term
-                        && !node.has_attribute(Attribute::Generated)
+                    if let StmtType::Terminal(stmt_return_type) =
+                        self.visit_stmt(*stmt)?
                     {
-                        self.warn_dead_code(name, node, term_node.unwrap());
-                        warned_dead_code = true;
-                    }
-                    if !node_ty.as_ref().is_pure && pure_token.is_some() {
-                        self.report_failed_purity_derivation(
-                            &pure_token.clone().unwrap(),
-                            name,
-                            node
-                        );
-                        return None;
+                        self.new_constraint(*ret, stmt_return_type);
+                        return_type = StmtType::Terminal(stmt_return_type);
+                        return_stmt = Some(stmt);
                     }
                 }
-                if func_ty.as_ref().termination == StmtTermination::Nonterminal
-                {
+                self.env.pop();
+
+                if matches!(return_type, StmtType::Nonterminal) {
                     self.report_missing_return(name);
                     return None;
                 }
-                self.env.pop();
+                return_type
             }
-            (
-                StmtValue::LetBinding {
-                    name,
-                    hint: hint_opt,
-                    value
-                },
-                false
-            ) => {
-                let (value_ty, expr_is_pure) = self.visit_expr(value)?;
-                if let Some(hint) = hint_opt {
-                    self.add_constraint(
-                        hint.clone(),
-                        value_ty.clone(),
-                        name.span(),
-                        value.span()
-                    );
+            StmtValue::LetBinding { name, hint, value } => {
+                let value_type = self.visit_expr(*value)?;
+                if let Some(hint) = hint {
+                    self.new_constraint(*hint, value_type);
                 }
-                self.env.bind(name.value.clone(), value_ty);
-                // TODO: never types
-                *node.ty.as_mut() =
-                    StmtType::from(StmtTermination::Nonterminal, expr_is_pure);
+                self.env.bind(name.value.clone(), value_type);
+                StmtType::Nonterminal
             }
-            (
-                StmtValue::Return {
-                    keyword_token: token,
-                    value: value_opt
-                },
-                false
-            ) => {
-                let ((value_ty, value_is_pure), value_start) =
-                    if let Some(value) = value_opt {
-                        (self.visit_expr(value)?, value.span())
-                    } else {
-                        ((Type::unit_singleton(), true), token.span())
-                    };
-                self.add_constraint(
-                    value_ty.clone(),
-                    self.env.find(RETURN_ID.into()).unwrap().clone(),
-                    value_start,
-                    token.span()
-                );
-                *node.ty.as_mut() =
-                    StmtType::from(StmtTermination::Terminal, value_is_pure);
+            StmtValue::Return { ret_token, value } => {
+                StmtType::Terminal(if let Some(value) = value {
+                    self.visit_expr(*value)?
+                } else {
+                    self.pool.generate(
+                        TypeValue::Unit,
+                        ret_token.clone(),
+                        ret_token.clone()
+                    )
+                })
             }
-            _ => {}
-        }
-        Some(node.ty.clone())
+        };
+        self.pool.set_ty(stmt, stmt_type.clone());
+        Some(stmt_type)
     }
 
     /// Whenever possible, pass `lhs` as the type to be unified into `rhs`.

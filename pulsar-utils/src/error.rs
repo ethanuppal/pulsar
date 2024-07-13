@@ -3,11 +3,9 @@
 // License as published by the Free Software Foundation, either version 3 of the
 // License, or (at your option) any later version.
 
-use crate::rrc::RRC;
-
 use super::loc::{Span, SpanProvider};
 use colored::*;
-use std::{cell::RefCell, fmt::Display, io, rc::Rc};
+use std::{fmt::Display, io};
 
 #[repr(i32)]
 #[derive(Clone, Copy, Debug)]
@@ -227,6 +225,7 @@ impl Default for Error {
 }
 
 /// An interface for fluently constructing errors.
+#[derive(Default)]
 pub struct ErrorBuilder {
     error: Error
 }
@@ -234,9 +233,7 @@ pub struct ErrorBuilder {
 impl ErrorBuilder {
     /// Constructs a new error builder.
     pub fn new() -> Self {
-        ErrorBuilder {
-            error: Error::default()
-        }
+        Self::default()
     }
 
     /// Uses the display style `style`.
@@ -311,14 +308,14 @@ pub struct ErrorManager {
 }
 
 impl ErrorManager {
-    /// Constructs a shared error manager that can record up to `max_count`
-    /// primary errors.
-    pub fn with_max_count(max_count: usize) -> RRC<ErrorManager> {
-        Rc::new(RefCell::new(ErrorManager {
+    /// Constructs an error manager that can record up to `max_count` primary
+    /// errors.
+    pub fn with_max_count(max_count: usize) -> ErrorManager {
+        ErrorManager {
             max_count,
             primary_count: 0,
             errors: vec![]
-        }))
+        }
     }
 
     /// Whether the error manager has recorded an error.

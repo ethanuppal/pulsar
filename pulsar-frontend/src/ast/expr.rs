@@ -3,15 +3,11 @@
 // License as published by the Free Software Foundation, either version 3 of the
 // License, or (at your option) any later version.
 
-use super::{
-    node::{Handle, Node},
-    pretty_print::{PrettyPrint, PrettyPrinter},
-    ty::Type,
-    AsASTPool
-};
+use super::{node::Node, pretty_print::PrettyPrint, ty::Type};
 use crate::token::Token;
 use inform::fmt::IndentFormatter;
-use std::fmt::Write;
+use pulsar_utils::pool::Handle;
+use std::fmt::{Display, Write};
 
 #[derive(Clone)]
 pub enum ExprValue {
@@ -42,8 +38,8 @@ pub enum ExprValue {
 pub type Expr = Node<ExprValue, Handle<Type>>;
 
 impl PrettyPrint for Expr {
-    fn fmt<P: AsASTPool>(
-        &self, f: &mut IndentFormatter<'_, '_>, ast_pool: &P
+    fn pretty_print(
+        &self, f: &mut IndentFormatter<'_, '_>
     ) -> core::fmt::Result {
         match self.value {
             ExprValue::ConstantInt(i) => {
@@ -53,7 +49,7 @@ impl PrettyPrint for Expr {
                 write!(f, "{}", name.value)?;
             }
             ExprValue::MemberAccess(value, ref member) => {
-                write!(f, "{}.{}", ast_pool.fmtr(value), member.value)?;
+                write!(f, "{}.{}", value, member.value)?;
             }
             ExprValue::Call(ref name, ref args) => {
                 write!(
@@ -61,7 +57,7 @@ impl PrettyPrint for Expr {
                     "{}({})",
                     name.value,
                     args.iter()
-                        .map(|elem| ast_pool.to_string(*elem))
+                        .map(|arg| arg.to_string())
                         .collect::<Vec<_>>()
                         .join(", ")
                 )?;
@@ -72,7 +68,7 @@ impl PrettyPrint for Expr {
                     "[{}{}]",
                     elements
                         .iter()
-                        .map(|elem| ast_pool.to_string(*elem))
+                        .map(|elem| elem.to_string())
                         .collect::<Vec<_>>()
                         .join(", "),
                     if should_continue {
@@ -86,35 +82,16 @@ impl PrettyPrint for Expr {
                 )?;
             }
             ExprValue::PrefixOp(ref op, rhs) => {
-                write!(f, "({} {})", op.value, ast_pool.fmtr(rhs))?;
+                write!(f, "({} {})", op.value, rhs)?;
             }
             ExprValue::InfixBop(lhs, ref op, rhs) => {
-                write!(
-                    f,
-                    "({} {} {})",
-                    ast_pool.fmtr(lhs),
-                    op.value,
-                    ast_pool.fmtr(rhs)
-                )?;
+                write!(f, "({} {} {})", lhs, op.value, rhs)?;
             }
             ExprValue::PostfixBop(lhs, ref op1, rhs, ref op2) => {
-                write!(
-                    f,
-                    "({}{}{}{})",
-                    ast_pool.fmtr(lhs),
-                    op1.value,
-                    ast_pool.fmtr(rhs),
-                    op2.value
-                )?;
+                write!(f, "({}{}{}{})", lhs, op1.value, rhs, op2.value)?;
             }
             ExprValue::HardwareMap(_, ref parallel_factor, ref fun, arr) => {
-                write!(
-                    f,
-                    "map<{}>({}, {})",
-                    parallel_factor,
-                    fun.value,
-                    ast_pool.fmtr(arr)
-                )?;
+                write!(f, "map<{}>({}, {})", parallel_factor, fun.value, arr)?;
             }
         }
 
@@ -124,5 +101,11 @@ impl PrettyPrint for Expr {
         // }
 
         Ok(())
+    }
+}
+
+impl Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        PrettyPrint::fmt(self, f)
     }
 }

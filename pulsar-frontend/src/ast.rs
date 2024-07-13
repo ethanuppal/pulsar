@@ -4,9 +4,9 @@
 // License, or (at your option) any later version.
 
 use expr::Expr;
-use node::{AsNodePool, BaseNodePool};
+use node::AsNodePool;
 use stmt::Stmt;
-use ty::Type;
+use ty::AsTypePool;
 
 pub mod expr;
 pub mod node;
@@ -15,9 +15,7 @@ pub mod stmt;
 pub mod stmt_ty;
 pub mod ty;
 
-pub trait AsASTPool:
-    AsNodePool<Type> + AsNodePool<Expr> + AsNodePool<Stmt> {
-}
+pub trait AsASTPool: AsTypePool + AsNodePool<Expr> + AsNodePool<Stmt> {}
 
 // impl ASTPool {
 //     pub fn new() -> Self {
