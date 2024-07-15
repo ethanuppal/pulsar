@@ -16,7 +16,7 @@ use pulsar_ir::{
     basic_block::BasicBlockCell,
     control_flow_graph::ControlFlowGraph,
     generator::GeneratedTopLevel,
-    label::{Label, LabelName, MAIN_SYMBOL_PREFIX},
+    label::{Label, Name, MAIN_SYMBOL_PREFIX},
     operand::Operand,
     variable::Variable,
     Ir
@@ -96,7 +96,7 @@ impl CalyxBackend {
     /// the current component if `unique` and instantiated fresh otherwise.
     fn cell_for_call(
         &self, component: &mut CalyxComponent<FunctionContext>,
-        call: &LabelName, unique: bool
+        call: &Name, unique: bool
     ) -> (String, CalyxCell) {
         let callee_name = call.mangle().clone();
         let cell_name = format!("call{}", callee_name);

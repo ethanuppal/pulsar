@@ -255,8 +255,10 @@ impl ErrorBuilder {
     }
 
     /// Locates the error at the span given by `span_provider`.
-    pub fn span<R: SpanProvider>(mut self, span_provider: &R) -> Self {
-        self.error.span = Some(span_provider.span());
+    pub fn span<P: SpanProvider, PRef: AsRef<P>>(
+        mut self, span_provider: PRef
+    ) -> Self {
+        self.error.span = Some(span_provider.as_ref().span());
         self
     }
 

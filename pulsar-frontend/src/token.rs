@@ -6,7 +6,6 @@
 use core::{fmt, fmt::Debug};
 use pulsar_utils::loc::{Loc, SpanProvider};
 
-///
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TokenType {
     Identifier,
@@ -141,6 +140,12 @@ impl Debug for Token {
             self.ty,
             self.loc
         )
+    }
+}
+
+impl AsRef<Token> for Token {
+    fn as_ref(&self) -> &Token {
+        self
     }
 }
 

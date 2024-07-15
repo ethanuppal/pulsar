@@ -2,145 +2,150 @@
 // redistribute it and/or modify it under the terms of the GNU General Public
 // License as published by the Free Software Foundation, either version 3 of the
 // License, or (at your option) any later version.
+
 use super::{
-    basic_block::BasicBlockCell,
-    control_flow_graph::ControlFlowGraph,
-    label::{Label, LabelName, LabelVisibility},
+    label::{Label, Name, Visibility},
     operand::Operand,
     variable::Variable,
     Ir
 };
+use crate::control::{Control, Seq};
 use pulsar_frontend::{
-    ast::{Expr, ExprValue, Param, Stmt, StmtValue},
-    token::{Token, TokenType},
-    ty::Type
+    ast::{
+        expr::{Expr, ExprValue},
+        pretty_print::PrettyPrint,
+        stmt::Stmt,
+        ty::{LiquidTypeValue, Type, TypeValue},
+        AsASTPool
+    },
+    token::{Token, TokenType}
 };
-use pulsar_utils::environment::Environment;
-use std::fmt::Display;
+use pulsar_utils::{
+    environment::Environment,
+    id::Gen,
+    pool::{AsPool, Handle}
+};
+use std::fmt::{self, Display, Write};
 
-pub enum GeneratedTopLevel {
-    Function {
-        label: Label,
-        args: Vec<Type>,
-        ret: Box<Type>,
-        is_pure: bool,
-        cfg: ControlFlowGraph
+pub struct GeneratedFunction {
+    label: Label,
+    args: Vec<Handle<Type>>,
+    ret: Handle<Type>,
+    cfg: Control
+}
+
+impl PrettyPrint for GeneratedFunction {
+    fn pretty_print(
+        &self, f: &mut inform::fmt::IndentFormatter<'_, '_>
+    ) -> core::fmt::Result {
+        writeln!(
+            f,
+            "cfg {}({}) -> {} {{",
+            self.label,
+            self.args
+                .iter()
+                .map(|ty| ty.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            self.ret
+        )?;
+        f.increase_indent();
+        self.cfg.pretty_print(f)?;
+        f.decrease_indent();
+        write!(f, "}}")
     }
 }
 
-impl Display for GeneratedTopLevel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            Self::Function {
-                label,
-                args,
-                ret,
-                is_pure,
-                cfg
-            } => {
-                writeln!(
-                    f,
-                    "{} {}({}) -> {}:",
-                    if *is_pure { "pure " } else { "" },
-                    label,
-                    args.iter()
-                        .map(|ty| ty.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    ret
-                )?;
-                write!(f, "{}", cfg)
-            }
-        }
+impl Display for GeneratedFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        PrettyPrint::fmt(self, f)
     }
 }
 
-pub struct Generator {
-    program: Box<dyn Iterator<Item = Stmt>>,
+pub trait AsGenerationPool: AsASTPool + AsPool<Control, ()> {}
+
+/// IR generator.
+pub struct Generator<'pool, P: AsGenerationPool> {
+    ast: Vec<Handle<Stmt>>,
+    pool: &'pool mut P,
+    var_gen: Gen,
     env: Environment<String, Variable>
 }
 
-impl Generator {
-    pub fn new(program: Vec<Stmt>) -> Self {
+impl<'pool, P: AsGenerationPool> Generator<'pool, P> {
+    /// Constructs a new IR generator.
+    pub fn new(ast: Vec<Handle<Stmt>>, pool: &'pool mut P) -> Self {
         Self {
-            program: Box::new(program.into_iter()),
+            ast,
+            pool,
+            var_gen: Gen::new(),
             env: Environment::new()
         }
     }
 
-    fn gen_expr(&mut self, expr: &Expr, block: BasicBlockCell) -> Operand {
+    /// A new IR variable unique to this generator.
+    fn new_var(&mut self) -> Variable {
+        Variable::from(self.var_gen.next())
+    }
+
+    /// Generates IR for `expr` at the end of `seq`, returning its result.
+    fn gen_expr(&mut self, expr: Handle<Expr>, seq: &mut Seq) -> Operand {
         match &expr.value {
             ExprValue::ConstantInt(value) => Operand::Constant(*value),
             ExprValue::InfixBop(lhs, op, rhs) => {
-                let lhs = self.gen_expr(lhs, block.clone());
-                let rhs = self.gen_expr(rhs, block.clone());
-                let result = Variable::new();
+                let lhs = self.gen_expr(*lhs, seq);
+                let rhs = self.gen_expr(*rhs, seq);
+                let result = self.new_var();
                 match op.ty {
                     TokenType::Plus => {
-                        block.as_mut().add(Ir::Add(result, lhs, rhs))
+                        seq.push(Ir::Add(result, lhs, rhs), self.pool);
                     }
                     TokenType::Times => {
-                        block.as_mut().add(Ir::Mul(result, lhs, rhs))
+                        seq.push(Ir::Mul(result, lhs, rhs), self.pool);
                     }
-                    _ => todo!()
+                    _ => todo!("haven't implemented all infix bops")
                 }
                 Operand::Variable(result)
             }
             ExprValue::BoundName(name) => {
-                Operand::Variable(*self.env.find(name.value.clone()).unwrap())
-            }
-            ExprValue::Call(name, args) => {
-                let mut arg_operands = vec![];
-                let mut arg_tys = vec![];
-                for arg in args {
-                    arg_tys.push(arg.ty.clone_out());
-                    let arg_operand = self.gen_expr(arg, block.clone());
-                    arg_operands.push(arg_operand);
-                }
-                let result_opt = if expr.ty.clone_out() == Type::Unit {
-                    None
-                } else {
-                    Some(Variable::new())
-                };
-                block.as_mut().add(Ir::Call(
-                    result_opt,
-                    LabelName::from_native(
-                        name.value.clone(),
-                        &arg_tys,
-                        &Box::new(expr.ty.clone_out())
-                    ),
-                    arg_operands
-                ));
-                result_opt.map_or(Operand::Constant(0), |result| {
-                    Operand::Variable(result)
-                })
+                Operand::Variable(*self.env.find(name.value.clone()).expect(
+                    "unbound name should have been caught in type inference"
+                ))
             }
             ExprValue::PostfixBop(array, op1, index, op2)
                 if op1.ty == TokenType::LeftBracket
                     && op2.ty == TokenType::RightBracket =>
             {
-                let array_operand = self.gen_expr(array, block.clone());
-                let index_operand = self.gen_expr(index, block.clone());
-                let result = Variable::new();
-                block.as_mut().add(Ir::Load {
-                    result,
-                    value: array_operand,
-                    index: index_operand
-                });
+                let array_operand = self.gen_expr(*array, seq);
+                let index_operand = self.gen_expr(*index, seq);
+                let result = self.new_var();
+                seq.push(
+                    Ir::Load {
+                        result,
+                        value: array_operand,
+                        index: index_operand
+                    },
+                    self.pool
+                );
                 Operand::Variable(result)
             }
             ExprValue::ArrayLiteral(elements, _) => {
-                let (element_type, element_count) =
-                    expr.ty.as_ref().as_array_type();
-                let element_size = element_type.as_ref().size();
-                let element_count = element_count as usize;
+                let TypeValue::Array(element_type, element_count) =
+                    self.pool.get_ty(expr).value
+                else {
+                    panic!();
+                };
+                let LiquidTypeValue::Equal(element_count) = element_count.value
+                else {
+                    panic!();
+                };
+                let element_size = element_type.size();
 
-                let result = Variable::new();
-                block.as_mut().add(Ir::LocalAlloc(
-                    result,
-                    element_size,
-                    element_count
-                ));
+                let result = self.new_var();
+                seq.push(
+                    Ir::LocalAlloc(result, element_size, element_count),
+                    self.pool
+                );
                 for (i, element) in elements.iter().enumerate() {
                     let element_operand = self.gen_expr(element, block.clone());
                     block.as_mut().add(Ir::Store {
@@ -176,7 +181,7 @@ impl Generator {
                 block.as_mut().add(Ir::Map {
                     result,
                     parallel_factor: *parallel_factor,
-                    f: LabelName::from_native(
+                    f: Name::from_native(
                         f.value.clone(),
                         &vec![Type::Int64],
                         &Box::new(Type::Int64)
@@ -191,7 +196,7 @@ impl Generator {
         }
     }
 
-    fn gen_node(&mut self, node: &Stmt, block: BasicBlockCell) {
+    fn gen_stmt(&mut self, node: &Stmt, block: BasicBlockCell) {
         match &node.value {
             StmtValue::LetBinding {
                 name,
@@ -229,15 +234,15 @@ impl Generator {
             entry.as_mut().add(Ir::GetParam(param_var));
         }
         for node in body {
-            self.gen_node(node, entry.clone());
+            self.gen_stmt(node, entry.clone());
         }
         self.env.pop();
         let arg_tys = params.iter().map(|(_, ty)| ty.clone()).collect();
         let ret_ty = Box::new(ret);
         GeneratedTopLevel::Function {
             label: Label::from(
-                LabelName::from_native(name.value.clone(), &arg_tys, &ret_ty),
-                LabelVisibility::Private
+                Name::from_native(name.value.clone(), &arg_tys, &ret_ty),
+                Visibility::Private
             ),
             args: arg_tys,
             ret: ret_ty,

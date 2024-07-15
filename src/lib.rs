@@ -18,3 +18,5 @@ pub use pulsar_frontend;
 pub use pulsar_ir;
 #[doc(no_inline)]
 pub use pulsar_utils;
+
+use pulsar_frontend::{ast::AsASTPool, type_inferer::AsInferencePool};

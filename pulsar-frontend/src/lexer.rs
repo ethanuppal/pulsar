@@ -196,7 +196,7 @@ impl<'err> Iterator for Lexer<'err> {
                         .of_style(Style::Primary)
                         .at_level(Level::Error)
                         .with_code(ErrorCode::UnrecognizedCharacter)
-                        .span(&Span::unit(self.loc.clone()))
+                        .span(Span::unit(self.loc.clone()))
                         .message("Encountered unrecognized character".into())
                         .build();
                     self.error_manager.record(error);

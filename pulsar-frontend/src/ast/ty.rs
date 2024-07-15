@@ -9,7 +9,7 @@ use super::{
 };
 use core::fmt;
 use inform::fmt::IndentFormatter;
-use pulsar_utils::pool::Handle;
+use pulsar_utils::{id::Id, pool::Handle};
 use std::{
     cmp,
     fmt::{Display, Write}
@@ -65,10 +65,10 @@ impl Display for LiquidType {
     }
 }
 
-#[derive(Clone, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum TypeValue {
     Unit,
-    Var(usize),
+    Var(Id),
     Name(String),
     Int64,
 
@@ -99,7 +99,7 @@ impl Type {
                 else {
                     panic!("Size not resolved to single value")
                 };
-                element_type.size() * (element_count as usize)
+                element_type.size() * element_count
             }
             TypeValue::Function { args: _, ret: _ } => 8
         }
@@ -183,5 +183,13 @@ impl Display for Type {
         PrettyPrint::fmt(self, f)
     }
 }
+
+impl PartialEq for Type {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl Eq for Type {}
 
 pub trait AsTypePool: AsNodePool<Type> + AsNodePool<LiquidType> {}

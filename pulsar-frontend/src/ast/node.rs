@@ -9,7 +9,7 @@ use crate::{
 };
 use pulsar_utils::{
     loc::{Loc, SpanProvider},
-    pool::{AsPool, Handle, Pool}
+    pool::{AsPool, Handle}
 };
 use std::{
     fmt::{self, Display},
@@ -72,7 +72,7 @@ impl<V, T> NodeInterface for Node<V, T> {
             attributes,
             start_token,
             end_token,
-            metadata: PhantomData::default()
+            metadata: PhantomData
         }
     }
 
@@ -100,8 +100,14 @@ impl<V: Clone, T> Clone for Node<V, T> {
             attributes: self.attributes,
             start_token: self.start_token.clone(),
             end_token: self.end_token.clone(),
-            metadata: PhantomData::default()
+            metadata: PhantomData
         }
+    }
+}
+
+impl<V, T> AsRef<Node<V, T>> for Node<V, T> {
+    fn as_ref(&self) -> &Node<V, T> {
+        self
     }
 }
 
@@ -131,6 +137,8 @@ impl<V: Display, T> Display for Node<V, T> {
 
 /// Can be used as a [`NodePool`].
 pub trait AsNodePool<N: NodeInterface>: AsPool<N, N::T> {
+    #[allow(clippy::new_ret_no_self)]
+    #[allow(clippy::wrong_self_convention)]
     fn new(
         &mut self, value: N::V, start_token: Token, end_token: Token
     ) -> Handle<N> {
@@ -176,5 +184,5 @@ pub trait AsNodePool<N: NodeInterface>: AsPool<N, N::T> {
     }
 }
 
-/// Memory pool for AST nodes.
-type NodePool<N: NodeInterface> = Pool<N::V, N::T>;
+// Memory pool for AST nodes.
+// pub type NodePool<N: NodeInterface> = Pool<N::V, N::T>;

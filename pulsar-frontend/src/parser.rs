@@ -15,7 +15,6 @@ use crate::{
         ty::{LiquidTypeValue, Type, TypeValue},
         AsASTPool
     },
-    attribute::{Attribute, Attributes},
     op::Associativity
 };
 use pulsar_utils::{
@@ -465,7 +464,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     fn parse_array_literal_expr_value(&mut self) -> Option<ExprValue> {
         let mut elements = vec![];
-        let mut should_continue = false;
+        let mut should_continue = None;
         let mut i = 0;
         contained_in! { self;
             TokenType::LeftBracket, "array literal", TokenType::RightBracket;
@@ -485,7 +484,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                         }
                     }
                     (Some(TokenType::Dots), _) => {
-                        should_continue = true;
+                        should_continue = Some(self.current().clone());
                         self.advance();
                         break;
                     }

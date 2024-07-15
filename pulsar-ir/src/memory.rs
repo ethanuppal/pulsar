@@ -3,4 +3,8 @@
 // License as published by the Free Software Foundation, either version 3 of the
 // License, or (at your option) any later version.
 
-pub struct ControlFlowGraph {}
+pub struct Memory {
+    element: usize,
+    length: usize,
+    bank: usize
+}

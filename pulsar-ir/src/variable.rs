@@ -10,11 +10,9 @@ pub struct Variable {
     id: Id
 }
 
-impl Variable {
-    pub fn new() -> Self {
-        Self {
-            id: Gen::next("IR variable")
-        }
+impl From<Id> for Variable {
+    fn from(value: Id) -> Self {
+        Self { id: value }
     }
 }
 

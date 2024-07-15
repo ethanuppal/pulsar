@@ -5,6 +5,16 @@ mod tests {
     use pulsar_utils::{error::ErrorManager, loc::Source};
     use std::{cell::RefCell, fs, rc::Rc};
 
+    pub struct Context {}
+
+    impl AsTypePool for Context {}
+    impl AsNodePool<Expr> for Context {}
+    impl AsNodePool<Stmt> for Context {}
+    impl AsASTPool for Context {}
+    impl AsPool<TypeConstraint, ()> for Context {}
+    impl AsPool<LiquidTypeConstraint, ()> for Context {}
+    impl AsInferencePool for Context {}
+
     fn read(filename: &str) -> Rc<Source> {
         Source::file(
             filename.into(),
@@ -14,12 +24,13 @@ mod tests {
     }
 
     fn parser_output(
-        filename: &str, error_manager: RRC<ErrorManager>
+        filename: &str, error_manager: &mut ErrorManager
     ) -> String {
+        let ctx = Context::default();
         let source = read(filename);
-        let lexer = Lexer::new(source, error_manager.clone());
+        let lexer = Lexer::new(source, error_manager);
         let tokens: Vec<_> = lexer.into_iter().collect();
-        let parser = Parser::new(tokens, error_manager.clone());
+        let parser = Parser::new(tokens, ctx, error_manager);
         let mut output = String::new();
         for node in parser {
             output.push_str(&format!("{}\n", node));
@@ -43,10 +54,10 @@ mod tests {
             paste! {
                 #[test]
                 fn [<test_parser_ $num>]() {
-                    let error_manager = ErrorManager::with_max_count(10);
+                    let mut error_manager = ErrorManager::with_max_count(10);
                     assert_snapshot!(parser_output(
                         &format!("tests/data/parser{}.plsr", $num),
-                        error_manager
+                        &mut error_manager
                     ));
                 }
             }

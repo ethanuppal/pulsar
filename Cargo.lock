@@ -604,6 +604,7 @@ dependencies = [
 name = "pulsar-ir"
 version = "0.0.0"
 dependencies = [
+ "inform",
  "pulsar-frontend",
  "pulsar-utils",
 ]

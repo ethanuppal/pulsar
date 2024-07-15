@@ -29,9 +29,27 @@ impl<T> Deref for Handle<T> {
     }
 }
 
+impl<T: Sized> AsRef<T> for Handle<T>
+where
+    <Handle<T> as Deref>::Target: AsRef<T>
+{
+    fn as_ref(&self) -> &T {
+        self.deref()
+    }
+}
+
 impl<T> DerefMut for Handle<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.pointer }
+    }
+}
+
+impl<T: Sized> AsMut<T> for Handle<T>
+where
+    <Handle<T> as Deref>::Target: AsMut<T>
+{
+    fn as_mut(&mut self) -> &mut T {
+        self.deref_mut()
     }
 }
 

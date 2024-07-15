@@ -9,7 +9,7 @@ use pulsar_utils::format::INDENT_WIDTH;
 
 /// An AST node that can be pretty-printed.
 ///
-/// # `Display``
+/// # Display
 ///
 /// You can implement [`Display`] for a [`PrettyPrint`] type `T` with:
 /// ```

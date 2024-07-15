@@ -6,13 +6,13 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use self::{label::LabelName, operand::Operand, variable::Variable};
+use self::{label::Name, operand::Operand, variable::Variable};
 use std::fmt::Display;
 
 pub mod control;
-pub mod control_flow_graph;
 pub mod generator;
 pub mod label;
+pub mod memory;
 pub mod operand;
 pub mod variable;
 
@@ -47,11 +47,11 @@ pub enum Ir {
     Map {
         result: Variable,
         parallel_factor: usize,
-        f: LabelName,
+        f: Name,
         input: Operand,
         length: usize
     },
-    Call(Option<Variable>, LabelName, Vec<Operand>)
+    Call(Option<Variable>, Name, Vec<Operand>)
 }
 
 impl Display for Ir {
