@@ -7,35 +7,33 @@ use super::{node::Node, pretty_print::PrettyPrint, ty::Type};
 use crate::token::Token;
 use inform::fmt::IndentFormatter;
 use pulsar_utils::pool::Handle;
-use std::fmt::{Display, Write};
+use std::fmt::{self, Display, Write};
 
 #[derive(Clone)]
 pub enum ExprValue {
     ConstantInt(i64),
     /// TODO: Support `::`s
-    BoundName(Token),
+    BoundName(Handle<Token>),
 
-    MemberAccess(Handle<Expr>, Token),
+    MemberAccess(Handle<Expr>, Handle<Token>),
 
     /// TODO: Call an `expr` or some sort of chaining of `::`
-    Call(Token, Vec<Handle<Expr>>),
+    Call(Handle<Token>, Vec<Handle<Expr>>),
 
     /// `ArrayLiteral(elements, should_continue)` is an array literal beginning
     /// with `elements` and filling the remainder of the array with zeros if
     /// `should_continue.is_some()`.
-    ArrayLiteral(Vec<Handle<Expr>>, Option<Token>),
+    ArrayLiteral(Vec<Handle<Expr>>, Option<Handle<Token>>),
 
-    PrefixOp(Token, Handle<Expr>),
-    InfixBop(Handle<Expr>, Token, Handle<Expr>),
-    PostfixBop(Handle<Expr>, Token, Handle<Expr>, Token)
+    PrefixOp(Handle<Token>, Handle<Expr>),
+    InfixBop(Handle<Expr>, Handle<Token>, Handle<Expr>),
+    PostfixBop(Handle<Expr>, Handle<Token>, Handle<Expr>, Handle<Token>)
 }
 
 pub type Expr = Node<ExprValue, Handle<Type>>;
 
 impl PrettyPrint for Expr {
-    fn pretty_print(
-        &self, f: &mut IndentFormatter<'_, '_>
-    ) -> core::fmt::Result {
+    fn pretty_print(&self, f: &mut IndentFormatter<'_, '_>) -> fmt::Result {
         match self.value {
             ExprValue::ConstantInt(i) => {
                 write!(f, "{}", i)?;

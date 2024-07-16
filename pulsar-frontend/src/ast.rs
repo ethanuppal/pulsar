@@ -3,11 +3,14 @@
 // License as published by the Free Software Foundation, either version 3 of the
 // License, or (at your option) any later version.
 
+use decl::Decl;
 use expr::Expr;
 use node::AsNodePool;
+use pulsar_utils::pool::HandleArray;
 use stmt::Stmt;
 use ty::AsTypePool;
 
+pub mod decl;
 pub mod expr;
 pub mod node;
 pub mod pretty_print;
@@ -15,16 +18,8 @@ pub mod stmt;
 pub mod stmt_ty;
 pub mod ty;
 
-pub trait AsASTPool: AsTypePool + AsNodePool<Expr> + AsNodePool<Stmt> {}
+pub type AST = HandleArray<Decl>;
 
-// impl ASTPool {
-//     pub fn new() -> Self {
-//         Self::default()
-//     }
-// }
-
-// impl AsRef<ASTPool> for ASTPool {
-//     fn as_ref(&self) -> &ASTPool {
-//         &self
-//     }
-// }
+pub trait AsASTPool:
+    AsTypePool + AsNodePool<Expr> + AsNodePool<Decl> + AsNodePool<Stmt> {
+}

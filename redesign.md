@@ -14,7 +14,7 @@ struct Complex {
     im: Double
 }
 
-func fft(input: Complex[FFT_SIZE], twid: Complex[FFT_SIZE / 2]) {
+func fft<FFT_SIZE>(input: Complex[FFT_SIZE], twid: Complex[FFT_SIZE / 2]) -> (output: Int) {
     for log in 0 ..< LOG2_FFT_SIZE {
         let span = FFT_SIZE >> (log + 1)
         for odd_ in span ..< FFT_SIZE {

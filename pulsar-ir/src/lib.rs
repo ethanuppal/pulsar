@@ -1,6 +1,3 @@
-//! The IR can be structured or unstructured, dependending on the requirements
-//! of the backend.
-//!
 //! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
 //! redistribute it and/or modify it under the terms of the GNU General Public
 //! License as published by the Free Software Foundation, either version 3 of
@@ -9,6 +6,7 @@
 use self::{label::Name, operand::Operand, variable::Variable};
 use std::fmt::Display;
 
+pub mod component;
 pub mod control;
 pub mod generator;
 pub mod label;

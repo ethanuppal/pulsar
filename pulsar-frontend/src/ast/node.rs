@@ -22,7 +22,9 @@ pub trait NodeInterface: Sized + SpanProvider {
 
     /// Constructs a new AST node with the given `value` that ranges from
     /// `start_token` to `end_token`.
-    fn new(value: Self::V, start_token: Token, end_token: Token) -> Self {
+    fn new(
+        value: Self::V, start_token: Handle<Token>, end_token: Handle<Token>
+    ) -> Self {
         Self::new_with_attributes(
             value,
             start_token,
@@ -34,15 +36,15 @@ pub trait NodeInterface: Sized + SpanProvider {
     /// Constructs a new AST node with the given `value` and `attributes` that
     /// ranges from `start_token` to `end_token`.
     fn new_with_attributes(
-        value: Self::V, start_token: Token, end_token: Token,
+        value: Self::V, start_token: Handle<Token>, end_token: Handle<Token>,
         attributes: Attributes
     ) -> Self;
 
     /// The first token in this node.
-    fn start_token(&self) -> &Token;
+    fn start_token(&self) -> Handle<Token>;
 
     /// The last token in this node.
-    fn end_token(&self) -> &Token;
+    fn end_token(&self) -> Handle<Token>;
 
     /// Whether this node has the attribute `attr`.
     fn has_attribute(&self, attr: Attribute) -> bool;
@@ -55,8 +57,8 @@ pub trait NodeInterface: Sized + SpanProvider {
 pub struct Node<V, T> {
     pub value: V,
     attributes: Attributes,
-    start_token: Token,
-    end_token: Token,
+    start_token: Handle<Token>,
+    end_token: Handle<Token>,
     metadata: PhantomData<T>
 }
 
@@ -65,7 +67,8 @@ impl<V, T> NodeInterface for Node<V, T> {
     type T = T;
 
     fn new_with_attributes(
-        value: V, start_token: Token, end_token: Token, attributes: Attributes
+        value: V, start_token: Handle<Token>, end_token: Handle<Token>,
+        attributes: Attributes
     ) -> Self {
         Self {
             value,
@@ -76,12 +79,12 @@ impl<V, T> NodeInterface for Node<V, T> {
         }
     }
 
-    fn start_token(&self) -> &Token {
-        &self.start_token
+    fn start_token(&self) -> Handle<Token> {
+        self.start_token
     }
 
-    fn end_token(&self) -> &Token {
-        &self.end_token
+    fn end_token(&self) -> Handle<Token> {
+        self.end_token
     }
 
     fn has_attribute(&self, attr: Attribute) -> bool {
@@ -140,7 +143,8 @@ pub trait AsNodePool<N: NodeInterface>: AsPool<N, N::T> {
     #[allow(clippy::new_ret_no_self)]
     #[allow(clippy::wrong_self_convention)]
     fn new(
-        &mut self, value: N::V, start_token: Token, end_token: Token
+        &mut self, value: N::V, start_token: Handle<Token>,
+        end_token: Handle<Token>
     ) -> Handle<N> {
         self.new_with_attributes(
             value,
@@ -151,8 +155,8 @@ pub trait AsNodePool<N: NodeInterface>: AsPool<N, N::T> {
     }
 
     fn new_with_attributes(
-        &mut self, value: N::V, start_token: Token, end_token: Token,
-        attributes: Attributes
+        &mut self, value: N::V, start_token: Handle<Token>,
+        end_token: Handle<Token>, attributes: Attributes
     ) -> Handle<N> {
         self.add(N::new_with_attributes(
             value,
@@ -163,7 +167,8 @@ pub trait AsNodePool<N: NodeInterface>: AsPool<N, N::T> {
     }
 
     fn generate(
-        &mut self, value: N::V, start_token: Token, end_token: Token
+        &mut self, value: N::V, start_token: Handle<Token>,
+        end_token: Handle<Token>
     ) -> Handle<N> {
         self.new_with_attributes(
             value,

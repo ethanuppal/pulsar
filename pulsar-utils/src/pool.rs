@@ -9,8 +9,9 @@ use std::{
     hash::Hash,
     io,
     marker::PhantomData,
-    mem,
-    ops::{Deref, DerefMut}
+    mem::{self, ManuallyDrop},
+    ops::{Deref, DerefMut},
+    ptr
 };
 
 /// 64MB.
@@ -87,8 +88,25 @@ impl<T> From<*mut T> for Handle<T> {
     }
 }
 
+union MMapArenaStore {
+    mmap: ManuallyDrop<MmapMut>,
+    ignore: ()
+}
+
+impl MMapArenaStore {
+    fn none() -> Self {
+        Self { ignore: () }
+    }
+
+    fn from(mmap: MmapMut) -> Self {
+        Self {
+            mmap: ManuallyDrop::new(mmap)
+        }
+    }
+}
+
 struct MMapArena<T> {
-    start: MmapMut,
+    store: MMapArenaStore,
     offset: usize,
     generic: PhantomData<T>
 }
@@ -96,31 +114,50 @@ struct MMapArena<T> {
 impl<T> MMapArena<T> {
     fn new(size: usize) -> io::Result<Self> {
         Ok(Self {
-            start: MmapMut::map_anon(size)?,
+            store: if mem::size_of::<T>() == 0 {
+                MMapArenaStore::none()
+            } else {
+                MMapArenaStore::from(MmapMut::map_anon(size)?)
+            },
             offset: 0,
             generic: PhantomData
         })
     }
 
     unsafe fn alloc(&mut self) -> *mut T {
-        if self.offset + mem::size_of::<T>() > self.start.len() {
-            panic!("Arena memory exhausted");
+        if mem::size_of::<T>() == 0 {
+            ptr::null_mut()
+        } else {
+            let mmap = &mut self.store.mmap;
+            if self.offset + mem::size_of::<T>() > mmap.len() {
+                panic!("Arena memory exhausted");
+            }
+            let result = mmap.as_mut_ptr().add(self.offset);
+            self.offset += mem::size_of::<T>();
+            result as *mut T
         }
-        let result = self.start.as_mut_ptr().add(self.offset);
-        self.offset += mem::size_of::<T>();
-        result as *mut T
     }
 
     unsafe fn offset_of(&self, pointer: *mut T) -> usize {
-        (pointer as *const u8).offset_from(self.start.as_ptr()) as usize
+        (pointer as *const u8).offset_from(self.store.mmap.as_ptr()) as usize
     }
 
     unsafe fn at_offset_ref(&self, offset: usize) -> *const T {
-        self.start.as_ptr().add(offset) as *mut T
+        self.store.mmap.as_ptr().add(offset) as *mut T
     }
 
     unsafe fn at_offset_mut(&mut self, offset: usize) -> *mut T {
-        self.start.as_mut_ptr().add(offset) as *mut T
+        let mmap = &mut self.store.mmap;
+        mmap.as_mut_ptr().add(offset) as *mut T
+    }
+
+    fn as_slice(&mut self) -> (*mut T, usize) {
+        unsafe {
+            (
+                self.store.mmap.as_ptr() as *mut T,
+                self.offset / mem::size_of::<T>()
+            )
+        }
     }
 }
 
@@ -172,13 +209,13 @@ impl<Value, Metadata> Pool<Value, Metadata> {
 /// Can be used as a memory pool for pairing `Value`s with `Metadata`. See
 /// [`Pool`].
 pub trait AsPool<Value, Metadata>: Sized {
-    fn base_ref(&self) -> &Pool<Value, Metadata>;
-    fn base_mut(&mut self) -> &mut Pool<Value, Metadata>;
+    fn as_pool_ref(&self) -> &Pool<Value, Metadata>;
+    fn as_pool_mut(&mut self) -> &mut Pool<Value, Metadata>;
 
     /// Adds `value` to the pool at the returned handle with uninitialized
     /// metadata.`
     fn add(&mut self, value: Value) -> Handle<Value> {
-        self.base_mut().add(value)
+        self.as_pool_mut().add(value)
     }
 
     fn duplicate(&mut self, handle: Handle<Value>) -> Handle<Value>
@@ -198,20 +235,88 @@ pub trait AsPool<Value, Metadata>: Sized {
     ) -> &'a Metadata
     where
         Value: 'a {
-        self.base_ref().get_metadata(handle)
+        self.as_pool_ref().get_metadata(handle)
     }
 
     fn set_metadata(&mut self, handle: Handle<Value>, ty: Metadata) {
-        self.base_mut().set_metadata(handle, ty);
+        self.as_pool_mut().set_metadata(handle, ty);
     }
 }
 
 impl<Value, Metadata> AsPool<Value, Metadata> for Pool<Value, Metadata> {
-    fn base_ref(&self) -> &Pool<Value, Metadata> {
+    fn as_pool_ref(&self) -> &Pool<Value, Metadata> {
         self
     }
 
-    fn base_mut(&mut self) -> &mut Pool<Value, Metadata> {
+    fn as_pool_mut(&mut self) -> &mut Pool<Value, Metadata> {
         self
+    }
+}
+
+impl<Value, Metadata> Pool<Value, Metadata> {
+    pub fn as_array(&mut self) -> HandleArray<Value> {
+        let (start, length) = self.contents.as_slice();
+        HandleArray { start, length }
+    }
+}
+
+pub struct HandleArray<T> {
+    start: *mut T,
+    length: usize
+}
+
+pub struct HandleArrayIterator<T> {
+    array: HandleArray<T>,
+    index: usize
+}
+
+impl<T> HandleArray<T> {
+    pub fn at(&self, index: usize) -> Handle<T> {
+        Handle::from(unsafe { self.start.add(index) })
+    }
+
+    pub fn len(&self) -> usize {
+        self.length
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+
+    pub fn last(&self) -> Option<Handle<T>> {
+        if self.is_empty() {
+            None
+        } else {
+            Some(self.at(self.len() - 1))
+        }
+    }
+}
+
+impl<T> Iterator for HandleArrayIterator<T> {
+    type Item = Handle<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index == self.array.len() {
+            None
+        } else {
+            Some(Handle::from(unsafe { self.array.start.add(self.index) }))
+        }
+    }
+}
+impl<T> ExactSizeIterator for HandleArrayIterator<T> {
+    fn len(&self) -> usize {
+        self.array.len()
+    }
+}
+
+impl<T> IntoIterator for HandleArray<T> {
+    type Item = Handle<T>;
+    type IntoIter = HandleArrayIterator<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        HandleArrayIterator {
+            array: self,
+            index: 0
+        }
     }
 }

@@ -31,6 +31,7 @@ pub enum TokenType {
     RightAngle,
     Dot,
     Dots,
+    Divider,
     Colon,
     Comma,
     Arrow,
@@ -67,6 +68,7 @@ impl Debug for TokenType {
                 Self::Colon => "colon",
                 Self::Dot => "dot",
                 Self::Dots => "dots",
+                Self::Divider => "divider",
                 Self::Comma => "comma",
                 Self::Arrow => "arrow",
                 Self::Newline => "newline"
@@ -97,6 +99,7 @@ impl fmt::Display for TokenType {
                 Self::Assign => "=",
                 Self::Dot => ".",
                 Self::Dots => "...",
+                Self::Divider => "---",
                 Self::Comma => ",",
                 Self::Arrow => "->",
                 _ => default.as_str()

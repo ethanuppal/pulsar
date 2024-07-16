@@ -6,7 +6,8 @@
 use super::token::{Token, TokenType};
 use pulsar_utils::{
     error::{ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
-    loc::{Loc, Source, Span}
+    loc::{Loc, Source, Span},
+    pool::{AsPool, Handle, HandleArray}
 };
 use std::rc::Rc;
 
@@ -21,9 +22,10 @@ use std::rc::Rc;
 ///     }
 /// }
 /// ```
-pub struct Lexer<'err> {
+pub struct Lexer<'err, 'pool, P: AsPool<Token, ()>> {
     loc: Loc,
     buffer: Vec<char>,
+    pool: &'pool mut P,
     error_manager: &'err mut ErrorManager
 }
 
@@ -41,10 +43,11 @@ macro_rules! with_unwind {
     };
 }
 
-impl<'err> Lexer<'err> {
+impl<'err, 'pool, P: AsPool<Token, ()>> Lexer<'err, 'pool, P> {
     /// Constructs a lexer for the given `source`.
     pub fn new(
-        source: Rc<Source>, error_manager: &'err mut ErrorManager
+        source: Rc<Source>, pool: &'pool mut P,
+        error_manager: &'err mut ErrorManager
     ) -> Self {
         Lexer {
             loc: Loc {
@@ -54,6 +57,7 @@ impl<'err> Lexer<'err> {
                 source: source.clone()
             },
             buffer: source.contents().chars().collect(),
+            pool,
             error_manager
         }
     }
@@ -98,21 +102,21 @@ impl<'err> Lexer<'err> {
 
     /// Consumes `length` characters and creates a token over those characters
     /// with type `ty`.
-    fn make_token(&mut self, ty: TokenType, length: usize) -> Token {
+    fn make_token(&mut self, ty: TokenType, length: usize) -> Handle<Token> {
         let loc_copy = self.loc.clone();
         self.advance_n(length);
         let pos_copy = loc_copy.pos as usize;
         let value: String =
             self.buffer[pos_copy..pos_copy + length].iter().collect();
-        Token {
+        self.pool.add(Token {
             ty,
             value,
             loc: loc_copy
-        }
+        })
     }
 
     /// Requires: `current().is_numeric()`.
-    fn make_number_token(&mut self) -> Token {
+    fn make_number_token(&mut self) -> Handle<Token> {
         let mut length = 0;
         with_unwind! { self in
             while !self.is_eof() && self.current().is_numeric() {
@@ -124,7 +128,7 @@ impl<'err> Lexer<'err> {
     }
 
     /// Requires: `current().is_alphabetic() || current() == '_'`.
-    fn make_identifier_token(&mut self) -> Token {
+    fn make_identifier_token(&mut self) -> Handle<Token> {
         let mut length = 0;
         with_unwind! { self in
             while !self.is_eof()
@@ -139,7 +143,7 @@ impl<'err> Lexer<'err> {
 }
 
 macro_rules! lex {
-    ($self:ident in $(| $token:expr => {$token_type:expr})* | _ $finally:block) => {
+    ($self:ident; $(| $token:expr => {$token_type:expr})* | _ $finally:block) => {
         $(
             {
                 let input_token_length = ($token).len();
@@ -154,19 +158,18 @@ macro_rules! lex {
     };
 }
 
-impl<'err> Iterator for Lexer<'err> {
-    type Item = Token;
-
-    fn next(&mut self) -> Option<Token> {
+impl<'err, 'pool, P: AsPool<Token, ()>> Lexer<'err, 'pool, P> {
+    fn next_token(&mut self) -> Option<Handle<Token>> {
         if self.is_eof() || self.error_manager.has_errors() {
             return None;
         }
 
         self.skip();
 
-        lex! { self in
+        lex! { self;
             | "+" => { TokenType::Plus }
             | "->" => { TokenType::Arrow }
+            | "---" => { TokenType::Divider }
             | "-" => { TokenType::Minus }
             | "*" => { TokenType::Times }
             | "(" => { TokenType::LeftPar }
@@ -203,6 +206,15 @@ impl<'err> Iterator for Lexer<'err> {
                     None
                 }
             }
+        }
+    }
+
+    pub fn lex(mut self) -> Option<HandleArray<Token>> {
+        while self.next_token().is_some() {}
+        if self.error_manager.has_errors() {
+            None
+        } else {
+            Some(self.pool.as_pool_mut().as_array())
         }
     }
 }

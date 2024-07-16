@@ -2,7 +2,8 @@
 // redistribute it and/or modify it under the terms of the GNU General Public
 // License as published by the Free Software Foundation, either version 3 of the
 // License, or (at your option) any later version.
-use pulsar_utils::id::{Gen, Id};
+
+use pulsar_utils::id::Id;
 use std::fmt::Display;
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]

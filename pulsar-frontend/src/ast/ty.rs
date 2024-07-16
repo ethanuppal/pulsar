@@ -7,11 +7,10 @@ use super::{
     node::{AsNodePool, Node},
     pretty_print::PrettyPrint
 };
-use core::fmt;
 use inform::fmt::IndentFormatter;
 use pulsar_utils::{id::Id, pool::Handle};
 use std::{
-    cmp,
+    cmp, fmt,
     fmt::{Display, Write}
 };
 

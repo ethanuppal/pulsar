@@ -8,70 +8,30 @@ use super::{
     ty::Type
 };
 use crate::token::Token;
+use inform::fmt::IndentFormatter;
 use pulsar_utils::pool::Handle;
-use std::fmt::{Display, Write};
+use std::fmt::{self, Display, Write};
 
 pub type Param = (Token, Handle<Type>);
 
 #[derive(Clone)]
 pub enum StmtValue {
-    Function {
-        name: Token,
-        params: Vec<Param>,
-        open_paren: Token,
-        ret: Handle<Type>,
-        close_paren: Token,
-        body: Vec<Handle<Stmt>>
-    },
-    LetBinding {
-        name: Token,
+    Let {
+        name: Handle<Token>,
         hint: Option<Handle<Type>>,
         value: Handle<Expr>
     },
-    Return {
-        ret_token: Token,
-        value: Option<Handle<Expr>>
-    }
+    Assign(Handle<Expr>, Handle<Token>, Handle<Expr>),
+    Divider(Handle<Token>)
 }
 
 pub type Stmt = Node<StmtValue, StmtType>;
 
 impl PrettyPrint for Stmt {
-    fn pretty_print(
-        &self, f: &mut inform::fmt::IndentFormatter<'_, '_>
-    ) -> core::fmt::Result {
+    fn pretty_print(&self, f: &mut IndentFormatter<'_, '_>) -> fmt::Result {
         match self.value {
-            StmtValue::Function {
-                ref name,
-                open_paren: _,
-                ref params,
-                close_paren: _,
-                ret,
-                ref body
-            } => {
-                let insert_newline = if body.is_empty() { "" } else { "\n" };
-                writeln!(
-                    f,
-                    "func {}({}) -> {} {{{}",
-                    name.value,
-                    params
-                        .iter()
-                        .map(|(name, ty)| format!("{}: {}", name.value, ty))
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    ret,
-                    insert_newline,
-                )?;
-                f.increase_indent();
-                for node in body {
-                    node.pretty_print(f)?;
-                    writeln!(f)?
-                }
-                f.decrease_indent();
-                write!(f, "{}}}", insert_newline)?;
-            }
-            StmtValue::LetBinding {
-                ref name,
+            StmtValue::Let {
+                name,
                 hint: hint_opt,
                 value
             } => {
@@ -80,19 +40,13 @@ impl PrettyPrint for Stmt {
                 } else {
                     "".into()
                 };
-                write!(f, "let {}{} = {}", name.value, hint_str, value)?;
+                write!(f, "let {}{} = {}", name.value, hint_str, value)
             }
-            StmtValue::Return {
-                ret_token: _,
-                value: value_opt
-            } => {
-                write!(f, "return")?;
-                if let Some(value) = value_opt {
-                    write!(f, " {}", value)?;
-                }
+            StmtValue::Assign(lhs, equals, rhs) => {
+                write!(f, "{} {} {}", lhs, equals.value, rhs)
             }
+            StmtValue::Divider(_) => write!(f, "---")
         }
-        Ok(())
     }
 }
 

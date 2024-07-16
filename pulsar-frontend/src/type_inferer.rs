@@ -5,7 +5,7 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use super::token::{Token, TokenType};
+use super::token::Token;
 use crate::{
     ast::{
         expr::{Expr, ExprValue},
@@ -22,16 +22,11 @@ use pulsar_utils::{
     environment::Environment,
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
     id::Gen,
-    loc::Span,
     pool::{AsPool, Handle}
 };
-use std::{
-    collections::{HashMap, HashSet},
-    iter::zip,
-    mem
-};
+use std::{iter::zip, mem};
 
-struct UnificationConstraint<T> {
+pub struct UnificationConstraint<T> {
     expected: Handle<T>,
     actual: Handle<T>,
     source: Option<Handle<Self>>
@@ -67,8 +62,8 @@ impl<T> UnificationConstraint<T> {
     }
 }
 
-type TypeConstraint = UnificationConstraint<Type>;
-type LiquidTypeConstraint = UnificationConstraint<LiquidType>;
+pub type TypeConstraint = UnificationConstraint<Type>;
+pub type LiquidTypeConstraint = UnificationConstraint<LiquidType>;
 
 pub trait AsInferencePool:
     AsASTPool + AsPool<TypeConstraint, ()> + AsPool<LiquidTypeConstraint, ()> {
@@ -308,9 +303,9 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
         if let StmtValue::Function {
             ref name,
             open_paren: _,
-            ref params,
+            inputs: ref params,
             ref close_paren,
-            ret,
+            outputs: ret,
             body: _
         } = stmt.value.clone()
         {
@@ -435,9 +430,9 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
         let stmt_type = match &stmt.value {
             StmtValue::Function {
                 name,
-                params,
+                inputs: params,
                 open_paren: _,
-                ret,
+                outputs: ret,
                 close_paren: _,
                 body
             } => {
@@ -468,7 +463,7 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                 }
                 return_type
             }
-            StmtValue::LetBinding { name, hint, value } => {
+            StmtValue::Let { name, hint, value } => {
                 let value_type = self.visit_expr(*value)?;
                 if let Some(hint) = hint {
                     self.new_constraint(*hint, value_type);
@@ -487,6 +482,7 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                     )
                 })
             }
+            StmtValue::Divider(_) => todo!()
         };
         self.pool.set_ty(stmt, stmt_type.clone());
         Some(stmt_type)

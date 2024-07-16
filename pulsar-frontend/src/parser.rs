@@ -9,6 +9,7 @@ use super::{
 };
 use crate::{
     ast::{
+        decl::{Decl, DeclValue, ParamVec},
         expr::{Expr, ExprValue},
         node::NodeInterface,
         stmt::{Stmt, StmtValue},
@@ -19,11 +20,11 @@ use crate::{
 };
 use pulsar_utils::{
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
-    pool::Handle
+    pool::{Handle, HandleArray}
 };
 use std::fmt::Display;
 
-enum Ctx {
+enum Where {
     In(String),
     Between(String),
     For(String),
@@ -32,7 +33,24 @@ enum Ctx {
     After(String)
 }
 
-impl Display for Ctx {
+macro_rules! ctx_constructor {
+    ($name:ident, $constr:ident) => {
+        pub fn $name<S: AsRef<str>>(value: S) -> Self {
+            Self::$constr(value.as_ref().to_string())
+        }
+    };
+}
+
+impl Where {
+    ctx_constructor!(in_, In);
+    ctx_constructor!(between, Between);
+    ctx_constructor!(for_, For);
+    ctx_constructor!(begin, Begin);
+    ctx_constructor!(end, End);
+    ctx_constructor!(after, After);
+}
+
+impl Display for Where {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             Self::In(loc) => format!("in {}", loc),
@@ -48,7 +66,7 @@ impl Display for Ctx {
 
 pub struct Parser<'ast, 'err, P: AsASTPool> {
     pos: usize,
-    buffer: Vec<Token>,
+    buffer: HandleArray<Token>,
     ast_pool: &'ast mut P,
     error_manager: &'err mut ErrorManager
 }
@@ -56,7 +74,7 @@ pub struct Parser<'ast, 'err, P: AsASTPool> {
 impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     /// Constructs a parser for the given token buffer `buffer`.
     pub fn new(
-        buffer: Vec<Token>, ast_pool: &'ast mut P,
+        buffer: HandleArray<Token>, ast_pool: &'ast mut P,
         error_manager: &'err mut ErrorManager
     ) -> Self {
         Self {
@@ -71,15 +89,15 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         self.pos == self.buffer.len()
     }
 
-    fn previous(&self) -> &Token {
-        &self.buffer[self.pos - 1]
+    fn previous(&self) -> Handle<Token> {
+        self.buffer.at(self.pos - 1)
     }
 
-    fn current(&self) -> &Token {
-        &self.buffer[self.pos]
+    fn current(&self) -> Handle<Token> {
+        self.buffer.at(self.pos)
     }
 
-    fn current_opt(&self) -> Option<&Token> {
+    fn current_opt(&self) -> Option<Handle<Token>> {
         if self.is_eof() {
             None
         } else {
@@ -100,7 +118,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     fn next_is(&self, ty: TokenType) -> bool {
         if self.pos + 1 < self.buffer.len() {
-            self.buffer[self.pos + 1].ty == ty
+            self.buffer.at(self.pos + 1).ty == ty
         } else {
             false
         }
@@ -110,8 +128,8 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         self.pos += 1;
     }
 
-    fn take(&mut self) -> Token {
-        let result = self.current().clone();
+    fn take(&mut self) -> Handle<Token> {
+        let result = self.current();
         self.advance();
         result
     }
@@ -135,14 +153,16 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     /// Returns the next token in the stream if it is of type `token_type` and
     /// reports an error otherwise, returning `None`.
-    fn expect(&mut self, token_type: TokenType, context: Ctx) -> Option<Token> {
+    fn expect(
+        &mut self, token_type: TokenType, context: Where
+    ) -> Option<Handle<Token>> {
         if self.is_eof() {
             self.report_unexpected_eof(context);
             None
         } else if self.current().ty != token_type {
             self.report_expected_token(
                 token_type,
-                &self.current().clone(),
+                self.current(),
                 &context.to_string()
             );
             None
@@ -155,7 +175,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     /// parsing context `context`.
     ///
     /// Requires: `!buffer.is_empty()`.
-    fn report_unexpected_eof(&mut self, context: Ctx) {
+    fn report_unexpected_eof(&mut self, context: Where) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
@@ -171,7 +191,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     /// diverges from the expected type `expected_ty` in the parsing context
     /// `context`.
     fn report_expected_token(
-        &mut self, expected_ty: TokenType, actual: &Token, context: &str
+        &mut self, expected_ty: TokenType, actual: Handle<Token>, context: &str
     ) {
         self.report(
             ErrorBuilder::new()
@@ -187,7 +207,8 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     /// [Reports](Parser::report): See [`Parser::report_expected_token`].
     fn report_expected_tokens(
-        &mut self, expected_tys: &[TokenType], actual: &Token, context: Ctx
+        &mut self, expected_tys: &[TokenType], actual: Handle<Token>,
+        context: Where
     ) {
         self.report(
             ErrorBuilder::new()
@@ -211,7 +232,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     /// Constructs a secondary-style error that refers back to a previous token
     /// `refback` with additional explanation `explain`.
-    fn report_refback(&mut self, refback: &Token, explain: String) {
+    fn report_refback(&mut self, refback: Handle<Token>, explain: String) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Secondary)
@@ -225,7 +246,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     /// [Reports](Parser::report): A construct (marked by `token`) is found at
     /// top level that should not be. See [`Parser::report_not_top_level`].
-    fn report_top_level(&mut self, token: &Token) {
+    fn report_invalid_top_level(&mut self, token: Handle<Token>) {
         self.report(ErrorBuilder::new()
             .of_style(Style::Primary)
             .at_level(Level::Error)
@@ -241,8 +262,8 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     /// [Reports](Parser::report): A construct (marked by `token`) that belongs
     /// only at top level is found further nested. See
-    /// [`Parser::report_top_level`].
-    fn report_not_top_level(&mut self, token: &Token) {
+    /// [`Parser::report_invalid_top_level`].
+    fn report_unexpected_top_level(&mut self, token: Handle<Token>) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
@@ -257,7 +278,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     /// [Reports](Parser::report): `token` represents an invalid start to a
     /// statement.
-    fn report_invalid_token(&mut self, token: &Token) {
+    fn report_invalid_token(&mut self, token: Handle<Token>) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
@@ -271,7 +292,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     /// [Reports](Parser::report): `token` was used incorrectly as a `usage`
     /// operator when it is not.
-    fn report_invalid_operator(&mut self, token: &Token, usage: &str) {
+    fn report_invalid_operator(&mut self, token: Handle<Token>, usage: &str) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
@@ -300,7 +321,7 @@ macro_rules! expect_n {
         } else if ![$($token_type),*].contains(&$self.current().ty) {
             $self.report_expected_tokens(
                 &[$($token_type),*],
-                &$self.current().clone(),
+                $self.current(),
                 $context
             );
             None
@@ -312,16 +333,23 @@ macro_rules! expect_n {
 
 /// `contained_in! { self; left_type, name, right_type; ... }` computes an
 /// expression or series of statements followed by an expression (`...`)
-/// surrounded by tokens of type `left_type` and `right_type`.
+/// surrounded by tokens of type `left_type` and `right_type`. `name` is a
+/// string that is used in error messages to describe the syntactic construct
+/// for when the containing tokens are invalid.
+///
+/// If the `...` body returns `value`, then `contained_in!` returns
+/// `Some((left_token, value, right_token))`; otherwise, it returns `None`. The
+/// `...` body may use `?` try syntax. Here, `left_token` corresponds to
+/// `left_type` and likewise for `right_token`.
 macro_rules! contained_in {
     ($self:ident; $open_type:expr, $loc_ctx:expr, $close_type:expr; $($action:tt)*) => {
         {
-            let open_token = $self.expect($open_type, Ctx::Begin($loc_ctx.into()))?;
+            let open_token = $self.expect($open_type, Where::begin($loc_ctx))?;
             let result = {$($action)*};
-            let close_token = $self.expect($close_type, Ctx::End($loc_ctx.into()));
+            let close_token = $self.expect($close_type, Where::end($loc_ctx));
             if close_token.is_none() {
                 $self.report_refback(
-                    &open_token,
+                    open_token,
                     format!("{} opened here", $open_type)
                 );
                 return None;
@@ -332,8 +360,8 @@ macro_rules! contained_in {
 }
 
 /// Constructs a function returning `Option<N>` for some [`NodeInterface`] `N`
-/// given a function returning `Option<N::V>`, assuming that [`AST`] implements
-/// [`NodePool`] for `N`. For example. `parse_full_node!(self.foo())`.
+/// given a function returning `Option<N::V>`, assuming that the parser's pool
+/// is [`AsNodePool<N>`]. For example. `parse_full_node!(self.foo())`.
 macro_rules! parse_full_node {
     ($self:ident.$method:ident($($arg:expr),*)) => {{
         let start_token = $self.current().clone();
@@ -353,7 +381,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     /// Advances until EOF, or when specified by `current_exit`, or when a
     /// top-level construct is potentially found.
     fn synchronize(
-        &mut self, custom_exit: fn(&Token) -> bool, description: String
+        &mut self, custom_exit: fn(Handle<Token>) -> bool, description: String
     ) {
         if !self.is_eof() {
             self.report(
@@ -382,10 +410,12 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         self.synchronize(|_| false, "Seeking top-level construct".into());
     }
 
-    fn parse_primary_type(&mut self, name: Option<&str>) -> Option<TypeValue> {
+    fn parse_primary_type<S: AsRef<str>>(
+        &mut self, name: Option<S>
+    ) -> Option<TypeValue> {
         let context = match name {
-            Some(name) => Ctx::In(name.into()),
-            None => Ctx::For("primary type".into())
+            Some(name) => Where::in_(name),
+            None => Where::for_("primary type")
         };
         let type_token = self.expect(TokenType::Identifier, context)?;
         Some(match type_token.value.as_str() {
@@ -398,7 +428,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     fn parse_array_type(&mut self, inner: Handle<Type>) -> Option<TypeValue> {
         let (_, size_token, close_token) = contained_in! { self;
             TokenType::LeftBracket, "array type", TokenType::RightBracket;
-            self.expect(TokenType::Integer, Ctx::For("array size".into()))?
+            self.expect(TokenType::Integer, Where::For("array size".into()))?
         }?;
 
         let size = size_token
@@ -451,7 +481,9 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     fn parse_type(&mut self, name: Option<&str>) -> Option<TypeValue> {
         if self.is_eof() {
-            self.report_unexpected_eof(Ctx::In(name.unwrap_or("type").into()));
+            self.report_unexpected_eof(Where::in_::<&str>(
+                name.unwrap_or("type")
+            ));
             return None;
         }
         let primary = parse_full_node!(self.parse_primary_type(name))?;
@@ -473,7 +505,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 if i > 0 {
                     self.expect(
                         TokenType::Comma,
-                        Ctx::Between("array elements".into())
+                        Where::Between("array elements".into())
                     )?;
                     self.consume_ignored();
                 }
@@ -508,7 +540,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     fn parse_literal_expr_value(&mut self) -> Option<ExprValue> {
         let literal_token = expect_n! { self in
-            [TokenType::Integer, TokenType::Float, TokenType::Char, TokenType::LeftBracket, TokenType::Identifier] => Ctx::Begin("literal expression".into())
+            [TokenType::Integer, TokenType::Float, TokenType::Char, TokenType::LeftBracket, TokenType::Identifier] => Where::Begin("literal expression".into())
         }?;
         match literal_token.ty {
             TokenType::Integer => Some(ExprValue::ConstantInt(
@@ -529,7 +561,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         &mut self, prefix_op: Op
     ) -> Option<ExprValue> {
         if prefix_op.is_unary_prefix() {
-            self.report_invalid_operator(&self.current().clone(), "unary");
+            self.report_invalid_operator(self.current(), "unary");
             return None;
         }
 
@@ -550,11 +582,11 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             let op2 = self.expect(
                 postfix_bop.close_token_ty,
                 postfix_bop.name.map_or(
-                    Ctx::After(
+                    Where::After(
                         "second subexpression in postfix binary expression"
                             .into()
                     ),
-                    Ctx::In
+                    Where::In
                 )
             )?;
             let start_token = lhs.start_token().clone();
@@ -573,7 +605,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     fn parse_call_expr_value(&mut self) -> Option<ExprValue> {
         let name = self.expect(
             TokenType::Identifier,
-            Ctx::Begin("call expression".into())
+            Where::Begin("call expression".into())
         )?;
 
         let mut args = vec![];
@@ -582,7 +614,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             let mut i = 0;
             while !self.is_eof() && self.current().ty != TokenType::RightPar {
                 if i > 0 {
-                    self.expect(TokenType::Comma, Ctx::Between("arguments".into()))?;
+                    self.expect(TokenType::Comma, Where::Between("arguments".into()))?;
                     self.consume_ignored();
                 }
                 if self.is_at(TokenType::RightPar) {
@@ -606,7 +638,9 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     fn parse_primary_expr_value_aux(&mut self) -> Option<ExprValue> {
         if self.is_eof() {
-            self.report_unexpected_eof(Ctx::Begin("primary expression".into()));
+            self.report_unexpected_eof(Where::Begin(
+                "primary expression".into()
+            ));
             None
         } else if let Some(prefix_op) =
             self.current_op_opt().filter(|op| op.is_unary_prefix())
@@ -616,11 +650,11 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             let open_paren = self.take();
             let temp_wrapped = self.parse_expr()?;
             let expr_value = temp_wrapped.value.clone();
-            let closing_paren =
-                self.expect(TokenType::RightPar, Ctx::In("expression".into()));
+            let closing_paren = self
+                .expect(TokenType::RightPar, Where::In("expression".into()));
             if closing_paren.is_none() {
                 self.report_refback(
-                    &open_paren,
+                    open_paren,
                     "Parentheses opened here".into()
                 );
                 None
@@ -712,7 +746,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             if op.is_infix_binary() {
                 self.parse_infix_binary_expr(primary, -1)
             } else {
-                self.report_invalid_operator(&self.current().clone(), "binary");
+                self.report_invalid_operator(self.current(), "binary");
                 None
             }
         } else {
@@ -720,178 +754,69 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         }
     }
 
+    // ============================== STATEMENTS ===============================
+
     fn parse_let(&mut self) -> Option<StmtValue> {
-        self.expect(TokenType::Let, Ctx::Begin("let binding".into()))?;
+        self.expect(TokenType::Let, Where::begin("let binding"))?;
 
         let name = self.expect(
             TokenType::Identifier,
-            Ctx::For("name in let binding".into())
+            Where::for_("name in let binding")
         )?;
 
         let mut hint = None;
         if self.current().ty == TokenType::Colon {
             self.advance();
             hint = Some(parse_full_node!(
-                self.parse_type("let binding type hint".into())
+                self.parse_type(Some("let binding type hint"))
             )?);
         }
 
         self.expect(
             TokenType::Assign,
-            Ctx::After("name in let binding".into())
+            Where::After("name in let binding".into())
         )?;
 
         let value = self.parse_expr()?;
 
-        Some(StmtValue::LetBinding { name, hint, value })
-    }
-
-    fn parse_return(&mut self) -> Option<StmtValue> {
-        let token = self
-            .expect(TokenType::Return, Ctx::Begin("return statement".into()))?;
-
-        let value = if self.is_at(TokenType::Newline) {
-            None
-        } else {
-            Some(self.parse_expr()?)
-        };
-
-        Some(StmtValue::Return {
-            ret_token: token,
-            value
-        })
+        Some(StmtValue::Let { name, hint, value })
     }
 
     /// Parses a brace-enclosed list of statements, e.g., `parse_block("function
     /// body")`.
-    fn parse_block(&mut self, name: &str) -> Option<Vec<Handle<Stmt>>> {
-        self.consume_ignored();
-
-        let mut nodes = vec![];
-        let mut block_failed = false;
-
+    fn parse_block(
+        &mut self, name: &str
+    ) -> Option<(Handle<Token>, Vec<Handle<Stmt>>, Handle<Token>)> {
         contained_in! { self;
             TokenType::LeftBrace, name, TokenType::RightBrace;
+
+            let mut nodes = vec![];
+
             self.consume_ignored();
             while !self.is_eof() && self.current().ty != TokenType::RightBrace {
-                let stmt_opt = self.parse_stmt(false);
+                let stmt_opt = self.parse_stmt();
                 if let Some(stmt) = stmt_opt {
                     nodes.push(stmt);
                 } else {
-                    block_failed = true;
                     self.synchronize(|token| token.ty == TokenType::RightBrace, format!("Seeking end of {}", name));
-                    break;
+                    return None;
                 }
             }
-        };
 
-        if block_failed {
-            None
-        } else {
-            Some(nodes)
+            nodes
         }
-    }
-
-    fn parse_func(&mut self) -> Option<StmtValue> {
-        let func = self.expect(
-            TokenType::Func,
-            Ctx::Begin("function declaration".into())
-        )?;
-
-        let name = self
-            .expect(TokenType::Identifier, Ctx::For("function name".into()))?;
-
-        let open_paren = self.expect(
-            TokenType::LeftPar,
-            Ctx::Begin(format!("function parameters in `{}`", name.value))
-        )?;
-
-        self.consume_ignored();
-
-        let mut i = 0;
-        let mut params = vec![];
-        while !self.is_eof() && self.current().ty != TokenType::RightPar {
-            if i > 0 {
-                self.expect(
-                    TokenType::Comma,
-                    Ctx::Between(format!(
-                        "function parameters in `{}`",
-                        name.value
-                    ))
-                )?;
-                self.consume_ignored();
-            }
-            if self.is_at(TokenType::RightPar) {
-                break;
-            }
-
-            let name = self.expect(
-                TokenType::Identifier,
-                Ctx::For(format!("parameter name in `{}`", name.value))
-            )?;
-            self.expect(
-                TokenType::Colon,
-                Ctx::After(format!("parameter name in `{}`", name.value))
-            )?;
-            let ty =
-                parse_full_node!(self.parse_type("parameter type".into()))?;
-            params.push((name, ty));
-
-            self.consume_ignored();
-            i += 1
-        }
-
-        let close_paren = self.expect(
-            TokenType::RightPar,
-            Ctx::End("function parameters".into())
-        );
-        if close_paren.is_none() {
-            self.report_refback(&open_paren, "Parentheses opened here".into());
-            return None;
-        }
-
-        let mut ret: Handle<Type> =
-            self.ast_pool
-                .generate(TypeValue::Unit, func.clone(), func.clone());
-        if self.is_at(TokenType::Arrow) {
-            self.advance();
-            ret = parse_full_node!(
-                self.parse_type("function return type".into())
-            )?;
-        }
-
-        let mut body = self.parse_block("function body")?;
-        if matches!(ret.value, TypeValue::Unit) {
-            body.push(self.ast_pool.generate(
-                StmtValue::Return {
-                    ret_token: name.clone(),
-                    value: None
-                },
-                name.clone(),
-                name.clone()
-            ));
-        }
-
-        Some(StmtValue::Function {
-            name: name.clone(),
-            open_paren,
-            params,
-            close_paren: close_paren.unwrap(),
-            ret,
-            body
-        })
     }
 
     /// Requires: a statement must have been parsed, and as consequence at least
     /// one token has already been encountered.
-    fn end_stmt(&mut self) -> Option<Token> {
+    fn end_stmt(&mut self) -> Option<Handle<Token>> {
         let ending_token = self.previous().clone();
 
         if !self.is_eof() && self.current().ty == TokenType::RightBrace {
             return Some(ending_token);
         }
 
-        self.expect(TokenType::Newline, Ctx::After("statement".into()))?;
+        self.expect(TokenType::Newline, Where::after("statement"))?;
 
         self.consume_ignored();
 
@@ -899,67 +824,152 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     }
 
     /// Requires: `!self.is_eof()`.
-    fn parse_stmt_value(&mut self, top_level: bool) -> Option<StmtValue> {
+    fn parse_stmt_value(&mut self) -> Option<StmtValue> {
         self.consume_ignored();
         if self.is_eof() || self.error_manager.is_full() {
             return None;
         }
 
-        let current_ty = self.current().ty;
-        match (current_ty, top_level) {
-            (TokenType::Func, true) => {
-                if let Some(func) = self.parse_func() {
-                    return Some(func);
-                }
-            }
-            (TokenType::Let, false) => {
-                if let Some(let_stmt) = self.parse_let() {
-                    return Some(let_stmt);
-                }
-            }
-            (TokenType::Return, false) => {
-                if let Some(return_stmt) = self.parse_return() {
-                    return Some(return_stmt);
-                }
-            }
-            _ => {
-                if current_ty.begins_top_level_construct() && !top_level {
-                    self.report_not_top_level(&self.current().clone());
-                } else if !current_ty.begins_top_level_construct() && top_level
-                {
-                    self.report_top_level(&self.current().clone());
+        match self.current().ty {
+            TokenType::Let => self.parse_let(),
+            TokenType::Divider => Some(StmtValue::Divider(self.take())),
+            other => {
+                if other.begins_top_level_construct() {
+                    self.report_unexpected_top_level(self.current());
                 } else {
-                    self.report_invalid_token(&self.current().clone());
+                    self.report_invalid_token(self.current());
                 }
-                self.advance();
+                self.advance(); // to prevent infinite loop
+                None
             }
-        }
-
-        if top_level {
-            self.attempt_restore_to_top_level();
-            self.parse_stmt_value(true)
-        } else {
-            None
         }
     }
 
-    fn parse_stmt(&mut self, top_level: bool) -> Option<Handle<Stmt>> {
+    fn parse_stmt(&mut self) -> Option<Handle<Stmt>> {
         if self.is_eof() {
             return None;
         }
-        let node = parse_full_node!(self.parse_stmt_value(top_level))?;
+        let node = parse_full_node!(self.parse_stmt_value())?;
         if self.end_stmt().is_none() {
             self.advance();
             return None;
         }
         Some(node)
     }
+
+    // ============================= DECLARATIONS ==============================
+
+    fn parse_params<S: AsRef<str>, T: AsRef<str>>(
+        &mut self, source: S, kind: T
+    ) -> Option<(Handle<Token>, ParamVec, Handle<Token>)> {
+        contained_in! { self;
+            TokenType::LeftPar, source.as_ref(), TokenType::RightPar;
+            self.consume_ignored();
+
+            let mut i = 0;
+            let mut params = ParamVec::new();
+            while !self.is_eof() && self.current().ty != TokenType::RightPar {
+                if i > 0 {
+                    self.expect(
+                        TokenType::Comma,
+                        Where::between(format!(
+                            "{} parameters in `{}`",
+                            kind.as_ref(),
+                            source.as_ref()
+                        ))
+                    )?;
+                    self.consume_ignored();
+                }
+                if self.is_at(TokenType::RightPar) {
+                    break;
+                }
+
+                let name = self.expect(
+                    TokenType::Identifier,
+                    Where::For(format!("{} parameter name in `{}`", kind.as_ref(), source.as_ref()))
+                )?;
+                self.expect(
+                    TokenType::Colon,
+                    Where::After(format!("{} parameter name in `{}`", kind.as_ref(), source.as_ref()))
+                )?;
+                let ty =
+                    parse_full_node!(self.parse_type(Some(&format!("{} parameter type", kind.as_ref()))))?;
+                params.push((name, ty));
+
+                self.consume_ignored();
+                i += 1
+            }
+
+            params
+        }
+    }
+
+    fn parse_func(&mut self) -> Option<DeclValue> {
+        let func = self.expect(
+            TokenType::Func,
+            Where::Begin("function declaration".into())
+        )?;
+
+        let name = self.expect(
+            TokenType::Identifier,
+            Where::For("function name".into())
+        )?;
+
+        let (_, inputs, _) = self.parse_params(&name.value, "input")?;
+
+        let outputs = if self.is_at(TokenType::Arrow) {
+            self.advance();
+            let (_, outputs, _) = self.parse_params(&name.value, "output")?;
+            outputs
+        } else {
+            ParamVec::new()
+        };
+
+        let (_open_brace, body, _close_brace) =
+            self.parse_block("function body")?;
+
+        Some(DeclValue::Function {
+            func,
+            name,
+            inputs,
+            outputs,
+            body
+        })
+    }
+
+    /// Requires: `!self.is_eof()`.
+    fn parse_decl_value(&mut self) -> Option<DeclValue> {
+        self.consume_ignored();
+        if self.is_eof() || self.error_manager.is_full() {
+            return None;
+        }
+
+        match self.current().ty {
+            TokenType::Func => self.parse_func(),
+            _ => {
+                self.report_invalid_top_level(self.current());
+                None
+            }
+        }
+    }
+
+    fn parse_decl(&mut self) -> Option<Handle<Decl>> {
+        if self.is_eof() {
+            return None;
+        }
+        if let Some(decl) = parse_full_node!(self.parse_decl_value()) {
+            Some(decl)
+        } else {
+            self.attempt_restore_to_top_level();
+            self.parse_decl()
+        }
+    }
 }
 
 impl<'ast, 'err, P: AsASTPool> Iterator for Parser<'ast, 'err, P> {
-    type Item = Handle<Stmt>;
+    type Item = Handle<Decl>;
 
-    fn next(&mut self) -> Option<Handle<Stmt>> {
-        self.parse_stmt(true)
+    fn next(&mut self) -> Option<Handle<Decl>> {
+        self.parse_decl()
     }
 }
