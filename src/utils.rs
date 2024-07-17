@@ -15,6 +15,9 @@ pub trait OptionCheckError<T> {
 }
 
 impl<T> OptionCheckError<T> for Option<T> {
+    /// Unwraps this value into an `Ok(...)` if it's `Some(...)`, otherwise,
+    /// writes the error messages in `error_manager` to [`std::io::stdout()`]
+    /// and returns an `Err(...)`.
     fn check_errors(
         self, error_manager: &mut ErrorManager
     ) -> anyhow::Result<T> {
@@ -22,7 +25,9 @@ impl<T> OptionCheckError<T> for Option<T> {
             Ok(result)
         } else {
             if error_manager.has_errors() {
-                error_manager.consume_and_write(&mut stdout())?;
+                let mut buffer = Vec::new();
+                error_manager.consume_and_write(&mut buffer)?;
+                print!("{}", String::from_utf8_lossy(&buffer));
             }
             Err(anyhow!("Exiting due to errors"))
         }

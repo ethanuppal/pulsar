@@ -319,7 +319,10 @@ impl<T> Iterator for HandleArrayIterator<T> {
         if self.index == self.array.len() {
             None
         } else {
-            Some(Handle::from(unsafe { self.array.start.add(self.index) }))
+            let result =
+                Handle::from(unsafe { self.array.start.add(self.index) });
+            self.index += 1;
+            Some(result)
         }
     }
 }

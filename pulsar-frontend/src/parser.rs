@@ -25,17 +25,18 @@ use pulsar_utils::{
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
     pool::{Handle, HandleArray}
 };
-use std::{
-    cmp,
-    fmt::{self, Display}
-};
+use std::cmp;
 
 pub type Block = (Handle<Token>, Vec<Handle<Stmt>>, Handle<Token>);
 
+// TODO: fix some naming
+
+// please can I get rid of this
 #[derive(Default)]
 struct ParseErrorContext {
     loc: String,
-    fix: Option<String>
+    fix: Option<String>,
+    refback: Option<Error>
 }
 
 impl ParseErrorContext {
@@ -45,6 +46,11 @@ impl ParseErrorContext {
 
     pub fn fix<S: AsRef<str>>(mut self, msg: S) -> Self {
         self.fix = Some(msg.as_ref().to_string());
+        self
+    }
+
+    pub fn refback(mut self, error: Error) -> Self {
+        self.refback = Some(error);
         self
     }
 }
@@ -151,6 +157,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         self.pos == self.buffer.len()
     }
 
+    /// Requires: the parser has advanced by at least one token.
     fn previous(&self) -> Handle<Token> {
         self.buffer.at(self.pos - 1)
     }
@@ -244,13 +251,17 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 .maybe_fix(context.fix)
                 .build()
         );
+        if let Some(refback) = context.refback {
+            self.report(refback);
+        }
     }
 
     /// [Reports](Parser::report): The token type of the found token `actual`
     /// diverges from the expected type `expected_ty` in the parsing context
     /// `context`.
     fn report_expected_token(
-        &mut self, expected_ty: TokenType, actual: Handle<Token>, context: &str
+        &mut self, expected_ty: TokenType, actual: Handle<Token>,
+        context: ParseErrorContext
     ) {
         self.report(
             ErrorBuilder::new()
@@ -258,10 +269,17 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 .at_level(Level::Error)
                 .with_code(ErrorCode::UnexpectedToken)
                 .span(actual)
-                .message(format!("Expected '{:?}' {}", expected_ty, context))
+                .message(format!(
+                    "Expected '{:?}' {}",
+                    expected_ty, context.loc
+                ))
                 .explain(format!("Received '{:?}' here", actual.ty))
+                .maybe_fix(context.fix)
                 .build()
         );
+        if let Some(refback) = context.refback {
+            self.report(refback);
+        }
     }
 
     /// [Reports](Parser::report): See [`Parser::report_expected_token`].
@@ -282,11 +300,15 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                         .map(|ty| format!("'{:?}'", ty))
                         .collect::<Vec<String>>()
                         .join(", "),
-                    context
+                    context.loc
                 ))
                 .explain(format!("Received '{:?}' here", actual.ty))
+                .maybe_fix(context.fix)
                 .build()
         );
+        if let Some(refback) = context.refback {
+            self.report(refback);
+        }
     }
 
     /// Constructs a secondary-style error that refers back to a previous token
@@ -314,7 +336,6 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             .message(format!("Unexpected {:?} at top level", token.ty))
             .fix(
                 "Allowed constructs at top level include functions and imports"
-                    .into()
             )
             .build());
     }
@@ -329,8 +350,8 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 .at_level(Level::Error)
                 .with_code(ErrorCode::ConstructShouldBeTopLevel)
                 .span(token)
-                .message("Unexpected top-level construct".into())
-                .fix("Did you mean to place it at the top level?".into())
+                .message("Unexpected top-level construct")
+                .fix("Did you mean to place it at the top level?")
                 .build()
         );
     }
@@ -344,7 +365,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 .at_level(Level::Error)
                 .with_code(ErrorCode::InvalidTokenForStatement)
                 .span(token)
-                .message("Invalid token at the start of a statement".into())
+                .message("Invalid token at the start of a statement")
                 .build()
         );
     }
@@ -404,9 +425,9 @@ macro_rules! expect_n {
 macro_rules! contained_in {
     ($self:ident; $open_type:expr, $loc_ctx:expr, $close_type:expr; $($action:tt)*) => {
         {
-            let open_token = $self.expect($open_type, ParseErrorContext::begin($loc_ctx))?;
+            let open_token = $self.expect($open_type, ParseErrorContext::new().begin($loc_ctx))?;
             let result = {$($action)*};
-            let close_token = $self.expect($close_type, ParseErrorContext::end($loc_ctx));
+            let close_token = $self.expect($close_type, ParseErrorContext::new().end($loc_ctx));
             if close_token.is_none() {
                 $self.report_refback(
                     open_token,
@@ -442,8 +463,8 @@ impl TokenType {
 impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     /// Advances until EOF, or when specified by `current_exit`, or when a
     /// top-level construct is potentially found.
-    fn synchronize(
-        &mut self, custom_exit: fn(Handle<Token>) -> bool, description: String
+    fn synchronize<S: AsRef<str>>(
+        &mut self, custom_exit: fn(Handle<Token>) -> bool, description: S
     ) {
         if !self.is_eof() {
             self.report(
@@ -452,10 +473,8 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                     .at_level(Level::Info)
                     .with_code(ErrorCode::UnexpectedToken)
                     .span(self.current())
-                    .message(
-                        "Attempting to recover understanding of code".into()
-                    )
-                    .fix(description)
+                    .message("Attempting to recover understanding of code")
+                    .explain(description)
                     .build()
             );
         }
@@ -469,7 +488,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     /// Identical to [`Parser::synchronize`] but with no custom exit.
     fn attempt_restore_to_top_level(&mut self) {
-        self.synchronize(|_| false, "Seeking top-level construct".into());
+        self.synchronize(|_| false, "Seeking top-level construct");
     }
 
     fn parse_primary_type<S: AsRef<str>>(
@@ -479,8 +498,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             TokenType::Identifier,
             name.map_or(
                 ParseErrorContext::new().for_("primary type"),
-                ParseErrorContext::new(),
-                in_
+                |name| ParseErrorContext::new().in_(name)
             )
         )?;
         Some(match type_token.value.as_str() {
@@ -493,7 +511,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     fn parse_array_type(&mut self, inner: Handle<Type>) -> Option<TypeValue> {
         let (_, size_token, close_token) = contained_in! { self;
             TokenType::LeftBracket, "array type", TokenType::RightBracket;
-            self.expect(TokenType::Integer, ParseErrorContext::For("array size".into()))?
+            self.expect(TokenType::Integer, ParseErrorContext::new().for_("array size"))?
         }?;
 
         let size = size_token
@@ -509,7 +527,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                         .at_level(Level::Error)
                         .with_code(ErrorCode::MalformedType)
                         .span(size_token)
-                        .message("Array size cannot be negative".into())
+                        .message("Array size cannot be negative")
                         .build()
                 );
                 return None;
@@ -521,7 +539,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                         .at_level(Level::Warning)
                         .with_code(ErrorCode::MalformedType)
                         .span(size_token)
-                        .message("Array size is zero".into())
+                        .message("Array size is zero")
                         .build()
                 );
             }
@@ -550,9 +568,9 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     fn parse_type(&mut self, name: Option<&str>) -> Option<TypeValue> {
         if self.is_eof() {
-            self.report_unexpected_eof(ParseErrorContext::in_::<&str>(
-                name.unwrap_or("type")
-            ));
+            self.report_unexpected_eof(
+                ParseErrorContext::new().in_::<&str>(name.unwrap_or("type"))
+            );
             return None;
         }
         let primary = parse_full_node!(self.parse_primary_type(name))?;
@@ -576,7 +594,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 if i > 0 {
                     self.expect(
                         TokenType::Comma,
-                        ParseErrorContext::Between("array elements".into())
+                        ParseErrorContext::new().between("array elements")
                     )?;
                     self.consume_ignored();
                 }
@@ -598,7 +616,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 if let Some(element) = element_opt {
                     elements.push(element);
                 } else {
-                    self.synchronize(|token| token.ty == TokenType::RightBrace, "Seeking end of array literal".into());
+                    self.synchronize(|token| token.ty == TokenType::RightBrace, "Seeking end of array literal");
                     return None;
                 }
 
@@ -611,7 +629,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     fn parse_literal_expr_value(&mut self) -> Option<ExprValue> {
         let literal_token = expect_n! { self in
-            [TokenType::Integer, TokenType::Float, TokenType::Char, TokenType::LeftBracket, TokenType::Identifier] => ParseErrorContext::Begin("literal expression".into())
+            [TokenType::Integer, TokenType::Float, TokenType::Char, TokenType::LeftBracket, TokenType::Identifier] => ParseErrorContext::new().begin("literal expression")
         }?;
         match literal_token.ty {
             TokenType::Integer => Some(ExprValue::ConstantInt(
@@ -651,11 +669,10 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             let op2 = self.expect(
                 postfix_bop.close_token_ty,
                 postfix_bop.name.map_or(
-                    ParseErrorContext::After(
+                    ParseErrorContext::new().after(
                         "second subexpression in postfix binary expression"
-                            .into()
                     ),
-                    ParseErrorContext::In
+                    |name| ParseErrorContext::new().in_(name)
                 )
             )?;
             let start_token = lhs.start_token();
@@ -672,7 +689,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     fn parse_call_expr_value(&mut self) -> Option<ExprValue> {
         let name = self.expect(
             TokenType::Identifier,
-            ParseErrorContext::Begin("call expression".into())
+            ParseErrorContext::new().begin("call expression")
         )?;
 
         let mut args = vec![];
@@ -681,7 +698,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             let mut i = 0;
             while !self.is_eof() && self.current().ty != TokenType::RightPar {
                 if i > 0 {
-                    self.expect(TokenType::Comma, ParseErrorContext::Between("arguments".into()))?;
+                    self.expect(TokenType::Comma, ParseErrorContext::new().between("arguments"))?;
                     self.consume_ignored();
                 }
                 if self.is_at(TokenType::RightPar) {
@@ -692,7 +709,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 if let Some(arg) = arg_opt {
                     args.push(arg);
                 } else {
-                    self.synchronize(|token| token.ty == TokenType::RightPar, "Seeking end of call arguments".into());
+                    self.synchronize(|token| token.ty == TokenType::RightPar, "Seeking end of call arguments");
                     return None;
                 }
 
@@ -705,9 +722,9 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     fn parse_primary_expr_value_aux(&mut self) -> Option<ExprValue> {
         if self.is_eof() {
-            self.report_unexpected_eof(ParseErrorContext::Begin(
-                "primary expression".into()
-            ));
+            self.report_unexpected_eof(
+                ParseErrorContext::new().begin("primary expression")
+            );
             None
         } else if let Some(prefix_op) =
             self.current_op_opt().filter(|op| op.is_unary_prefix())
@@ -719,7 +736,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             let expr_value = temp_wrapped.value.clone();
             let closing_paren = self.expect(
                 TokenType::RightPar,
-                ParseErrorContext::In("expression".into())
+                ParseErrorContext::new().in_("expression")
             );
             if closing_paren.is_none() {
                 self.report_refback(
@@ -826,11 +843,14 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     // ============================== STATEMENTS ===============================
 
     fn parse_let(&mut self) -> Option<StmtValue> {
-        self.expect(TokenType::Let, ParseErrorContext::begin("let binding"))?;
+        self.expect(
+            TokenType::Let,
+            ParseErrorContext::new().begin("let binding")
+        )?;
 
         let name = self.expect(
             TokenType::Identifier,
-            ParseErrorContext::for_("name in let binding")
+            ParseErrorContext::new().for_("name in let binding")
         )?;
 
         let mut hint = None;
@@ -843,7 +863,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
         self.expect(
             TokenType::Assign,
-            ParseErrorContext::After("name in let binding".into())
+            ParseErrorContext::new().after("name in let binding")
         )?;
 
         let value = self.parse_expr()?;
@@ -856,7 +876,19 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     fn parse_assign(&mut self, lhs: Handle<Expr>) -> Option<StmtValue> {
         let assign = self.expect(
             TokenType::Assign,
-            ParseErrorContext::between("terms in assignment")
+            ParseErrorContext::new()
+                .between("terms in assignment")
+                .refback(
+                    ErrorBuilder::new()
+                        .at_level(Level::Error)
+                        .of_style(Style::Secondary)
+                        .with_code(ErrorCode::WompWomp)
+                        .continues()
+                        .span(lhs)
+                        .explain("Assignment began here")
+                        .fix(format!("Insert '=' after `{}`", lhs))
+                        .build()
+                )
         )?;
         let rhs = self.parse_expr()?;
         Some(StmtValue::Assign(lhs, assign, rhs))
@@ -894,7 +926,10 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             return Some(ending_token);
         }
 
-        self.expect(TokenType::Newline, ParseErrorContext::after("statement"))?;
+        self.expect(
+            TokenType::Newline,
+            ParseErrorContext::new().after("statement")
+        )?;
 
         self.consume_ignored();
 
@@ -952,7 +987,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 if i > 0 {
                     self.expect(
                         TokenType::Comma,
-                        ParseErrorContext::between(format!(
+                        ParseErrorContext::new().between(format!(
                             "{} parameters in `{}`",
                             kind.as_ref(),
                             source.as_ref()
@@ -966,11 +1001,11 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
                 let name = self.expect(
                     TokenType::Identifier,
-                    ParseErrorContext::For(format!("{} parameter name in `{}`", kind.as_ref(), source.as_ref()))
+                    ParseErrorContext::new().for_(format!("{} parameter name in `{}`", kind.as_ref(), source.as_ref()))
                 )?;
                 self.expect(
                     TokenType::Colon,
-                    ParseErrorContext::After(format!("{} parameter name in `{}`", kind.as_ref(), source.as_ref()))
+                    ParseErrorContext::new().for_(format!("{} parameter name in `{}`", kind.as_ref(), source.as_ref()))
                 )?;
                 let ty =
                     parse_full_node!(self.parse_type(Some(&format!("{} parameter type", kind.as_ref()))))?;
@@ -987,23 +1022,27 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     fn parse_func(&mut self) -> Option<DeclValue> {
         let func = self.expect(
             TokenType::Func,
-            ParseErrorContext::Begin("function declaration".into())
+            ParseErrorContext::new().begin("function declaration")
         )?;
 
         let name = self.expect(
             TokenType::Identifier,
-            ParseErrorContext::For("function name".into())
+            ParseErrorContext::new().for_("function name")
         )?;
 
+        self.consume_ignored();
         let (_, inputs, _) = self.parse_params(&name.value, "input")?;
 
+        self.consume_ignored();
         let outputs = if self.is_at(TokenType::Arrow) {
             self.advance();
+            self.consume_ignored();
             let (_, outputs, _) = self.parse_params(&name.value, "output")?;
             outputs
         } else {
             ParamVec::new()
         };
+        self.consume_ignored();
 
         let (_open_brace, body, _close_brace) =
             self.parse_block("function body")?;

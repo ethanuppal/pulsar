@@ -1,4 +1,4 @@
-func main() -> Int {
+func main() -> (return: Int) {
     let arr = [[1]]
-    return arr[0][0]
+    return = arr[0][0]
 }

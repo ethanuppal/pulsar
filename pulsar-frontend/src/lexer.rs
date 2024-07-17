@@ -195,7 +195,6 @@ impl<'err, 'pool, P: AsPool<Token, ()>> Lexer<'err, 'pool, P> {
             | "\n" => { TokenType::Newline }
             | "func" => { TokenType::Func }
             | "let" => { TokenType::Let }
-            | "return" => { TokenType::Return }
             | _ {
                 if self.current().is_numeric() {
                     Some(self.make_number_token())
@@ -207,7 +206,7 @@ impl<'err, 'pool, P: AsPool<Token, ()>> Lexer<'err, 'pool, P> {
                         .at_level(Level::Error)
                         .with_code(ErrorCode::UnrecognizedCharacter)
                         .span(Span::unit(self.loc.clone()))
-                        .message("Encountered unrecognized character".into())
+                        .message("Encountered unrecognized character")
                         .build();
                     self.error_manager.record(error);
                     None

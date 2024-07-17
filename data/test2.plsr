@@ -1,11 +1,3 @@
-func sum(x: Int[1000]) {
-
-}
-
-func sum(x: Int[2000]) {
-
-}
-
 func main() {
-    sum([1, 2, ...])
+    a b
 }

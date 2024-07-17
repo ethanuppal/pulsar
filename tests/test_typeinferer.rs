@@ -11,6 +11,7 @@ mod tests {
     use pulsar_utils::{error::ErrorManager, loc::Source};
 
     fn typeinferer_output(filename: &str) -> anyhow::Result<String> {
+        todo!();
         let mut ctx = Context::new().unwrap();
         let source = Source::load_file(filename)?;
         let mut error_manager = ErrorManager::with_max_count(10);
@@ -28,11 +29,11 @@ mod tests {
             output.push_str(&format!("{}\n", decl));
         }
 
-        let mut buffer = Vec::new();
         if error_manager.has_errors() {
-            error_manager.consume_and_write(&mut buffer)?
+            let mut buffer = Vec::new();
+            error_manager.consume_and_write(&mut buffer)?;
+            output.push_str(&String::from_utf8_lossy(&buffer));
         }
-        output.push_str(String::from_utf8(buffer).unwrap().as_str());
 
         Ok(output)
     }

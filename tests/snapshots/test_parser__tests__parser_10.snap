@@ -1,7 +1,7 @@
 ---
 source: tests/test_parser.rs
-expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", 10), error_manager)"
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\",\n                10)).expect(\"failed to parse input\")"
 ---
-func member_access() -> Int64 {
-    return (((foo . bar) . baz) + (3 * ((array[3]) . member2)))
+func member_access() -> (output: Int64) {
+    output = (((foo . bar) . baz) + (3 * ((array[3]) . member2)))
 }

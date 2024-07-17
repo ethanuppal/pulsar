@@ -57,10 +57,10 @@ impl PrettyPrint for Decl {
                 )?;
                 f.increase_indent();
                 for (i, node) in body.iter().enumerate() {
-                    if i > 0 && i < body.len() - 1 {
+                    node.pretty_print(f)?;
+                    if i < body.len() - 1 {
                         writeln!(f)?
                     }
-                    node.pretty_print(f)?;
                 }
                 f.decrease_indent();
                 write!(f, "{}}}", insert_newline)

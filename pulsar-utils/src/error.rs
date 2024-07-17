@@ -13,6 +13,7 @@ use std::{
 #[repr(i32)]
 #[derive(Clone, Copy, Debug)]
 pub enum ErrorCode {
+    /// Quite unfortunate indeed.
     WompWomp,
     UnrecognizedCharacter,
     UnexpectedEOF,
@@ -272,8 +273,8 @@ impl ErrorBuilder {
     }
 
     /// Uses the main error description `message`.
-    pub fn message(mut self, message: String) -> Self {
-        self.error.message = message;
+    pub fn message<S: AsRef<str>>(mut self, message: S) -> Self {
+        self.error.message = message.as_ref().to_string();
         self
     }
 
@@ -284,18 +285,18 @@ impl ErrorBuilder {
     /// function is called (see [`ErrorBuilder::of_style`]).
     pub fn continues(self) -> Self {
         assert!(self.error.style == Style::Secondary);
-        self.message("   ...".into())
+        self.message("   ...")
     }
 
     /// Uses an explanatory note `explain`.
-    pub fn explain(mut self, explain: String) -> Self {
-        self.error.explain = Some(explain);
+    pub fn explain<S: AsRef<str>>(mut self, explain: S) -> Self {
+        self.error.explain = Some(explain.as_ref().to_string());
         self
     }
 
     /// Uses a recommendation `fix`.
-    pub fn fix(mut self, fix: String) -> Self {
-        self.error.fix = Some(fix);
+    pub fn fix<S: AsRef<str>>(mut self, fix: S) -> Self {
+        self.error.fix = Some(fix.as_ref().to_string());
         self
     }
 
@@ -330,7 +331,7 @@ impl ErrorManager {
 
     /// Whether the error manager has recorded an error.
     pub fn has_errors(&self) -> bool {
-        !self.errors.is_empty()
+        self.primary_count > 0
     }
 
     /// Whether the error manager cannot take any further primary errors.
@@ -357,11 +358,9 @@ impl ErrorManager {
     ) -> io::Result<()> {
         for (i, error) in self.errors.iter().enumerate() {
             if error.style == Style::Primary && i > 0 {
-                output.write_all(&[b'\n'])?;
+                writeln!(output)?;
             }
-            output.write_all(error.to_string().as_bytes())?;
-            output.write_all(&[b'\n'])?;
-            output.flush()?;
+            writeln!(output, "{}", error)?;
         }
         self.errors.clear();
         self.primary_count = 0;

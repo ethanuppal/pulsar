@@ -164,35 +164,6 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
         );
     }
 
-    fn report_failed_purity_derivation(
-        &mut self, pure_token: Handle<Token>, name: Handle<Token>,
-        impure_node: &Stmt
-    ) {
-        self.report(
-            ErrorBuilder::new()
-                .of_style(Style::Primary)
-                .at_level(Level::Error)
-                .with_code(ErrorCode::StaticAnalysisIssue)
-                .span(impure_node)
-                .message(format!(
-                    "Impure statement in `pure` function `{}`",
-                    name.value
-                ))
-                .build()
-        );
-        self.report(
-            ErrorBuilder::new()
-                .of_style(Style::Secondary)
-                .at_level(Level::Error)
-                .with_code(ErrorCode::StaticAnalysisIssue)
-                .span(pure_token)
-                .continues()
-                .explain("Function declared pure here".into())
-                .fix("Consider marking called functions with `pure`".into())
-                .build()
-        );
-    }
-
     fn report_called_non_function(&mut self, name: Handle<Token>) {
         self.report(
             ErrorBuilder::new()

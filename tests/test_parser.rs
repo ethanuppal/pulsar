@@ -18,21 +18,18 @@ mod tests {
             .lex()
             .check_errors(&mut error_manager)?;
 
-        let ast = Parser::new(tokens, &mut ctx, &mut error_manager)
-            .parse()
-            .check_errors(&mut error_manager)?;
+        let ast = Parser::new(tokens, &mut ctx, &mut error_manager).parse();
 
         let mut output = String::new();
 
-        for decl in ast {
-            output.push_str(&format!("{}\n", decl));
+        if let Some(ast) = ast {
+            for decl in ast {
+                output.push_str(&format!("{}\n", decl));
+            }
         }
-
         let mut buffer = Vec::new();
-        if error_manager.has_errors() {
-            error_manager.consume_and_write(&mut buffer)?
-        }
-        output.push_str(String::from_utf8(buffer).unwrap().as_str());
+        error_manager.consume_and_write(&mut buffer)?;
+        output.push_str(&String::from_utf8_lossy(&buffer));
 
         Ok(output)
     }

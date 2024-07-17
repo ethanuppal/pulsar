@@ -1,19 +1,9 @@
 ---
 source: tests/test_parser.rs
-expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", test_num),\n    error_manager.clone())"
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\",\n                2)).expect(\"failed to parse input\")"
 ---
-func this() -> Unit {
-    return
-}
-func is() -> Unit {
-    return
-}
-func a() -> Unit {
-    return
-}
-func valid() -> Unit {
-    return
-}
-func program() -> Unit {
-    return
-}
+func this() -> () {}
+func is() -> () {}
+func a() -> () {}
+func valid() -> () {}
+func program() -> () {}

@@ -1,12 +1,11 @@
 ---
 source: tests/test_parser.rs
-expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", test_num),\n    error_manager.clone())"
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\",\n                4)).expect(\"failed to parse input\")"
 ---
-func main() -> Unit {
+func main() -> () {
     let mix1 = (1 + (2 * 3))
     let mix2 = ((1 * 2) + 3)
     let par1 = ((1 + 2) * 3)
     let par2 = (1 + (2 * 3))
     let par3 = (1 * (2 + 3))
-    return
 }

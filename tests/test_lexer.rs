@@ -31,7 +31,7 @@ mod tests {
         ($num:expr) => {
             paste! {
                 #[test]
-                fn [<test_parser_ $num>]() {
+                fn [<test_lexer_ $num>]() {
                     assert_snapshot!(lexer_output(
                         &format!("tests/data/lexer{}.plsr", $num)
                     ));
