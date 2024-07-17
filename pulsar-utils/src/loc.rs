@@ -32,7 +32,7 @@ impl Source {
     ) -> Rc<Source> {
         Rc::new(Source::File {
             name: name.as_ref().to_string(),
-            contents: name.as_ref().to_string()
+            contents: contents.as_ref().to_string()
         })
     }
 
@@ -81,10 +81,7 @@ impl Source {
                 end_pos += 1;
 
                 // Slice the contents to get the current line
-                let line = contents
-                    .get(start_pos..end_pos - 1)
-                    .unwrap_or_default()
-                    .to_string();
+                let line = contents[start_pos..end_pos - 1].to_string();
 
                 // Make iterators for the before/after lines
                 let before_lines: Vec<_> = {

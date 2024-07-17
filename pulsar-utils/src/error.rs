@@ -299,6 +299,11 @@ impl ErrorBuilder {
         self
     }
 
+    pub fn maybe_fix<S: AsRef<str>>(mut self, fix: Option<S>) -> Self {
+        self.error.fix = fix.map(|str| str.as_ref().to_string());
+        self
+    }
+
     /// Produces the error.
     pub fn build(self) -> Error {
         self.error

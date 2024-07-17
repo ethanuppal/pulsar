@@ -22,7 +22,6 @@ use std::env;
 pub fn main() -> anyhow::Result<()> {
     let mut pool = Pool::<[i32; 7], ()>::new()?;
     pool.add([1, 2, 3, 4, 6, 7, 8]);
-    panic!("utku");
 
     let mut args = env::args();
     args.next(); // ignore program path

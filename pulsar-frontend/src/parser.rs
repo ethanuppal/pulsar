@@ -32,46 +32,39 @@ use std::{
 
 pub type Block = (Handle<Token>, Vec<Handle<Stmt>>, Handle<Token>);
 
-// TODO: I want to get rid of this. Not sure why I added it. Seems like a bad
-// idea
-enum Where {
-    In(String),
-    Between(String),
-    For(String),
-    Begin(String),
-    End(String),
-    After(String)
+#[derive(Default)]
+struct ParseErrorContext {
+    loc: String,
+    fix: Option<String>
+}
+
+impl ParseErrorContext {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn fix<S: AsRef<str>>(mut self, msg: S) -> Self {
+        self.fix = Some(msg.as_ref().to_string());
+        self
+    }
 }
 
 macro_rules! where_constructor {
-    ($name:ident, $constr:ident) => {
-        pub fn $name<S: AsRef<str>>(value: S) -> Self {
-            Self::$constr(value.as_ref().to_string())
+    ($name:ident, $constr:ident, $loc_str:expr) => {
+        pub fn $name<S: AsRef<str>>(mut self, value: S) -> Self {
+            self.loc = format!("{} {}", $loc_str, value.as_ref());
+            self
         }
     };
 }
 
-impl Where {
-    where_constructor!(in_, In);
-    where_constructor!(between, Between);
-    where_constructor!(for_, For);
-    where_constructor!(begin, Begin);
-    where_constructor!(end, End);
-    where_constructor!(after, After);
-}
-
-impl Display for Where {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self {
-            Self::In(loc) => format!("in {}", loc),
-            Self::Between(values) => format!("between {}", values),
-            Self::For(purpose) => format!("for {}", purpose),
-            Self::Begin(loc) => format!("at start of {}", loc),
-            Self::End(loc) => format!("at end of {}", loc),
-            Self::After(loc) => format!("after {}", loc)
-        }
-        .fmt(f)
-    }
+impl ParseErrorContext {
+    where_constructor!(in_, In, "in");
+    where_constructor!(between, Between, "between");
+    where_constructor!(for_, For, "for");
+    where_constructor!(begin, Begin, "at start of");
+    where_constructor!(end, End, "at end of");
+    where_constructor!(after, After, "after");
 }
 
 /// The parser is constructed via helper, error reporting, and parse functions.
@@ -223,17 +216,13 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     /// Returns the next token in the stream if it is of type `token_type` and
     /// reports an error otherwise, returning `None`.
     fn expect(
-        &mut self, token_type: TokenType, context: Where
+        &mut self, token_type: TokenType, context: ParseErrorContext
     ) -> Option<Handle<Token>> {
         if self.is_eof() {
             self.report_unexpected_eof(context);
             None
         } else if self.current().ty != token_type {
-            self.report_expected_token(
-                token_type,
-                self.current(),
-                &context.to_string()
-            );
+            self.report_expected_token(token_type, self.current(), context);
             None
         } else {
             Some(self.take())
@@ -244,14 +233,15 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     /// parsing context `context`.
     ///
     /// Requires: `!buffer.is_empty()`.
-    fn report_unexpected_eof(&mut self, context: Where) {
+    fn report_unexpected_eof(&mut self, context: ParseErrorContext) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::UnexpectedEOF)
                 .span(self.buffer.last().unwrap())
-                .explain(format!("Unexpected EOF {}", context))
+                .explain(format!("Unexpected EOF {}", context.loc))
+                .maybe_fix(context.fix)
                 .build()
         );
     }
@@ -277,7 +267,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     /// [Reports](Parser::report): See [`Parser::report_expected_token`].
     fn report_expected_tokens(
         &mut self, expected_tys: &[TokenType], actual: Handle<Token>,
-        context: Where
+        context: ParseErrorContext
     ) {
         self.report(
             ErrorBuilder::new()
@@ -414,9 +404,9 @@ macro_rules! expect_n {
 macro_rules! contained_in {
     ($self:ident; $open_type:expr, $loc_ctx:expr, $close_type:expr; $($action:tt)*) => {
         {
-            let open_token = $self.expect($open_type, Where::begin($loc_ctx))?;
+            let open_token = $self.expect($open_type, ParseErrorContext::begin($loc_ctx))?;
             let result = {$($action)*};
-            let close_token = $self.expect($close_type, Where::end($loc_ctx));
+            let close_token = $self.expect($close_type, ParseErrorContext::end($loc_ctx));
             if close_token.is_none() {
                 $self.report_refback(
                     open_token,
@@ -436,8 +426,10 @@ macro_rules! parse_full_node {
     ($self:ident.$method:ident($($arg:expr),*)) => {{
         let start_token = $self.current().clone();
         let value = $self.$method($($arg),*);
-        let end_token = $self.previous().clone();
-        value.map(|v| $self.ast_pool.new(v, start_token, end_token))
+        value.map(|v| {
+            let end_token = $self.previous().clone();
+            $self.ast_pool.new(v, start_token, end_token)
+        })
     }};
 }
 
@@ -485,7 +477,11 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     ) -> Option<TypeValue> {
         let type_token = self.expect(
             TokenType::Identifier,
-            name.map_or(Where::for_("primary type"), Where::in_)
+            name.map_or(
+                ParseErrorContext::new().for_("primary type"),
+                ParseErrorContext::new(),
+                in_
+            )
         )?;
         Some(match type_token.value.as_str() {
             "Int64" | "Int" => TypeValue::Int64,
@@ -497,7 +493,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     fn parse_array_type(&mut self, inner: Handle<Type>) -> Option<TypeValue> {
         let (_, size_token, close_token) = contained_in! { self;
             TokenType::LeftBracket, "array type", TokenType::RightBracket;
-            self.expect(TokenType::Integer, Where::For("array size".into()))?
+            self.expect(TokenType::Integer, ParseErrorContext::For("array size".into()))?
         }?;
 
         let size = size_token
@@ -554,7 +550,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     fn parse_type(&mut self, name: Option<&str>) -> Option<TypeValue> {
         if self.is_eof() {
-            self.report_unexpected_eof(Where::in_::<&str>(
+            self.report_unexpected_eof(ParseErrorContext::in_::<&str>(
                 name.unwrap_or("type")
             ));
             return None;
@@ -580,7 +576,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 if i > 0 {
                     self.expect(
                         TokenType::Comma,
-                        Where::Between("array elements".into())
+                        ParseErrorContext::Between("array elements".into())
                     )?;
                     self.consume_ignored();
                 }
@@ -615,7 +611,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     fn parse_literal_expr_value(&mut self) -> Option<ExprValue> {
         let literal_token = expect_n! { self in
-            [TokenType::Integer, TokenType::Float, TokenType::Char, TokenType::LeftBracket, TokenType::Identifier] => Where::Begin("literal expression".into())
+            [TokenType::Integer, TokenType::Float, TokenType::Char, TokenType::LeftBracket, TokenType::Identifier] => ParseErrorContext::Begin("literal expression".into())
         }?;
         match literal_token.ty {
             TokenType::Integer => Some(ExprValue::ConstantInt(
@@ -655,11 +651,11 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             let op2 = self.expect(
                 postfix_bop.close_token_ty,
                 postfix_bop.name.map_or(
-                    Where::After(
+                    ParseErrorContext::After(
                         "second subexpression in postfix binary expression"
                             .into()
                     ),
-                    Where::In
+                    ParseErrorContext::In
                 )
             )?;
             let start_token = lhs.start_token();
@@ -676,7 +672,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     fn parse_call_expr_value(&mut self) -> Option<ExprValue> {
         let name = self.expect(
             TokenType::Identifier,
-            Where::Begin("call expression".into())
+            ParseErrorContext::Begin("call expression".into())
         )?;
 
         let mut args = vec![];
@@ -685,7 +681,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             let mut i = 0;
             while !self.is_eof() && self.current().ty != TokenType::RightPar {
                 if i > 0 {
-                    self.expect(TokenType::Comma, Where::Between("arguments".into()))?;
+                    self.expect(TokenType::Comma, ParseErrorContext::Between("arguments".into()))?;
                     self.consume_ignored();
                 }
                 if self.is_at(TokenType::RightPar) {
@@ -709,7 +705,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     fn parse_primary_expr_value_aux(&mut self) -> Option<ExprValue> {
         if self.is_eof() {
-            self.report_unexpected_eof(Where::Begin(
+            self.report_unexpected_eof(ParseErrorContext::Begin(
                 "primary expression".into()
             ));
             None
@@ -721,8 +717,10 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             let open_paren = self.take();
             let temp_wrapped = self.parse_expr()?;
             let expr_value = temp_wrapped.value.clone();
-            let closing_paren = self
-                .expect(TokenType::RightPar, Where::In("expression".into()));
+            let closing_paren = self.expect(
+                TokenType::RightPar,
+                ParseErrorContext::In("expression".into())
+            );
             if closing_paren.is_none() {
                 self.report_refback(
                     open_paren,
@@ -828,11 +826,11 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     // ============================== STATEMENTS ===============================
 
     fn parse_let(&mut self) -> Option<StmtValue> {
-        self.expect(TokenType::Let, Where::begin("let binding"))?;
+        self.expect(TokenType::Let, ParseErrorContext::begin("let binding"))?;
 
         let name = self.expect(
             TokenType::Identifier,
-            Where::for_("name in let binding")
+            ParseErrorContext::for_("name in let binding")
         )?;
 
         let mut hint = None;
@@ -845,12 +843,23 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
         self.expect(
             TokenType::Assign,
-            Where::After("name in let binding".into())
+            ParseErrorContext::After("name in let binding".into())
         )?;
 
         let value = self.parse_expr()?;
 
         Some(StmtValue::Let { name, hint, value })
+    }
+
+    /// Requires: `lhs` has just been parsed as a valid expression in the token
+    /// stream.
+    fn parse_assign(&mut self, lhs: Handle<Expr>) -> Option<StmtValue> {
+        let assign = self.expect(
+            TokenType::Assign,
+            ParseErrorContext::between("terms in assignment")
+        )?;
+        let rhs = self.parse_expr()?;
+        Some(StmtValue::Assign(lhs, assign, rhs))
     }
 
     /// Parses a brace-enclosed list of statements, e.g., `parse_block("function
@@ -885,7 +894,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             return Some(ending_token);
         }
 
-        self.expect(TokenType::Newline, Where::after("statement"))?;
+        self.expect(TokenType::Newline, ParseErrorContext::after("statement"))?;
 
         self.consume_ignored();
 
@@ -903,7 +912,9 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             TokenType::Let => self.parse_let(),
             TokenType::Divider => Some(StmtValue::Divider(self.take())),
             other => {
-                if other.begins_top_level_construct() {
+                if let Some(expr) = self.parse_expr() {
+                    return self.parse_assign(expr);
+                } else if other.begins_top_level_construct() {
                     self.report_unexpected_top_level(self.current());
                 } else {
                     self.report_invalid_token(self.current());
@@ -941,7 +952,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 if i > 0 {
                     self.expect(
                         TokenType::Comma,
-                        Where::between(format!(
+                        ParseErrorContext::between(format!(
                             "{} parameters in `{}`",
                             kind.as_ref(),
                             source.as_ref()
@@ -955,11 +966,11 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
                 let name = self.expect(
                     TokenType::Identifier,
-                    Where::For(format!("{} parameter name in `{}`", kind.as_ref(), source.as_ref()))
+                    ParseErrorContext::For(format!("{} parameter name in `{}`", kind.as_ref(), source.as_ref()))
                 )?;
                 self.expect(
                     TokenType::Colon,
-                    Where::After(format!("{} parameter name in `{}`", kind.as_ref(), source.as_ref()))
+                    ParseErrorContext::After(format!("{} parameter name in `{}`", kind.as_ref(), source.as_ref()))
                 )?;
                 let ty =
                     parse_full_node!(self.parse_type(Some(&format!("{} parameter type", kind.as_ref()))))?;
@@ -976,12 +987,12 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     fn parse_func(&mut self) -> Option<DeclValue> {
         let func = self.expect(
             TokenType::Func,
-            Where::Begin("function declaration".into())
+            ParseErrorContext::Begin("function declaration".into())
         )?;
 
         let name = self.expect(
             TokenType::Identifier,
-            Where::For("function name".into())
+            ParseErrorContext::For("function name".into())
         )?;
 
         let (_, inputs, _) = self.parse_params(&name.value, "input")?;

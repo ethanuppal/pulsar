@@ -1,9 +1,7 @@
-pure func inc(x: Int) -> Int {
-    return x + 1
+func identity(x: Int) -> (y: Int) {
+    y = x
 }
 
-func main() -> Int {
-    let arr = [1]
-    let arr2 = map<1>(inc, arr)
-    return arr2[0]
+func main(a: Int[64][64], b: Int[64][64]) -> (c: Int[64][64]) {
+    
 }
