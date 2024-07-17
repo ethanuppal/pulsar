@@ -1,7 +1,7 @@
-// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
-// redistribute it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of the
+//! License, or (at your option) any later version.
 
 use super::{
     node::{AsNodePool, Node},
@@ -10,8 +10,9 @@ use super::{
 use inform::fmt::IndentFormatter;
 use pulsar_utils::{id::Id, pool::Handle};
 use std::{
-    cmp, fmt,
-    fmt::{Display, Write}
+    cmp,
+    fmt::{self, Display, Write},
+    mem
 };
 
 /// This isn't a real liquid type. Notably, the only constraint it can
@@ -75,8 +76,8 @@ pub enum TypeValue {
     Array(Handle<Type>, Handle<LiquidType>),
 
     Function {
-        args: Vec<Handle<Type>>,
-        ret: Handle<Type>
+        inputs: Vec<Handle<Type>>,
+        outputs: Vec<Handle<Type>>
     }
 }
 
@@ -100,7 +101,10 @@ impl Type {
                 };
                 element_type.size() * element_count
             }
-            TypeValue::Function { args: _, ret: _ } => 8
+            TypeValue::Function {
+                inputs: _,
+                outputs: _
+            } => 8
         }
     }
 
@@ -113,16 +117,26 @@ impl Type {
             TypeValue::Array(element_type, element_count) => {
                 format!("A{}{}", element_count, element_type)
             }
-            TypeValue::Function { args, ret } => format!(
-                "F{}{}{}",
-                args.len(),
-                args.iter()
+            TypeValue::Function { inputs, outputs } => format!(
+                "F{}{}{}{}",
+                inputs.len(),
+                inputs
+                    .iter()
                     .map(|arg| arg.to_string())
                     .collect::<Vec<_>>()
                     .join(""),
-                ret
+                outputs.len(),
+                outputs
+                    .iter()
+                    .map(|arg| arg.to_string())
+                    .collect::<Vec<_>>()
+                    .join(""),
             )
         }
+    }
+
+    pub fn can_unify_with(&self, other: &Self) -> bool {
+        mem::discriminant(&self.value) == mem::discriminant(&other.value)
     }
 
     pub fn subterms(&self) -> Vec<Handle<Type>> {
@@ -132,9 +146,9 @@ impl Type {
             | TypeValue::Name(_)
             | TypeValue::Int64 => Vec::new(),
             TypeValue::Array(element_type, _) => vec![*element_type],
-            TypeValue::Function { args, ret } => {
-                let mut result = args.clone();
-                result.push(*ret);
+            TypeValue::Function { inputs, outputs } => {
+                let mut result = inputs.clone();
+                result.extend(outputs);
                 result
             }
         }
@@ -164,21 +178,26 @@ impl PrettyPrint for Type {
             TypeValue::Array(element_type, element_count) => {
                 write!(f, "{}[{}]", element_type, element_count)
             }
-            TypeValue::Function { args, ret } => write!(
+            TypeValue::Function { inputs, outputs } => write!(
                 f,
-                "({}) -> {}",
-                args.iter()
-                    .map(|ty| ty.to_string())
+                "({}) -> ({})",
+                inputs
+                    .iter()
+                    .map(|input| input.to_string())
                     .collect::<Vec<_>>()
                     .join(", "),
-                ret
+                outputs
+                    .iter()
+                    .map(|outputs| outputs.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )
         }
     }
 }
 
 impl Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         PrettyPrint::fmt(self, f)
     }
 }

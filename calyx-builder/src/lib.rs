@@ -1,7 +1,7 @@
-// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
-// redistribute it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
 use calyx_ir::RRC;
 use pulsar_utils::environment::Environment;
@@ -87,7 +87,7 @@ impl CalyxCellKind {
 }
 
 impl Display for CalyxCellKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             Self::Register { size: _ } => "std_reg",
             Self::CombMemoryD1 {

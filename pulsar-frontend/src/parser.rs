@@ -1,3 +1,6 @@
+//! Implements a recursive-descent predictive parser. See the documentation at
+//! [`Parser`].
+//!
 //! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
 //! redistribute it and/or modify it under the terms of the GNU General Public
 //! License as published by the Free Software Foundation, either version 3 of
@@ -14,7 +17,7 @@ use crate::{
         node::NodeInterface,
         stmt::{Stmt, StmtValue},
         ty::{LiquidTypeValue, Type, TypeValue},
-        AsASTPool
+        AsASTPool, AST
     },
     op::Associativity
 };
@@ -22,8 +25,15 @@ use pulsar_utils::{
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
     pool::{Handle, HandleArray}
 };
-use std::fmt::Display;
+use std::{
+    cmp,
+    fmt::{self, Display}
+};
 
+pub type Block = (Handle<Token>, Vec<Handle<Stmt>>, Handle<Token>);
+
+// TODO: I want to get rid of this. Not sure why I added it. Seems like a bad
+// idea
 enum Where {
     In(String),
     Between(String),
@@ -33,7 +43,7 @@ enum Where {
     After(String)
 }
 
-macro_rules! ctx_constructor {
+macro_rules! where_constructor {
     ($name:ident, $constr:ident) => {
         pub fn $name<S: AsRef<str>>(value: S) -> Self {
             Self::$constr(value.as_ref().to_string())
@@ -42,16 +52,16 @@ macro_rules! ctx_constructor {
 }
 
 impl Where {
-    ctx_constructor!(in_, In);
-    ctx_constructor!(between, Between);
-    ctx_constructor!(for_, For);
-    ctx_constructor!(begin, Begin);
-    ctx_constructor!(end, End);
-    ctx_constructor!(after, After);
+    where_constructor!(in_, In);
+    where_constructor!(between, Between);
+    where_constructor!(for_, For);
+    where_constructor!(begin, Begin);
+    where_constructor!(end, End);
+    where_constructor!(after, After);
 }
 
 impl Display for Where {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             Self::In(loc) => format!("in {}", loc),
             Self::Between(values) => format!("between {}", values),
@@ -64,6 +74,65 @@ impl Display for Where {
     }
 }
 
+/// The parser is constructed via helper, error reporting, and parse functions.
+/// The naming convention is that functions named `parse_{decl,stmt,expr,type}`
+/// are the driver functions for their given syntactic category (returning
+/// [`crate::ast::node::Node`]s). These are merely wrappers around
+/// `parse_{decl,stmt,expr,type}_value` functions, which drive individual
+/// `parse_foo` functions (all of which return `Node::Value`s). At any point, a
+/// `Node` can be constructed from its `Node::Value` by wrapping it in
+/// [`parse_full_node!`].
+///
+/// Helpers:
+///
+/// - [`is_eof`](`Parser::is_eof`)
+/// - [`previous`](`Parser::previous`)
+/// - [`current`](`Parser::current`)
+/// - [`current_opt`](`Parser::current_opt`)
+/// - [`current_op_opt`](`Parser::current_op_opt`)
+/// - [`is_at`](`Parser::is_at`)
+/// - [`next_is`](`Parser::next_is`)
+/// - [`advance`](`Parser::advance`)
+/// - [`take`](`Parser::take`)
+/// - [`unget`](`Parser::unget`)
+/// - [`consume_ignored`](`Parser::consume_ignored`)
+/// - [`expect`](`Parser::expect`)
+/// - [`contained_in!`]
+/// - [`parse_full_node!`]
+/// - [`synchronize`](`Parser::synchronize`)
+/// - [`attempt_restore_to_top_level`](`Parser::attempt_restore_to_top_level`)
+///
+/// Error Reporting:
+///
+/// - All the `report_*` functions as well as [`Parser::report`].
+///
+/// Parse:
+///
+/// - Types
+///     - [`parse_primary_type`](Parser::parse_primary_type)
+///     - [`parse_array_type`](Parser::parse_array_type)
+///     - [`parse_type`](Parser::parse_type)
+/// - Expressions
+///     - [`parse_array_literal_expr_value`](Parser::parse_array_literal_expr_value)
+///     - [`parse_literal_expr_value`](Parser::parse_literal_expr_value)
+///     - [`parse_unary_prefix_expr_value`](Parser::parse_unary_prefix_expr_value)
+///     - [`parse_postfix_binary_expr_value`](Parser::parse_postfix_binary_expr_value)
+///     - [`parse_call_expr_value`](Parser::parse_call_expr_value)
+///     - [`parse_primary_expr_value_aux`](Parser::parse_primary_expr_value_aux)
+///     - [`parse_primary_expr_value`](Parser::parse_primary_expr_value)
+///     - [`parse_infix_binary_expr`](Parser::parse_infix_binary_expr)
+///     - [`parse_expr`](Parser::parse_expr)
+/// - Statements
+///     - [`parse_let`](Parser::parse_let)
+///     - [`parse_block`](Parser::parse_block)
+///     - [`end_stmt`](Parser::end_stmt)
+///     - [`parse_stmt_value`](Parser::parse_stmt_value)
+///     - [`parse_stmt`](Parser::parse_stmt)
+/// - Declarations
+///     - [`parse_params`](Parser::parse_params)
+///     - [`parse_func`](Parser::parse_func)
+///     - [`parse_decl_value`](Parser::parse_decl_value)
+///     - [`parse_decl`](Parser::parse_decl)
 pub struct Parser<'ast, 'err, P: AsASTPool> {
     pos: usize,
     buffer: HandleArray<Token>,
@@ -313,6 +382,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     }
 }
 
+// TODO: see if you can remove or actually make useful
 macro_rules! expect_n {
     ($self:ident in [$($token_type:expr),*] => $context:expr) => {
         if $self.is_eof() {
@@ -393,7 +463,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                     .message(
                         "Attempting to recover understanding of code".into()
                     )
-                    .explain(description)
+                    .fix(description)
                     .build()
             );
         }
@@ -405,7 +475,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         }
     }
 
-    /// Identical to [`Parser::synchronize`] but with no custom exit.`
+    /// Identical to [`Parser::synchronize`] but with no custom exit.
     fn attempt_restore_to_top_level(&mut self) {
         self.synchronize(|_| false, "Seeking top-level construct".into());
     }
@@ -413,11 +483,10 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     fn parse_primary_type<S: AsRef<str>>(
         &mut self, name: Option<S>
     ) -> Option<TypeValue> {
-        let context = match name {
-            Some(name) => Where::in_(name),
-            None => Where::for_("primary type")
-        };
-        let type_token = self.expect(TokenType::Identifier, context)?;
+        let type_token = self.expect(
+            TokenType::Identifier,
+            name.map_or(Where::for_("primary type"), Where::in_)
+        )?;
         Some(match type_token.value.as_str() {
             "Int64" | "Int" => TypeValue::Int64,
             "Unit" => TypeValue::Unit,
@@ -436,41 +505,45 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             .as_str()
             .parse::<i64>()
             .expect("number token can be parsed as number");
-        if size < 0 {
-            self.report(
-                ErrorBuilder::new()
-                    .of_style(Style::Primary)
-                    .at_level(Level::Error)
-                    .with_code(ErrorCode::MalformedType)
-                    .span(&size_token)
-                    .message("Array size cannot be negative".into())
-                    .build()
-            );
-            return None;
-        } else if size == 0 {
-            self.report(
-                ErrorBuilder::new()
-                    .of_style(Style::Primary)
-                    .at_level(Level::Warning)
-                    .with_code(ErrorCode::MalformedType)
-                    .span(&size_token)
-                    .message("Array size is zero".into())
-                    .build()
-            );
+        match size.cmp(&0) {
+            cmp::Ordering::Less => {
+                self.report(
+                    ErrorBuilder::new()
+                        .of_style(Style::Primary)
+                        .at_level(Level::Error)
+                        .with_code(ErrorCode::MalformedType)
+                        .span(size_token)
+                        .message("Array size cannot be negative".into())
+                        .build()
+                );
+                return None;
+            }
+            cmp::Ordering::Equal => {
+                self.report(
+                    ErrorBuilder::new()
+                        .of_style(Style::Primary)
+                        .at_level(Level::Warning)
+                        .with_code(ErrorCode::MalformedType)
+                        .span(size_token)
+                        .message("Array size is zero".into())
+                        .build()
+                );
+            }
+            _ => {}
         }
 
         let result_value = TypeValue::Array(
             inner,
             self.ast_pool.generate(
                 LiquidTypeValue::Equal(size as usize),
-                size_token.clone(),
-                size_token.clone()
+                size_token,
+                size_token
             )
         );
         if self.is_at(TokenType::LeftBracket) {
             let result = self.ast_pool.new(
                 result_value,
-                inner.start_token().clone(),
+                inner.start_token(),
                 close_token
             );
             self.parse_array_type(result)
@@ -494,6 +567,8 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         }
     }
 
+    // ============================== EXPRESSIONS ==============================
+
     fn parse_array_literal_expr_value(&mut self) -> Option<ExprValue> {
         let mut elements = vec![];
         let mut should_continue = None;
@@ -516,7 +591,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                         }
                     }
                     (Some(TokenType::Dots), _) => {
-                        should_continue = Some(self.current().clone());
+                        should_continue = Some(self.current());
                         self.advance();
                         break;
                     }
@@ -550,9 +625,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 self.unget();
                 self.parse_array_literal_expr_value()
             }
-            TokenType::Identifier => {
-                Some(ExprValue::BoundName(literal_token.clone()))
-            }
+            TokenType::Identifier => Some(ExprValue::BoundName(literal_token)),
             _ => None
         }
     }
@@ -589,8 +662,8 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                     Where::In
                 )
             )?;
-            let start_token = lhs.start_token().clone();
-            let end_token = op2.clone();
+            let start_token = lhs.start_token();
+            let end_token = op2;
             lhs = self.ast_pool.new(
                 ExprValue::PostfixBop(lhs, op1, rhs, op2),
                 start_token,
@@ -600,8 +673,6 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         Some(lhs.value.clone())
     }
 
-    /// Warning: do not call this function unless it is wrapped in
-    /// [`parse_expr_full!`].
     fn parse_call_expr_value(&mut self) -> Option<ExprValue> {
         let name = self.expect(
             TokenType::Identifier,
@@ -633,7 +704,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             }
         };
 
-        Some(ExprValue::Call(name.clone(), args))
+        Some(ExprValue::Call(name, args))
     }
 
     fn parse_primary_expr_value_aux(&mut self) -> Option<ExprValue> {
@@ -687,7 +758,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     fn parse_infix_binary_expr(
         &mut self, mut lhs: Handle<Expr>, min_precedence: Precedence
     ) -> Option<Handle<Expr>> {
-        let mut lookahead = self.current().clone();
+        let mut lookahead = self.current();
         while !self.is_eof()
             && Op::from(lookahead.ty)
                 .and_then(|op| op.infix_binary)
@@ -703,7 +774,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             if self.is_eof() {
                 break;
             }
-            lookahead = self.current().clone();
+            lookahead = self.current();
             while !self.is_eof()
                 && Op::from(lookahead.ty)
                     .and_then(|next_op| next_op.infix_binary)
@@ -726,10 +797,10 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                         0
                     };
                 rhs = self.parse_infix_binary_expr(rhs, new_min_precedence)?;
-                lookahead = self.current().clone();
+                lookahead = self.current();
             }
-            let start_token = lhs.start_token().clone();
-            let end_token = rhs.end_token().clone();
+            let start_token = lhs.start_token();
+            let end_token = rhs.end_token();
             lhs = self.ast_pool.new(
                 ExprValue::InfixBop(lhs, op_token, rhs),
                 start_token,
@@ -784,9 +855,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     /// Parses a brace-enclosed list of statements, e.g., `parse_block("function
     /// body")`.
-    fn parse_block(
-        &mut self, name: &str
-    ) -> Option<(Handle<Token>, Vec<Handle<Stmt>>, Handle<Token>)> {
+    fn parse_block(&mut self, name: &str) -> Option<Block> {
         contained_in! { self;
             TokenType::LeftBrace, name, TokenType::RightBrace;
 
@@ -810,7 +879,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     /// Requires: a statement must have been parsed, and as consequence at least
     /// one token has already been encountered.
     fn end_stmt(&mut self) -> Option<Handle<Token>> {
-        let ending_token = self.previous().clone();
+        let ending_token = self.previous();
 
         if !self.is_eof() && self.current().ty == TokenType::RightBrace {
             return Some(ending_token);
@@ -962,6 +1031,15 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         } else {
             self.attempt_restore_to_top_level();
             self.parse_decl()
+        }
+    }
+
+    pub fn parse(mut self) -> Option<AST> {
+        while self.parse_decl().is_some() {}
+        if self.error_manager.has_errors() {
+            None
+        } else {
+            Some(self.ast_pool.as_pool_mut().as_array())
         }
     }
 }

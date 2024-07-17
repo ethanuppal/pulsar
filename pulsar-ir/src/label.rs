@@ -1,12 +1,11 @@
-// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
-// redistribute it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
-
-use std::fmt::{Display, Formatter};
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
 use pulsar_frontend::ast::ty::Type;
 use pulsar_utils::pool::Handle;
+use std::fmt::{self, Display, Formatter, Write};
 
 /// If one exists, the start symbol for a pulsar program is guaranteed to begin
 /// with the following.
@@ -20,15 +19,24 @@ pub struct Name {
 
 impl Name {
     pub fn from_native<S: AsRef<str>>(
-        value: S, args: &[Handle<Type>], ret: Handle<Type>
+        value: S, inputs: &[Handle<Type>], outputs: &[Handle<Type>]
     ) -> Self {
         let mut mangled = String::new();
-        mangled.push_str("_pulsar");
-        mangled.push_str(&format!("_S{}", value.as_ref()));
-        for arg in args {
-            mangled.push_str(&format!("_{}", arg.mangle()));
+        write!(
+            &mut mangled,
+            "_pulsar_SF{}{}",
+            value.as_ref().len(),
+            value.as_ref()
+        )
+        .unwrap();
+        write!(&mut mangled, "{}", inputs.len()).unwrap();
+        for input in inputs {
+            write!(&mut mangled, "{}", input.mangle()).unwrap();
         }
-        mangled.push_str(&format!("_{}", ret.mangle()));
+        write!(&mut mangled, "{}", outputs.len()).unwrap();
+        for output in outputs {
+            write!(&mut mangled, "{}", output.mangle()).unwrap();
+        }
         Self {
             unmangled: value.as_ref().to_string(),
             mangled,
@@ -36,13 +44,17 @@ impl Name {
         }
     }
 
-    pub fn mangle(&self) -> &String {
+    pub fn unmangled(&self) -> &str {
+        &self.unmangled
+    }
+
+    pub fn mangled(&self) -> &str {
         &self.mangled
     }
 }
 
 impl Display for Name {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.is_native {
             write!(f, "native {}", self.unmangled)?;
         } else {
@@ -60,7 +72,7 @@ pub enum Visibility {
 }
 
 impl Display for Visibility {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             Visibility::Public => "public",
             Visibility::Private => "private",
@@ -82,7 +94,7 @@ impl Label {
 }
 
 impl Display for Label {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {}", self.visibility, self.name)
     }
 }

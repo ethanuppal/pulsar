@@ -1,7 +1,7 @@
-// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
-// redistribute it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
 use super::token::{Token, TokenType};
 use pulsar_utils::{
@@ -15,11 +15,18 @@ use std::rc::Rc;
 ///
 /// # Example
 /// ```
-/// fn lex(source: Rc<Source>, error_manager: &mut ErrorManager) {
-///     let lexer = Lexer::new(source, error_manager);
-///     for token in lexer {
-///         println! {"{}", token};
-///     }
+/// use pulsar_frontend::{lexer::Lexer, token::Token};
+/// use pulsar_utils::{
+///     error::ErrorManager,
+///     loc::Source,
+///     pool::{AsPool, HandleArray}
+/// };
+/// use std::rc::Rc;
+///
+/// fn lex<C: AsPool<Token, ()>>(
+///     source: Rc<Source>, ctx: &mut C, error_manager: &mut ErrorManager
+/// ) -> Option<HandleArray<Token>> {
+///     Lexer::new(source, ctx, error_manager).lex()
 /// }
 /// ```
 pub struct Lexer<'err, 'pool, P: AsPool<Token, ()>> {
@@ -34,7 +41,7 @@ pub struct Lexer<'err, 'pool, P: AsPool<Token, ()>> {
 ///
 /// Note: this macro must only be invoked within the lexer.
 macro_rules! with_unwind {
-    ($self:ident in $($action:tt)*) => {
+    ($self:ident; $($action:tt)*) => {
         let old_loc = $self.loc.clone();
         {
             $($action)*
@@ -118,7 +125,7 @@ impl<'err, 'pool, P: AsPool<Token, ()>> Lexer<'err, 'pool, P> {
     /// Requires: `current().is_numeric()`.
     fn make_number_token(&mut self) -> Handle<Token> {
         let mut length = 0;
-        with_unwind! { self in
+        with_unwind! { self;
             while !self.is_eof() && self.current().is_numeric() {
                 self.advance();
                 length += 1;
@@ -130,7 +137,7 @@ impl<'err, 'pool, P: AsPool<Token, ()>> Lexer<'err, 'pool, P> {
     /// Requires: `current().is_alphabetic() || current() == '_'`.
     fn make_identifier_token(&mut self) -> Handle<Token> {
         let mut length = 0;
-        with_unwind! { self in
+        with_unwind! { self;
             while !self.is_eof()
             && (self.current().is_alphanumeric() || self.current() == '_')
             {

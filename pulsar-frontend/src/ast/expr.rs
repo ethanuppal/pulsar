@@ -1,7 +1,7 @@
-// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
-// redistribute it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
 use super::{node::Node, pretty_print::PrettyPrint, ty::Type};
 use crate::token::Token;
@@ -89,7 +89,7 @@ impl PrettyPrint for Expr {
 }
 
 impl Display for Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         PrettyPrint::fmt(self, f)
     }
 }

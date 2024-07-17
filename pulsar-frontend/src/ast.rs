@@ -1,7 +1,7 @@
-// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
-// redistribute it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of the
+//! License, or (at your option) any later version.
 
 use decl::Decl;
 use expr::Expr;
@@ -15,7 +15,6 @@ pub mod expr;
 pub mod node;
 pub mod pretty_print;
 pub mod stmt;
-pub mod stmt_ty;
 pub mod ty;
 
 pub type AST = HandleArray<Decl>;

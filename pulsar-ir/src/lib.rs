@@ -4,11 +4,11 @@
 //! the License, or (at your option) any later version.
 
 use self::{label::Name, operand::Operand, variable::Variable};
-use std::fmt::Display;
+use std::fmt::{self, Display};
 
 pub mod component;
 pub mod control;
-pub mod generator;
+pub mod from_ast;
 pub mod label;
 pub mod memory;
 pub mod operand;
@@ -53,7 +53,7 @@ pub enum Ir {
 }
 
 impl Display for Ir {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             Self::Add(result, lhs, rhs) => {
                 write!(f, "{} = {} + {}", result, lhs, rhs)

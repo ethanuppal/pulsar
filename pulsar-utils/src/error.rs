@@ -1,11 +1,14 @@
-// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
-// redistribute it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
 use super::loc::{Span, SpanProvider};
 use colored::*;
-use std::{fmt::Display, io};
+use std::{
+    fmt::{self, Display},
+    io
+};
 
 #[repr(i32)]
 #[derive(Clone, Copy, Debug)]
@@ -24,7 +27,7 @@ pub enum ErrorCode {
 }
 
 impl Display for ErrorCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         (*self as i32).fmt(f)
     }
 }
@@ -66,7 +69,7 @@ impl Level {
 }
 
 impl Display for Level {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",
@@ -100,7 +103,7 @@ pub struct Error {
 }
 
 impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Only primary-style messages have a header indicating they are the
         // root of an error message and not auxillary information
         if self.style == Style::Primary {

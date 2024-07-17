@@ -3,16 +3,19 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use memmap2::MmapMut;
+use memmap2::{MmapMut, MmapOptions};
 use std::{
-    fmt::{Debug, Display},
+    fmt::{self, Debug, Display},
     hash::Hash,
     io,
     marker::PhantomData,
     mem::{self, ManuallyDrop},
     ops::{Deref, DerefMut},
-    ptr
+    ptr,
+    rc::Rc
 };
+
+use crate::loc::Loc;
 
 /// 64MB.
 const ARENA_SIZE_BYTES: usize = 64 * 1024 * 1024;
@@ -77,8 +80,14 @@ impl<T> Hash for Handle<T> {
 }
 
 impl<T: Display> Display for Handle<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.pointer.fmt(f)
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unsafe { &*self.pointer }.fmt(f)
+    }
+}
+
+impl<T: Debug> Debug for Handle<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unsafe { &*self.pointer }.fmt(f)
     }
 }
 
@@ -117,7 +126,7 @@ impl<T> MMapArena<T> {
             store: if mem::size_of::<T>() == 0 {
                 MMapArenaStore::none()
             } else {
-                MMapArenaStore::from(MmapMut::map_anon(size)?)
+                MMapArenaStore::from(MmapOptions::new().len(size).map_anon()?)
             },
             offset: 0,
             generic: PhantomData
@@ -180,7 +189,8 @@ impl<Value, Metadata> Pool<Value, Metadata> {
     fn add(&mut self, value: Value) -> Handle<Value> {
         unsafe {
             let next_value = self.contents.alloc();
-            *next_value = value;
+            *(next_value as *mut ManuallyDrop<Value>) =
+                ManuallyDrop::new(value);
             self.metadata.alloc();
             Handle::from(next_value)
         }
@@ -260,14 +270,11 @@ impl<Value, Metadata> Pool<Value, Metadata> {
     }
 }
 
+/// An immutable array of handles. Internally just a pointer to the start of the
+/// memory pool it was created from via [`Pool::as_array`].
 pub struct HandleArray<T> {
     start: *mut T,
     length: usize
-}
-
-pub struct HandleArrayIterator<T> {
-    array: HandleArray<T>,
-    index: usize
 }
 
 impl<T> HandleArray<T> {
@@ -292,6 +299,19 @@ impl<T> HandleArray<T> {
     }
 }
 
+impl<T> Clone for HandleArray<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for HandleArray<T> {}
+
+pub struct HandleArrayIterator<T> {
+    array: HandleArray<T>,
+    index: usize
+}
+
 impl<T> Iterator for HandleArrayIterator<T> {
     type Item = Handle<T>;
 
@@ -303,6 +323,7 @@ impl<T> Iterator for HandleArrayIterator<T> {
         }
     }
 }
+
 impl<T> ExactSizeIterator for HandleArrayIterator<T> {
     fn len(&self) -> usize {
         self.array.len()

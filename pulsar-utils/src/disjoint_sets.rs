@@ -1,8 +1,13 @@
-// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
-// redistribute it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
-use std::{collections::HashMap, fmt::Debug, hash::Hash, iter::Map};
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
+use std::{
+    collections::HashMap,
+    fmt::{self, Debug},
+    hash::Hash,
+    iter::Map
+};
 
 /// For a node `x`, when the node data is `(p, r)`, `x`'s parent is `p` and
 /// `x`'s rank is `r`.
@@ -97,7 +102,7 @@ impl<T: Eq + Hash + Clone> Debug for DisjointSets<T>
 where
     T: Debug
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, (node, data)) in self.nodes.iter().enumerate() {
             if i > 0 {
                 writeln!(f)?;

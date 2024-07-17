@@ -1,25 +1,25 @@
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
+
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
     use pulsar_frontend::lexer::Lexer;
+    use pulsar_lang::context::Context;
     use pulsar_utils::{error::ErrorManager, loc::Source};
-    use std::{cell::RefCell, fs, rc::Rc};
 
-    fn read(filename: &str) -> Rc<Source> {
-        Source::file(
-            filename.into(),
-            fs::read_to_string(filename)
-                .expect(format!("Could not read file: {}", filename).as_str())
-        )
-    }
-
-    fn lexer_output(
-        filename: &str, error_manager: RRC<ErrorManager>
-    ) -> String {
-        let source = read(filename);
-        let lexer = Lexer::new(source, error_manager);
+    fn lexer_output(filename: &str) -> String {
+        let mut ctx = Context::new().unwrap();
+        let source = Source::load_file(filename)
+            .unwrap_or_else(|_| panic!("Could not read file: {}", filename));
+        let mut error_manager = ErrorManager::with_max_count(10);
+        let tokens = Lexer::new(source, &mut ctx, &mut error_manager)
+            .lex()
+            .expect("invalid input");
         let mut output = String::new();
-        for token in lexer {
+        for token in tokens {
             output.push_str(&format!("{:?}\n", token));
         }
         output
@@ -32,10 +32,8 @@ mod tests {
             paste! {
                 #[test]
                 fn [<test_parser_ $num>]() {
-                    let error_manager = ErrorManager::with_max_count(10);
                     assert_snapshot!(lexer_output(
-                        &format!("tests/data/lexer{}.plsr", $num),
-                        error_manager
+                        &format!("tests/data/lexer{}.plsr", $num)
                     ));
                 }
             }

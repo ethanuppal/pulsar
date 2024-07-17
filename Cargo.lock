@@ -14,10 +14,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "arrayvec"
-version = "0.5.2"
+name = "anyhow"
+version = "1.0.86"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
+checksum = "b3d1d046238990b9cf5bcde22a3fb3584ee5cf65fb2765f454ed428c7a0063da"
 
 [[package]]
 name = "atty"
@@ -67,36 +67,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "calyx-backend"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76dcf7f8fb16e04dcde3be76ecf7e2d7be1c01da2d06dd34aced9d500b8d587f"
-dependencies = [
- "calyx-frontend",
- "calyx-ir",
- "calyx-utils",
- "itertools 0.11.0",
- "linked-hash-map",
- "log",
- "petgraph",
- "serde",
- "serde_json",
- "smallvec",
- "string-interner",
- "vast",
-]
-
-[[package]]
-name = "calyx-builder"
-version = "0.0.0"
-dependencies = [
- "calyx-frontend",
- "calyx-ir",
- "calyx-utils",
- "pulsar-utils",
-]
-
-[[package]]
 name = "calyx-frontend"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -104,7 +74,7 @@ checksum = "c1a704c13111b701f4fb4bc33b9bd638f5cd5c2f9ef389cdbcf016a1e9c0a9d1"
 dependencies = [
  "atty",
  "calyx-utils",
- "itertools 0.11.0",
+ "itertools",
  "lazy_static",
  "linked-hash-map",
  "log",
@@ -124,7 +94,7 @@ checksum = "ac71d552c6f8abc2073bd9d1cfd3723a60a21be9783051193d490e18329833f2"
 dependencies = [
  "calyx-frontend",
  "calyx-utils",
- "itertools 0.11.0",
+ "itertools",
  "linked-hash-map",
  "log",
  "petgraph",
@@ -140,7 +110,7 @@ checksum = "f3e84fb3e987d830354740eb51e1188eb1bc820e4d207cf29e5f0920a8e3eec9"
 dependencies = [
  "calyx-ir",
  "calyx-utils",
- "itertools 0.11.0",
+ "itertools",
  "lazy_static",
  "linked-hash-map",
  "log",
@@ -157,7 +127,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36b682a77c69b68fe1554c484316324705614246365e3342ea28d708f93805be"
 dependencies = [
  "atty",
- "itertools 0.11.0",
+ "itertools",
  "petgraph",
  "serde_json",
  "string-interner",
@@ -357,15 +327,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
@@ -536,18 +497,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
 
 [[package]]
-name = "pretty"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83f3aa1e3ca87d3b124db7461265ac176b40c277f37e503eaa29c9c75c037846"
-dependencies = [
- "arrayvec",
- "log",
- "typed-arena",
- "unicode-segmentation",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -577,21 +526,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pulsar-backend"
-version = "0.0.0"
-dependencies = [
- "calyx-backend",
- "calyx-builder",
- "calyx-frontend",
- "calyx-ir",
- "calyx-opt",
- "calyx-utils",
- "pulsar-frontend",
- "pulsar-ir",
- "pulsar-utils",
-]
-
-[[package]]
 name = "pulsar-frontend"
 version = "0.0.0"
 dependencies = [
@@ -613,7 +547,7 @@ dependencies = [
 name = "pulsar-lang"
 version = "0.0.0"
 dependencies = [
- "calyx-builder",
+ "anyhow",
  "calyx-frontend",
  "calyx-ir",
  "calyx-opt",
@@ -623,7 +557,6 @@ dependencies = [
  "lazy_static",
  "paste",
  "proptest",
- "pulsar-backend",
  "pulsar-frontend",
  "pulsar-ir",
  "pulsar-utils",
@@ -884,12 +817,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "typed-arena"
-version = "2.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6af6ae20167a9ece4bcb41af5b80f8a1f1df981f6391189ce00fd257af04126a"
-
-[[package]]
 name = "typenum"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -912,22 +839,6 @@ name = "unicode-ident"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
-
-[[package]]
-name = "unicode-segmentation"
-version = "1.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4c87d22b6e3f4a18d4d40ef354e97c90fcb14dd91d7dc0aa9d8a1172ebf7202"
-
-[[package]]
-name = "vast"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1adaa4ed0e71c5eb614cf42563dbfedb47c0e343b9c7c710bdc092c918e08e32"
-dependencies = [
- "itertools 0.10.5",
- "pretty",
-]
 
 [[package]]
 name = "version_check"

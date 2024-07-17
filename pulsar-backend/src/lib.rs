@@ -7,7 +7,7 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use pulsar_ir::generator::GeneratedTopLevel;
+use pulsar_ir::from_ast::GeneratedTopLevel;
 use std::path::PathBuf;
 
 pub mod calyx;

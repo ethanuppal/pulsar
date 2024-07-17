@@ -1,8 +1,14 @@
-// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
-// redistribute it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
-use std::{cmp::Ordering, fmt::Display, rc::Rc};
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
+use std::{
+    cmp::Ordering,
+    fmt::{self, Display},
+    fs, io,
+    path::Path,
+    rc::Rc
+};
 
 /// Different sources of text data.
 #[derive(Clone, Debug, Eq)]
@@ -21,8 +27,29 @@ pub enum Source {
 }
 
 impl Source {
-    pub fn file(name: String, contents: String) -> Rc<Source> {
-        Rc::new(Source::File { name, contents })
+    pub fn file<S: AsRef<str>, T: AsRef<str>>(
+        name: S, contents: T
+    ) -> Rc<Source> {
+        Rc::new(Source::File {
+            name: name.as_ref().to_string(),
+            contents: name.as_ref().to_string()
+        })
+    }
+
+    pub fn load_file<P: AsRef<Path>>(path: P) -> io::Result<Rc<Source>> {
+        fs::read(path.as_ref())
+            .and_then(|contents| {
+                String::from_utf8(contents).map_err(io::Error::other)
+            })
+            .map(|contents| {
+                Source::file(
+                    path.as_ref()
+                        .file_name()
+                        .expect("invalid file")
+                        .to_string_lossy(),
+                    contents
+                )
+            })
     }
 
     /// `contents(source)` is the string contents of `source`.
@@ -97,7 +124,7 @@ impl Source {
 }
 
 impl Display for Source {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Source::File { name, contents: _ } => write!(f, "{}", name),
             Source::Unknown => write!(f, "<unknown>")
@@ -173,7 +200,7 @@ impl Loc {
 }
 
 impl Display for Loc {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}:{}", self.source, self.line, self.col)
     }
 }
@@ -327,7 +354,7 @@ impl AsRef<Span> for Span {
 }
 
 impl Display for Span {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[{}, {})", self.start, self.end)
     }
 }

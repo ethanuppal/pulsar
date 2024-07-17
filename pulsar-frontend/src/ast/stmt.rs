@@ -1,18 +1,13 @@
-// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
-// redistribute it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
-use super::{
-    expr::Expr, node::Node, pretty_print::PrettyPrint, stmt_ty::StmtType,
-    ty::Type
-};
+use super::{expr::Expr, node::Node, pretty_print::PrettyPrint, ty::Type};
 use crate::token::Token;
 use inform::fmt::IndentFormatter;
 use pulsar_utils::pool::Handle;
 use std::fmt::{self, Display, Write};
-
-pub type Param = (Token, Handle<Type>);
 
 #[derive(Clone)]
 pub enum StmtValue {
@@ -25,7 +20,7 @@ pub enum StmtValue {
     Divider(Handle<Token>)
 }
 
-pub type Stmt = Node<StmtValue, StmtType>;
+pub type Stmt = Node<StmtValue, ()>;
 
 impl PrettyPrint for Stmt {
     fn pretty_print(&self, f: &mut IndentFormatter<'_, '_>) -> fmt::Result {
@@ -51,7 +46,7 @@ impl PrettyPrint for Stmt {
 }
 
 impl Display for Stmt {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         PrettyPrint::fmt(self, f)
     }
 }

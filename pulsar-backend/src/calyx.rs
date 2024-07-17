@@ -1,7 +1,7 @@
-// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
-// redistribute it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of the
+//! License, or (at your option) any later version.
 
 use super::PulsarBackend;
 use crate::Output;
@@ -15,7 +15,7 @@ use pulsar_frontend::ty::Type;
 use pulsar_ir::{
     basic_block::BasicBlockCell,
     control_flow_graph::ControlFlowGraph,
-    generator::GeneratedTopLevel,
+    from_ast::GeneratedTopLevel,
     label::{Label, Name, MAIN_SYMBOL_PREFIX},
     operand::Operand,
     variable::Variable,
@@ -85,20 +85,20 @@ impl CalyxBackend {
             ));
         }
         self.builder
-            .register_component(label.name.mangle().clone(), comp_ports);
+            .register_component(label.name.mangled().clone(), comp_ports);
 
-        if label.name.mangle().starts_with(MAIN_SYMBOL_PREFIX) {
-            self.builder.set_entrypoint(label.name.mangle().clone());
+        if label.name.mangled().starts_with(MAIN_SYMBOL_PREFIX) {
+            self.builder.set_entrypoint(label.name.mangled().clone());
         }
     }
 
     /// A component for a call to `call` instantiated as a cell a single time in
     /// the current component if `unique` and instantiated fresh otherwise.
     fn cell_for_call(
-        &self, component: &mut CalyxComponent<FunctionContext>,
-        call: &Name, unique: bool
+        &self, component: &mut CalyxComponent<FunctionContext>, call: &Name,
+        unique: bool
     ) -> (String, CalyxCell) {
-        let callee_name = call.mangle().clone();
+        let callee_name = call.mangled().clone();
         let cell_name = format!("call{}", callee_name);
         component.component_cell(cell_name, callee_name, unique)
     }
@@ -385,7 +385,7 @@ impl CalyxBackend {
         cfg: &ControlFlowGraph
     ) {
         let mut component: CalyxComponent<FunctionContext> =
-            self.builder.start_component(label.name.mangle().clone());
+            self.builder.start_component(label.name.mangled().clone());
 
         if *ret != Type::Unit {
             let func = component.signature();

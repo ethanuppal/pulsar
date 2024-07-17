@@ -1,7 +1,7 @@
-// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
-// redistribute it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
 use super::{node::Node, pretty_print::PrettyPrint, stmt::Stmt, ty::Type};
 use crate::token::Token;
@@ -47,7 +47,7 @@ impl PrettyPrint for Decl {
                 ref body
             } => {
                 let insert_newline = if body.is_empty() { "" } else { "\n" };
-                writeln!(
+                write!(
                     f,
                     "func {}({}) -> ({}) {{{}",
                     name.value,
@@ -56,9 +56,11 @@ impl PrettyPrint for Decl {
                     insert_newline,
                 )?;
                 f.increase_indent();
-                for node in body {
+                for (i, node) in body.iter().enumerate() {
+                    if i > 0 && i < body.len() - 1 {
+                        writeln!(f)?
+                    }
                     node.pretty_print(f)?;
-                    writeln!(f)?
                 }
                 f.decrease_indent();
                 write!(f, "{}}}", insert_newline)

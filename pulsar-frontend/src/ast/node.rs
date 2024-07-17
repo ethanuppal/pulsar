@@ -1,7 +1,7 @@
-// Copyright (C) 2024 Ethan Uppal. This program is free software: you can
-// redistribute it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
 use crate::{
     attribute::{Attribute, Attributes},
@@ -101,8 +101,8 @@ impl<V: Clone, T> Clone for Node<V, T> {
         Self {
             value: self.value.clone(),
             attributes: self.attributes,
-            start_token: self.start_token.clone(),
-            end_token: self.end_token.clone(),
+            start_token: self.start_token,
+            end_token: self.end_token,
             metadata: PhantomData
         }
     }
