@@ -5,35 +5,72 @@
 
 use core::{fmt, fmt::Debug};
 use pulsar_utils::loc::{Loc, SpanProvider};
+use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TokenType {
+    #[serde(rename = "identifier")]
     Identifier,
+    /// While it is guaranteed that tokens of this type represent valid
+    /// integers, they may not fit within the 64-bit signed or unsigned limit.
+    #[serde(rename = "integer")]
     Integer,
+    #[serde(rename = "float")]
     Float,
+    #[serde(rename = "bool")]
     Bool,
+    #[serde(rename = "char")]
     Char,
+    #[serde(rename = "string")]
     String,
+    #[serde(rename = "func")]
     Func,
+    #[serde(rename = "let")]
     Let,
+    #[serde(rename = "for")]
+    For,
+    #[serde(rename = "in")]
+    In,
+    #[serde(rename = "plus")]
     Plus,
+    #[serde(rename = "minus")]
     Minus,
+    #[serde(rename = "times")]
     Times,
+    #[serde(rename = "assign")]
     Assign,
+    #[serde(rename = "left-par")]
     LeftPar,
+    #[serde(rename = "right-par")]
     RightPar,
+    #[serde(rename = "left-brace")]
     LeftBrace,
+    #[serde(rename = "right-brace")]
     RightBrace,
+    #[serde(rename = "left-bracket")]
     LeftBracket,
+    #[serde(rename = "right-bracket")]
     RightBracket,
+    #[serde(rename = "left-angle")]
     LeftAngle,
+    #[serde(rename = "right-angle")]
     RightAngle,
+    #[serde(rename = "dot")]
     Dot,
+    #[serde(rename = "dots")]
     Dots,
+    #[serde(rename = "dots-until")]
+    DotsUntil,
+    #[serde(rename = "divider")]
     Divider,
+    #[serde(rename = "colon")]
     Colon,
+    #[serde(rename = "comma")]
     Comma,
+    #[serde(rename = "arrow")]
     Arrow,
+    #[serde(rename = "newline")]
     Newline
 }
 
@@ -42,40 +79,12 @@ impl Debug for TokenType {
         write!(
             f,
             "{}",
-            match self {
-                Self::Identifier => "identifier",
-                Self::Integer => "integer",
-                Self::Float => "float",
-                Self::Bool => "bool",
-                Self::Char => "char",
-                Self::String => "string",
-                Self::Func => "func",
-                Self::Let => "let",
-                Self::Plus => "plus",
-                Self::Minus => "minus",
-                Self::Times => "times",
-                Self::Assign => "assign",
-                Self::LeftPar => "left-par",
-                Self::RightPar => "right-par",
-                Self::LeftBrace => "left-brace",
-                Self::RightBrace => "right-brace",
-                Self::LeftBracket => "left-bracket",
-                Self::RightBracket => "right-bracket",
-                Self::LeftAngle => "left-angle",
-                Self::RightAngle => "right-angle",
-                Self::Colon => "colon",
-                Self::Dot => "dot",
-                Self::Dots => "dots",
-                Self::Divider => "divider",
-                Self::Comma => "comma",
-                Self::Arrow => "arrow",
-                Self::Newline => "newline"
-            }
+            serde_json::to_string(self).expect("I handled all cases")
         )
     }
 }
 
-impl fmt::Display for TokenType {
+impl Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let default = format!("{:?}", self);
         write!(
@@ -97,6 +106,7 @@ impl fmt::Display for TokenType {
                 Self::Assign => "=",
                 Self::Dot => ".",
                 Self::Dots => "...",
+                Self::DotsUntil => "..<",
                 Self::Divider => "---",
                 Self::Comma => ",",
                 Self::Arrow => "->",

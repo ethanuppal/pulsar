@@ -10,8 +10,9 @@ use super::{
     Ir
 };
 use crate::{
+    cell::Cell,
     component::Component,
-    control::{AsControlPool, SeqParBuilder},
+    control::{AsControlPool, Control, For, SeqParBuilder},
     memory::Memory
 };
 use pulsar_frontend::{
@@ -29,7 +30,7 @@ use pulsar_utils::{environment::Environment, id::Gen, pool::Handle};
 pub struct ComponentGenerator {
     var_gen: Gen,
     env: Environment<String, Variable>,
-    memories: Environment<String, Memory>
+    cells: Environment<Variable, Cell>
 }
 
 pub fn ast_to_ir<P: AsControlPool>(ast: AST, pool: &mut P) -> Vec<Component> {
@@ -57,6 +58,11 @@ impl ComponentGenerator {
         mut self, pool: &mut P, name: Handle<Token>, inputs: &[Param],
         outputs: &[Param], body: &[Handle<Stmt>]
     ) -> Component {
+        for (port_name, _) in inputs.iter().chain(outputs) {
+            let var = self.new_var();
+            self.env.bind(port_name.value.clone(), var);
+        }
+
         let inputs = inputs
             .iter()
             .map(|(_, input_type)| *input_type)
@@ -106,9 +112,7 @@ impl ComponentGenerator {
                 Operand::Variable(result)
             }
             ExprValue::BoundName(name) => {
-                Operand::Variable(*self.env.find(name.value.clone()).expect(
-                    "unbound name should have been caught in type inference"
-                ))
+                Operand::Variable(*self.env.find(name.value.clone()).unwrap_or_else(|| panic!("unbound name `{}` should have been caught in type inference", name.value)))
             }
             ExprValue::PostfixBop(array, op1, index, op2)
                 if op1.ty == TokenType::LeftBracket
@@ -152,6 +156,35 @@ impl ComponentGenerator {
             }
             StmtValue::Divider(_) => {
                 control.split();
+            }
+            StmtValue::For {
+                var,
+                lower,
+                exclusive_upper,
+                body
+            } => {
+                self.env.push();
+                let variant = self.new_var();
+                self.env.bind(var.value.clone(), variant);
+                let lower_operand = self.gen_expr(*lower, control);
+                let upper_operand = self.gen_expr(*exclusive_upper, control);
+                let body = control.with_pool(|pool| {
+                    let mut builder = SeqParBuilder::new(pool);
+                    self.env.push();
+                    for stmt in body {
+                        self.gen_stmt(*stmt, &mut builder);
+                    }
+                    self.env.pop();
+                    let control = builder.into();
+                    pool.add(control)
+                });
+                self.env.pop();
+                control.push(Control::For(For::new(
+                    variant,
+                    lower_operand,
+                    upper_operand,
+                    body
+                )));
             }
         }
     }

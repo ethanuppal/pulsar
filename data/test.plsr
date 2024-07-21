@@ -1,5 +1,5 @@
 func identity(x: Int) -> (y: Int) {
-    y = x
+    x = y
 }
 
 func main(a: Int[64][64], b: Int[64][64]) -> (c: Int[64][64]) {

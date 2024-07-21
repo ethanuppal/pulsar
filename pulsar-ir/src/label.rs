@@ -5,11 +5,11 @@
 
 use pulsar_frontend::ast::ty::Type;
 use pulsar_utils::pool::Handle;
-use std::fmt::{self, Display, Formatter, Write};
+use std::fmt::{self, Display, Write};
 
 /// If one exists, the start symbol for a pulsar program is guaranteed to begin
 /// with the following.
-pub const MAIN_SYMBOL_PREFIX: &str = "_pulsar_Smain";
+pub const MAIN_SYMBOL_PREFIX: &str = "pulsar_SF4main";
 
 pub struct Name {
     unmangled: String,
@@ -24,7 +24,7 @@ impl Name {
         let mut mangled = String::new();
         write!(
             &mut mangled,
-            "_pulsar_SF{}{}",
+            "pulsar_SF{}{}",
             value.as_ref().len(),
             value.as_ref()
         )

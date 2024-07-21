@@ -6,7 +6,7 @@
 use calyx_ir::RRC;
 use pulsar_utils::environment::Environment;
 use std::{
-    collections::HashMap, fmt::Display, marker::PhantomData, path::PathBuf
+    collections::HashMap, Display, marker::PhantomData, path::PathBuf
 };
 
 pub mod macros;

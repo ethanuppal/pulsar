@@ -17,7 +17,13 @@ pub enum StmtValue {
         value: Handle<Expr>
     },
     Assign(Handle<Expr>, Handle<Token>, Handle<Expr>),
-    Divider(Handle<Token>)
+    Divider(Handle<Token>),
+    For {
+        var: Handle<Token>,
+        lower: Handle<Expr>,
+        exclusive_upper: Handle<Expr>,
+        body: Vec<Handle<Stmt>>
+    }
 }
 
 pub type Stmt = Node<StmtValue, ()>;
@@ -40,7 +46,26 @@ impl PrettyPrint for Stmt {
             StmtValue::Assign(lhs, equals, rhs) => {
                 write!(f, "{} {} {}", lhs, equals.value, rhs)
             }
-            StmtValue::Divider(_) => write!(f, "---")
+            StmtValue::Divider(_) => write!(f, "---"),
+            StmtValue::For {
+                var,
+                lower,
+                exclusive_upper,
+                ref body
+            } => {
+                writeln!(
+                    f,
+                    "for {} in {} ..< {} {{",
+                    var.value, lower, exclusive_upper
+                )?;
+                f.increase_indent();
+                for stmt in body {
+                    stmt.pretty_print(f)?;
+                    writeln!(f)?;
+                }
+                f.decrease_indent();
+                write!(f, "}}")
+            }
         }
     }
 }

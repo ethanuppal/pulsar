@@ -7,7 +7,7 @@
 mod tests {
     use std::{
         env,
-        fmt::Display,
+        Display,
         process::{exit, Command}
     };
 

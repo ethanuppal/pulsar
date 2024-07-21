@@ -190,11 +190,14 @@ impl<'err, 'pool, P: AsPool<Token, ()>> Lexer<'err, 'pool, P> {
             | "=" => { TokenType::Assign }
             | ":" => { TokenType::Colon }
             | "..." => { TokenType::Dots }
+            | "..<" => { TokenType::DotsUntil }
             | "." => { TokenType::Dot }
             | "," => { TokenType::Comma }
             | "\n" => { TokenType::Newline }
             | "func" => { TokenType::Func }
             | "let" => { TokenType::Let }
+            | "for" => { TokenType::For }
+            | "in" => { TokenType::In }
             | _ {
                 if self.current().is_numeric() {
                     Some(self.make_number_token())

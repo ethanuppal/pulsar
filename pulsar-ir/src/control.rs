@@ -1,29 +1,40 @@
 //! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
 //! redistribute it and/or modify it under the terms of the GNU General Public
-//! License as published by the Free Software Foundation, either version 3 of the
-//! License, or (at your option) any later version.
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
 use crate::{operand::Operand, variable::Variable, Ir};
 use inform::fmt::IndentFormatter;
 use pulsar_frontend::ast::pretty_print::PrettyPrint;
 use pulsar_utils::pool::{AsPool, Handle};
 use std::{
-    default,
     fmt::{self, Display, Write},
     mem, vec
 };
 
 pub struct For {
     variant: Variable,
-    lower: usize,
-    upper: usize,
+    lower: Operand,
+    upper: Operand,
     body: Handle<Control>
 }
 
+impl For {
+    pub fn new(
+        variant: Variable, lower: Operand, upper: Operand,
+        body: Handle<Control>
+    ) -> Self {
+        Self {
+            variant,
+            lower,
+            upper,
+            body
+        }
+    }
+}
+
 impl PrettyPrint for For {
-    fn pretty_print(
-        &self, f: &mut IndentFormatter<'_, '_>
-    ) -> fmt::Result {
+    fn pretty_print(&self, f: &mut IndentFormatter<'_, '_>) -> fmt::Result {
         writeln!(
             f,
             "for {} in {} ..< {} {{",
@@ -52,21 +63,18 @@ impl Seq {
         Self::default()
     }
 
-    pub fn push<C: Into<Control>, Metadata, P: AsPool<Control, Metadata>>(
-        &mut self, child: C, pool: &mut P
-    ) {
-        self.children.push(pool.add(child.into()));
+    pub fn push(&mut self, child: Handle<Control>) {
+        self.children.push(child);
     }
 }
 
 impl PrettyPrint for Seq {
-    fn pretty_print(
-        &self, f: &mut IndentFormatter<'_, '_>
-    ) -> fmt::Result {
+    fn pretty_print(&self, f: &mut IndentFormatter<'_, '_>) -> fmt::Result {
         writeln!(f, "seq {{")?;
         f.increase_indent();
         for child in &self.children {
             child.pretty_print(f)?;
+            writeln!(f)?;
         }
         f.decrease_indent();
         write!(f, "}}")
@@ -89,21 +97,24 @@ impl Par {
         Self::default()
     }
 
-    pub fn push<C: Into<Control>, Metadata, P: AsPool<Control, Metadata>>(
-        &mut self, child: C, pool: &mut P
-    ) {
-        self.children.push(pool.add(child.into()));
+    pub fn singleton(child: Handle<Control>) -> Self {
+        let mut new_self = Self::new();
+        new_self.push(child);
+        new_self
+    }
+
+    pub fn push(&mut self, child: Handle<Control>) {
+        self.children.push(child);
     }
 }
 
 impl PrettyPrint for Par {
-    fn pretty_print(
-        &self, f: &mut IndentFormatter<'_, '_>
-    ) -> fmt::Result {
+    fn pretty_print(&self, f: &mut IndentFormatter<'_, '_>) -> fmt::Result {
         writeln!(f, "par {{")?;
         f.increase_indent();
         for child in &self.children {
             child.pretty_print(f)?;
+            writeln!(f)?;
         }
         f.decrease_indent();
         write!(f, "}}")
@@ -126,7 +137,12 @@ impl IfElse {
     pub fn new(
         cond: Operand, true_branch: Handle<Control>,
         false_branch: Handle<Control>
-    ) {
+    ) -> Self {
+        Self {
+            cond,
+            true_branch,
+            false_branch
+        }
     }
 }
 
@@ -136,11 +152,11 @@ impl PrettyPrint for IfElse {
         f.increase_indent();
         self.true_branch.pretty_print(f)?;
         f.decrease_indent();
-        writeln!(f, "}} else {{")?;
+        writeln!(f, "\n}} else {{")?;
         f.increase_indent();
         self.false_branch.pretty_print(f)?;
         f.decrease_indent();
-        write!(f, "}}")
+        write!(f, "\n}}")
     }
 }
 
@@ -203,11 +219,18 @@ impl<'pool, P: AsControlPool> SeqParBuilder<'pool, P> {
     }
 
     pub fn push<C: Into<Control>>(&mut self, control: C) {
-        self.pars.last_mut().unwrap().push(control, self.pool);
+        self.pars
+            .last_mut()
+            .unwrap()
+            .push(self.pool.add(control.into()));
     }
 
     pub fn split(&mut self) {
         self.pars.push(Par::new());
+    }
+
+    pub fn with_pool<R, F: FnOnce(&mut P) -> R>(&mut self, f: F) -> R {
+        f(&mut self.pool)
     }
 }
 
@@ -218,7 +241,7 @@ impl<'pool, P: AsControlPool> From<SeqParBuilder<'pool, P>> for Control {
         } else {
             let mut seq = Seq::new();
             for par in value.pars {
-                seq.push(Self::Par(par), value.pool);
+                seq.push(value.pool.add(Self::Par(par)));
             }
             Self::Seq(seq)
         }

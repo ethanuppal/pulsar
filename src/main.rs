@@ -8,14 +8,17 @@
 //     Output, PulsarBackend
 // };
 use pulsar_frontend::{
-    lexer::Lexer, parser::Parser, type_inferer::TypeInferer
+    ast::{expr::Expr, node::AsNodePool},
+    lexer::Lexer,
+    parser::Parser,
+    type_inferer::TypeInferer
 };
 use pulsar_ir::from_ast;
 use pulsar_lang::{context::Context, utils::OptionCheckError};
 use pulsar_utils::{
     error::ErrorManager,
-    loc::Source,
-    pool::{AsPool, Pool}
+    loc::{Source, SpanProvider},
+    pool::{AsPool, HandleArray, Pool}
 };
 use std::env;
 
@@ -43,6 +46,15 @@ pub fn main() -> anyhow::Result<()> {
     let ast = TypeInferer::new(ast, &mut ctx, &mut error_manager)
         .infer()
         .check_errors(&mut error_manager)?;
+
+    // for decl in ast {
+    //     println!("{}", decl);
+    // }
+
+    let exprs: HandleArray<Expr> = ctx.as_pool_mut().as_array();
+    for expr in exprs {
+        println!("{} {}: {}", expr.span(), expr, ctx.get_ty(expr));
+    }
 
     let comps = from_ast::ast_to_ir(ast, &mut ctx);
 

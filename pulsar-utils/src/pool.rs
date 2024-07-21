@@ -11,11 +11,8 @@ use std::{
     marker::PhantomData,
     mem::{self, ManuallyDrop},
     ops::{Deref, DerefMut},
-    ptr,
-    rc::Rc
+    ptr
 };
-
-use crate::loc::Loc;
 
 /// 64MB.
 const ARENA_SIZE_BYTES: usize = 64 * 1024 * 1024;
@@ -23,6 +20,12 @@ const ARENA_SIZE_BYTES: usize = 64 * 1024 * 1024;
 /// Pointer to a value allocated in a [`Pool`].
 pub struct Handle<T> {
     pointer: *mut T
+}
+
+impl<T> Handle<T> {
+    pub fn is_invalid(&self) -> bool {
+        self.pointer.is_null() || !self.pointer.is_aligned()
+    }
 }
 
 impl<T> Deref for Handle<T> {
@@ -116,7 +119,7 @@ impl MMapArenaStore {
 
 struct MMapArena<T> {
     store: MMapArenaStore,
-    offset: usize,
+    count: usize,
     generic: PhantomData<T>
 }
 
@@ -128,9 +131,18 @@ impl<T> MMapArena<T> {
             } else {
                 MMapArenaStore::from(MmapOptions::new().len(size).map_anon()?)
             },
-            offset: 0,
+            count: 0,
             generic: PhantomData
         })
+    }
+
+    unsafe fn start(&self) -> *const T {
+        self.store.mmap.as_ptr() as *const T
+    }
+
+    unsafe fn start_mut(&mut self) -> *mut T {
+        let mmap = &mut self.store.mmap;
+        mmap.as_mut_ptr() as *mut T
     }
 
     unsafe fn alloc(&mut self) -> *mut T {
@@ -138,35 +150,29 @@ impl<T> MMapArena<T> {
             ptr::null_mut()
         } else {
             let mmap = &mut self.store.mmap;
-            if self.offset + mem::size_of::<T>() > mmap.len() {
+            if (self.count + 1) * mem::size_of::<T>() > mmap.len() {
                 panic!("Arena memory exhausted");
             }
-            let result = mmap.as_mut_ptr().add(self.offset);
-            self.offset += mem::size_of::<T>();
-            result as *mut T
+            let result = self.start_mut().add(self.count);
+            self.count += 1;
+            result
         }
     }
 
-    unsafe fn offset_of(&self, pointer: *mut T) -> usize {
-        (pointer as *const u8).offset_from(self.store.mmap.as_ptr()) as usize
+    unsafe fn index_of(&self, pointer: *mut T) -> usize {
+        pointer.offset_from(self.start()) as usize
     }
 
-    unsafe fn at_offset_ref(&self, offset: usize) -> *const T {
-        self.store.mmap.as_ptr().add(offset) as *mut T
+    unsafe fn at_index_ref(&self, index: usize) -> *const T {
+        self.start().add(index) as *mut T
     }
 
-    unsafe fn at_offset_mut(&mut self, offset: usize) -> *mut T {
-        let mmap = &mut self.store.mmap;
-        mmap.as_mut_ptr().add(offset) as *mut T
+    unsafe fn at_index_mut(&mut self, index: usize) -> *mut T {
+        self.start_mut().add(index)
     }
 
     fn as_slice(&mut self) -> (*mut T, usize) {
-        unsafe {
-            (
-                self.store.mmap.as_ptr() as *mut T,
-                self.offset / mem::size_of::<T>()
-            )
-        }
+        unsafe { (self.start_mut(), self.count) }
     }
 }
 
@@ -203,15 +209,15 @@ impl<Value, Metadata> Pool<Value, Metadata> {
     where
         Value: 'a {
         unsafe {
-            let offset = self.contents.offset_of(handle.pointer);
-            self.metadata.at_offset_ref(offset).as_ref().unwrap()
+            let index = self.contents.index_of(handle.pointer);
+            self.metadata.at_index_ref(index).as_ref().unwrap()
         }
     }
 
-    fn set_metadata(&mut self, handle: Handle<Value>, ty: Metadata) {
+    fn set_metadata(&mut self, handle: Handle<Value>, metadata: Metadata) {
         unsafe {
-            let offset = self.contents.offset_of(handle.pointer);
-            *self.metadata.at_offset_mut(offset) = ty;
+            let index = self.contents.index_of(handle.pointer);
+            *self.metadata.at_index_mut(index) = metadata;
         }
     }
 }

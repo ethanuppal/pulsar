@@ -395,19 +395,32 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
 // TODO: see if you can remove or actually make useful
 macro_rules! expect_n {
-    ($self:ident in [$($token_type:expr),*] => $context:expr) => {
+    ($self:ident; $token:ident; $context:expr; $($token_type:pat => $action:expr),*) => {
         if $self.is_eof() {
-            $self.report_unexpected_eof($context.into());
-            None
-        } else if ![$($token_type),*].contains(&$self.current().ty) {
-            $self.report_expected_tokens(
-                &[$($token_type),*],
-                $self.current(),
-                $context
-            );
+            $self.report_unexpected_eof($context);
             None
         } else {
-            Some($self.take())
+            let $token = $self.current();
+            match $self.current().ty {
+                $(
+                    $token_type => $action,
+                )*
+                _ => {
+                    let token_type_patterns = [$(stringify!($token_type)),*];
+                    let mut token_types = Vec::new();
+                    for subpattern in token_type_patterns {
+                        for sub in subpattern.split('|').map(str::trim) {
+                            token_types.push(serde_json::from_str(&sub).expect("failed to round-trip serialize"));
+                        }
+                    }
+                    $self.report_expected_tokens(
+                        &token_types,
+                        $self.current(),
+                        $context
+                    );
+                    None
+                }
+            }
         }
     };
 }
@@ -573,11 +586,14 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             );
             return None;
         }
-        let primary = parse_full_node!(self.parse_primary_type(name))?;
+        let start = self.current();
+        let primary_value = self.parse_primary_type(name)?;
+        let end = self.previous();
         if self.is_at(TokenType::LeftBracket) {
+            let primary = self.ast_pool.new(primary_value, start, end);
             self.parse_array_type(primary)
         } else {
-            Some(primary.value.clone())
+            Some(primary_value)
         }
     }
 
@@ -628,20 +644,20 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     }
 
     fn parse_literal_expr_value(&mut self) -> Option<ExprValue> {
-        let literal_token = expect_n! { self in
-            [TokenType::Integer, TokenType::Float, TokenType::Char, TokenType::LeftBracket, TokenType::Identifier] => ParseErrorContext::new().begin("literal expression")
-        }?;
-        match literal_token.ty {
+        expect_n!(self; literal_token; ParseErrorContext::new().in_("literal expression");
             TokenType::Integer => Some(ExprValue::ConstantInt(
                 literal_token.value.parse::<i64>().unwrap()
             )),
             TokenType::LeftBracket => {
                 self.unget();
                 self.parse_array_literal_expr_value()
-            }
-            TokenType::Identifier => Some(ExprValue::BoundName(literal_token)),
-            _ => None
-        }
+            },
+            TokenType::Identifier => Some(ExprValue::BoundName(literal_token))
+        )
+        // let literal_token = expect_n! { self in
+        //     [TokenType::Integer, TokenType::Float, TokenType::Char,
+        // TokenType::LeftBracket, TokenType::Identifier] =>
+        // ParseErrorContext::new().begin("literal expression") }?;
     }
 
     fn parse_unary_prefix_expr_value(
@@ -658,9 +674,9 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         Some(ExprValue::PrefixOp(op_token, rhs))
     }
 
-    fn parse_postfix_binary_expr_value(
+    fn parse_postfix_binary_expr(
         &mut self, mut lhs: Handle<Expr>
-    ) -> Option<ExprValue> {
+    ) -> Option<Handle<Expr>> {
         while let Some(postfix_bop) =
             self.current_op_opt().and_then(|op| op.postfix_binary)
         {
@@ -683,7 +699,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 end_token
             );
         }
-        Some(lhs.value.clone())
+        Some(lhs)
     }
 
     fn parse_call_expr_value(&mut self) -> Option<ExprValue> {
@@ -757,15 +773,15 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         }
     }
 
-    fn parse_primary_expr_value(&mut self) -> Option<ExprValue> {
+    fn parse_primary_expr(&mut self) -> Option<Handle<Expr>> {
         let primary = parse_full_node!(self.parse_primary_expr_value_aux())?;
         if self
             .current_op_opt()
             .map_or(false, |op| op.is_postfix_binary())
         {
-            self.parse_postfix_binary_expr_value(primary)
+            self.parse_postfix_binary_expr(primary)
         } else {
-            Some(primary.value.clone())
+            Some(primary)
         }
     }
 
@@ -785,7 +801,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 .and_then(|op| op.infix_binary)
                 .expect("while cond guarantees");
 
-            let mut rhs = parse_full_node!(self.parse_primary_expr_value())?;
+            let mut rhs = self.parse_primary_expr()?;
             if self.is_eof() {
                 break;
             }
@@ -827,7 +843,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     fn parse_expr(&mut self) -> Option<Handle<Expr>> {
         self.consume_ignored();
-        let primary = parse_full_node!(self.parse_primary_expr_value())?;
+        let primary = self.parse_primary_expr()?;
         if let Some(op) = self.current_op_opt() {
             if op.is_infix_binary() {
                 self.parse_infix_binary_expr(primary, -1)
@@ -842,6 +858,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     // ============================== STATEMENTS ===============================
 
+    /// Requires: `self.current().ty == TokenType::Let`.`
     fn parse_let(&mut self) -> Option<StmtValue> {
         self.expect(
             TokenType::Let,
@@ -892,6 +909,40 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         )?;
         let rhs = self.parse_expr()?;
         Some(StmtValue::Assign(lhs, assign, rhs))
+    }
+
+    /// Requires: `self.current().ty == TokenType::For`;
+    fn parse_for(&mut self) -> Option<StmtValue> {
+        self.expect(
+            TokenType::For,
+            ParseErrorContext::new().begin("for statement")
+        )?;
+        let var = self.expect(
+            TokenType::Identifier,
+            ParseErrorContext::new().for_("loop variable")
+        )?;
+        self.expect(
+            TokenType::In,
+            ParseErrorContext::new().after("loop variable")
+        )?;
+        let lower = self.parse_expr()?;
+
+        // todo: handle `...`
+        self.expect(
+            TokenType::DotsUntil,
+            ParseErrorContext::new().between("range bounds")
+        )?;
+
+        let exclusive_upper = self.parse_expr()?;
+
+        let (_, body, _) = self.parse_block("for body")?;
+
+        Some(StmtValue::For {
+            var,
+            lower,
+            exclusive_upper,
+            body
+        })
     }
 
     /// Parses a brace-enclosed list of statements, e.g., `parse_block("function
@@ -946,6 +997,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         match self.current().ty {
             TokenType::Let => self.parse_let(),
             TokenType::Divider => Some(StmtValue::Divider(self.take())),
+            TokenType::For => self.parse_for(),
             other => {
                 if let Some(expr) = self.parse_expr() {
                     return self.parse_assign(expr);
