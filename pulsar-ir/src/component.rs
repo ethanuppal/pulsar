@@ -3,17 +3,22 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use crate::{
-    cell::Cell, control::Control, label::Label, memory::Memory,
-    variable::Variable
-};
+use crate::{cell::Cell, control::Control, label::Label, variable::Variable};
 use inform::fmt::IndentFormatter;
-use pulsar_frontend::ast::{pretty_print::PrettyPrint, ty::Type};
+use pulsar_frontend::ast::pretty_print::PrettyPrint;
 use pulsar_utils::pool::Handle;
-use std::fmt::{self, Display, Write};
+use std::{
+    collections::HashMap,
+    fmt::{self, Display, Write}
+};
 
 pub struct Component {
     label: Label,
+    inputs: Vec<Handle<Cell>>,
+    outputs: Vec<Handle<Cell>>,
+    internal_cells: Vec<Handle<Cell>>,
+    /// Like reg-alloc but for cells. need better way to represent
+    cell_alloc: HashMap<Variable, Handle<Cell>>,
     cfg: Control
 }
 
@@ -26,7 +31,8 @@ impl Component {
             label,
             inputs,
             outputs,
-            memories,
+            internal_cells: Vec::new(),
+            cell_alloc: HashMap::new(),
             cfg
         }
     }
@@ -40,17 +46,31 @@ impl PrettyPrint for Component {
             self.label,
             self.inputs
                 .iter()
-                .map(|ty| ty.to_string())
+                .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join(", "),
             self.outputs
                 .iter()
-                .map(|ty| ty.to_string())
+                .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join(", ")
         )?;
         f.increase_indent();
-        self.cfg.pretty_print(f)?;
+
+        writeln!(f, "cells {{");
+        {
+            f.increase_indent();
+            self.cfg.pretty_print(f)?;
+            f.decrease_indent();
+        }
+        writeln!(f, "}}\ncontrol {{");
+        {
+            f.increase_indent();
+            self.cfg.pretty_print(f)?;
+            f.decrease_indent();
+        }
+        write!(f, "\n}}")?;
+
         f.decrease_indent();
         write!(f, "\n}}")
     }

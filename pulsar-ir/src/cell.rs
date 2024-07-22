@@ -3,8 +3,10 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
+use std::fmt::{self, Display};
+
 use crate::memory::Memory;
-use pulsar_frontend::ast::ty::{Type, TypeValue};
+use pulsar_frontend::ast::ty::{LiquidTypeValue, Type, TypeValue};
 
 /// A hardware element capable of storage.
 pub enum Cell {
@@ -14,17 +16,40 @@ pub enum Cell {
     Register(usize)
 }
 
-impl From<Type> for Cell {
-    fn from(ty: Type) -> Self {
-        match &ty.value {
+impl Cell {
+    pub fn from(ty: &Type) -> Self {
+        match ty.value {
             TypeValue::Unit => Self::Register(0),
             TypeValue::Var(_) => panic!(),
             TypeValue::Name(_) => todo!(),
             TypeValue::Int64 => Self::Register(64),
             TypeValue::Array(element_type, element_count) => {
-                todo!("Memory from {}/{}", element_type, element_count)
+                let LiquidTypeValue::Equal(length) = element_count.value else {
+                    panic!("liquid type not resolved");
+                };
+                Self::Memory(Memory::new(length, element_type.size(), 1))
             }
-            TypeValue::Function { inputs, outputs } => panic!()
+            TypeValue::Function {
+                inputs: _,
+                outputs: _
+            } => panic!()
+        }
+    }
+}
+
+impl Display for Cell {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Cell::Memory(memory) => {
+                write!(
+                    f,
+                    "Memory(length={}, element={}, bank={})",
+                    memory.length, memory.element, memory.bank
+                )
+            }
+            Cell::Register(bit_width) => {
+                write!(f, "Register(width={})", bit_width)
+            }
         }
     }
 }

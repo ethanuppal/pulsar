@@ -736,7 +736,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         Some(ExprValue::Call(name, args))
     }
 
-    fn parse_primary_expr_value_aux(&mut self) -> Option<ExprValue> {
+    fn parse_primary_expr_aux(&mut self) -> Option<Handle<Expr>> {
         if self.is_eof() {
             self.report_unexpected_eof(
                 ParseErrorContext::new().begin("primary expression")
@@ -745,11 +745,10 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         } else if let Some(prefix_op) =
             self.current_op_opt().filter(|op| op.is_unary_prefix())
         {
-            self.parse_unary_prefix_expr_value(prefix_op)
+            parse_full_node!(self.parse_unary_prefix_expr_value(prefix_op))
         } else if self.is_at(TokenType::LeftPar) {
             let open_paren = self.take();
-            let temp_wrapped = self.parse_expr()?;
-            let expr_value = temp_wrapped.value.clone();
+            let wrapped = self.parse_expr()?;
             let closing_paren = self.expect(
                 TokenType::RightPar,
                 ParseErrorContext::new().in_("expression")
@@ -761,20 +760,20 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 );
                 None
             } else {
-                Some(expr_value)
+                Some(wrapped)
             }
         } else if self.is_at(TokenType::Identifier)
             && self.next_is(TokenType::LeftPar)
         {
             // TODO: allow calling expressions and more complex names with `::`
-            self.parse_call_expr_value()
+            parse_full_node!(self.parse_call_expr_value())
         } else {
-            self.parse_literal_expr_value()
+            parse_full_node!(self.parse_literal_expr_value())
         }
     }
 
     fn parse_primary_expr(&mut self) -> Option<Handle<Expr>> {
-        let primary = parse_full_node!(self.parse_primary_expr_value_aux())?;
+        let primary = self.parse_primary_expr_aux()?;
         if self
             .current_op_opt()
             .map_or(false, |op| op.is_postfix_binary())

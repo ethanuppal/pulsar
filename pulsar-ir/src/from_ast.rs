@@ -24,7 +24,13 @@ use pulsar_frontend::{
     },
     token::{Token, TokenType}
 };
-use pulsar_utils::{environment::Environment, id::Gen, pool::Handle};
+use pulsar_utils::{
+    environment::Environment,
+    id::Gen,
+    pool::{AsPool, Handle}
+};
+
+pub trait AsGeneratorPool: AsControlPool + AsPool<Cell, ()> {}
 
 #[derive(Default)]
 pub struct ComponentGenerator {
@@ -33,7 +39,7 @@ pub struct ComponentGenerator {
     cells: Environment<Variable, Cell>
 }
 
-pub fn ast_to_ir<P: AsControlPool>(ast: AST, pool: &mut P) -> Vec<Component> {
+pub fn ast_to_ir<P: AsGeneratorPool>(ast: AST, pool: &mut P) -> Vec<Component> {
     ast.into_iter()
         .map(|decl| match &decl.value {
             DeclValue::Function {
@@ -54,26 +60,33 @@ impl ComponentGenerator {
         Self::default()
     }
 
-    pub fn gen<P: AsControlPool>(
+    pub fn gen<P: AsGeneratorPool>(
         mut self, pool: &mut P, name: Handle<Token>, inputs: &[Param],
         outputs: &[Param], body: &[Handle<Stmt>]
     ) -> Component {
-        for (port_name, _) in inputs.iter().chain(outputs) {
-            let var = self.new_var();
-            self.env.bind(port_name.value.clone(), var);
+        let mut input_cells = Vec::new();
+        let mut output_cells = Vec::new();
+        for (params, cells) in
+            [(inputs, &mut input_cells), (outputs, &mut output_cells)]
+        {
+            for (port_name, port_type) in params {
+                let var = self.new_var();
+                self.env.bind(port_name.value.clone(), var);
+                cells.push(pool.add(Cell::from(port_type)))
+            }
         }
 
-        let inputs = inputs
+        let input_types = inputs
             .iter()
             .map(|(_, input_type)| *input_type)
             .collect::<Vec<_>>();
-        let outputs = outputs
+        let output_types = outputs
             .iter()
             .map(|(_, output_type)| *output_type)
             .collect::<Vec<_>>();
 
         let label = Label::from(
-            Name::from_native(&name.value, &inputs, &outputs),
+            Name::from_native(&name.value, &input_types, &output_types),
             Visibility::Public
         );
 
@@ -82,7 +95,10 @@ impl ComponentGenerator {
             self.gen_stmt(*stmt, &mut control)
         }
 
-        Component::new(label, inputs, outputs, vec![], control.into())
+        let mut comp =
+            Component::new(label, input_cells, output_cells, control.into());
+
+        comp
     }
 
     /// A new IR variable unique to this generator.
@@ -121,11 +137,7 @@ impl ComponentGenerator {
                 let array_operand = self.gen_expr(*array, control);
                 let index_operand = self.gen_expr(*index, control);
                 let result = self.new_var();
-                control.push(Ir::Load {
-                    result,
-                    value: array_operand,
-                    index: index_operand
-                });
+                control.push(Ir::Assign(result, Operand::PartialAccess(Box::new(array_operand), Box::new(index_operand))));
                 Operand::Variable(result)
             }
             _ => todo!()

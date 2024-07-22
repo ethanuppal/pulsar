@@ -15,7 +15,11 @@ use pulsar_frontend::{
     token::Token,
     type_inferer::{AsInferencePool, LiquidTypeConstraint, TypeConstraint}
 };
-use pulsar_ir::control::{AsControlPool, Control};
+use pulsar_ir::{
+    cell::Cell,
+    control::{AsControlPool, Control},
+    from_ast::AsGeneratorPool
+};
 use pulsar_utils::pool::{AsPool, Handle, Pool};
 use std::io;
 
@@ -29,7 +33,8 @@ pub struct Context {
     tokens: Pool<Token, ()>,
     type_constraints: Pool<TypeConstraint, ()>,
     liquid_type_constraints: Pool<LiquidTypeConstraint, ()>,
-    controls: Pool<Control, usize>
+    controls: Pool<Control, usize>,
+    cells: Pool<Cell, ()>
 }
 
 impl Context {
@@ -43,7 +48,8 @@ impl Context {
             tokens: Pool::new()?,
             type_constraints: Pool::new()?,
             liquid_type_constraints: Pool::new()?,
-            controls: Pool::new()?
+            controls: Pool::new()?,
+            cells: Pool::new()?
         })
     }
 }
@@ -91,3 +97,5 @@ as_pool!(LiquidTypeConstraint, (), liquid_type_constraints);
 impl AsInferencePool for Context {}
 as_pool!(Control, usize, controls);
 impl AsControlPool for Context {}
+as_pool!(Cell, (), cells);
+impl AsGeneratorPool for Context {}
