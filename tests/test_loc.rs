@@ -5,7 +5,7 @@
 
 #[cfg(test)]
 mod tests {
-    use pulsar_utils::loc::{Loc, Source};
+    use pulsar_utils::span::{Loc, Source};
 
     #[test]
     fn test_loc_lines() {

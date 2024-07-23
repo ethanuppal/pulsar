@@ -3,7 +3,7 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use super::loc::{Span, SpanProvider};
+use super::span::{Span, SpanProvider};
 use colored::*;
 use std::{
     fmt::{self, Display},

@@ -21,14 +21,14 @@ impl<T> OptionCheckError<T> for Option<T> {
     fn check_errors(
         self, error_manager: &mut ErrorManager
     ) -> anyhow::Result<T> {
+        if error_manager.has_errors() {
+            let mut buffer = Vec::new();
+            error_manager.consume_and_write(&mut buffer)?;
+            print!("{}", String::from_utf8_lossy(&buffer));
+        }
         if let Some(result) = self {
             Ok(result)
         } else {
-            if error_manager.has_errors() {
-                let mut buffer = Vec::new();
-                error_manager.consume_and_write(&mut buffer)?;
-                print!("{}", String::from_utf8_lossy(&buffer));
-            }
             Err(anyhow!("Exiting due to errors"))
         }
     }

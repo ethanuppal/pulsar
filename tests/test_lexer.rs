@@ -8,7 +8,8 @@ mod tests {
     use insta::assert_snapshot;
     use pulsar_frontend::lexer::Lexer;
     use pulsar_lang::context::Context;
-    use pulsar_utils::{error::ErrorManager, loc::Source};
+    use pulsar_utils::{error::ErrorManager, span::Source};
+    use std::fmt::Write;
 
     fn lexer_output(filename: &str) -> String {
         let mut ctx = Context::new().unwrap();
@@ -20,7 +21,7 @@ mod tests {
             .expect("invalid input");
         let mut output = String::new();
         for token in tokens {
-            output.push_str(&format!("{:?}\n", token));
+            writeln!(&mut output, "{:?}", token).unwrap();
         }
         output
     }

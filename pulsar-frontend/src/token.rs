@@ -4,89 +4,91 @@
 //! the License, or (at your option) any later version.
 
 use core::{fmt, fmt::Debug};
-use pulsar_utils::loc::{Loc, SpanProvider};
-use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use pulsar_utils::span::{Loc, SpanProvider};
 
-#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TokenType {
-    #[serde(rename = "identifier")]
+macro_rules! token_type_enum {
+    ($($(@$doc:expr =>)? $name:ident),+) => {
+        #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+        pub enum TokenType {
+            $(
+                $(#[doc = $doc])?
+                $name
+            ),+
+        }
+
+        impl TokenType {
+            /// A kebab-case name for this token type.
+            pub fn name(&self) -> String {
+                match self {
+                    $(
+                        TokenType::$name => {
+                            let mut result = String::new();
+                            for (i, c) in stringify!($name).chars().enumerate() {
+                                if c.is_uppercase() {
+                                    if i > 0 {
+                                        result.push('-');
+                                    }
+                                    result.push(c.to_ascii_lowercase());
+                                } else {
+                                    result.push(c);
+                                }
+                            }
+                            result
+                        }
+                    )*
+                }
+            }
+
+            /// e.g., `TokenType::from_pattern("TokenType::Newline")`.
+            pub fn from_pattern<S: AsRef<str>>(pat: S) -> Option<Self> {
+                match pat.as_ref() {
+                    $(
+                        concat!("TokenType::", stringify!($name)) => Some(TokenType::$name),
+                    )*
+                    _ => None
+                }
+            }
+        }
+    };
+}
+
+token_type_enum! {
     Identifier,
-    /// While it is guaranteed that tokens of this type represent valid
-    /// integers, they may not fit within the 64-bit signed or unsigned limit.
-    #[serde(rename = "integer")]
+    @"While it is guaranteed that tokens of this type represent valid integers, they may not fit within the 64-bit signed or unsigned limit." =>
     Integer,
-    #[serde(rename = "float")]
     Float,
-    #[serde(rename = "bool")]
     Bool,
-    #[serde(rename = "char")]
     Char,
-    #[serde(rename = "string")]
     String,
-    #[serde(rename = "func")]
     Func,
-    #[serde(rename = "let")]
     Let,
-    #[serde(rename = "for")]
     For,
-    #[serde(rename = "in")]
     In,
-    #[serde(rename = "plus")]
     Plus,
-    #[serde(rename = "minus")]
     Minus,
-    #[serde(rename = "times")]
     Times,
-    #[serde(rename = "assign")]
     Assign,
-    #[serde(rename = "left-par")]
     LeftPar,
-    #[serde(rename = "right-par")]
     RightPar,
-    #[serde(rename = "left-brace")]
     LeftBrace,
-    #[serde(rename = "right-brace")]
     RightBrace,
-    #[serde(rename = "left-bracket")]
     LeftBracket,
-    #[serde(rename = "right-bracket")]
     RightBracket,
-    #[serde(rename = "left-angle")]
     LeftAngle,
-    #[serde(rename = "right-angle")]
     RightAngle,
-    #[serde(rename = "dot")]
     Dot,
-    #[serde(rename = "dots")]
     Dots,
-    #[serde(rename = "dots-until")]
     DotsUntil,
-    #[serde(rename = "divider")]
     Divider,
-    #[serde(rename = "colon")]
     Colon,
-    #[serde(rename = "comma")]
     Comma,
-    #[serde(rename = "arrow")]
     Arrow,
-    #[serde(rename = "newline")]
     Newline
 }
 
-impl Debug for TokenType {
+impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            serde_json::to_string(self).expect("I handled all cases")
-        )
-    }
-}
-
-impl Display for TokenType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let default = format!("{:?}", self);
+        let default = self.name();
         write!(
             f,
             "{}",
@@ -142,13 +144,13 @@ impl Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "({}, ty = {:?}, loc = {})",
+            "({}, ty = {}, loc = {})",
             if self.value == "\n" {
                 "\\n"
             } else {
                 self.value.as_str()
             },
-            self.ty,
+            self.ty.name(),
             self.loc
         )
     }

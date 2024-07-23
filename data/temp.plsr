@@ -15,4 +15,3 @@ pure func multiply(x: Int, y: Int) -> Int {
 pure func square(value: Int) -> Int {
     return multiply(value, value)
 }
-

@@ -6,21 +6,24 @@
 //! the License, or (at your option) any later version.
 
 use super::token::Token;
-use crate::ast::{
-    decl::{Decl, DeclValue},
-    expr::{Expr, ExprValue},
-    node::NodeInterface,
-    stmt::{Stmt, StmtValue},
-    ty::{LiquidType, LiquidTypeValue, Type, TypeValue},
-    AsASTPool
+use crate::{
+    ast::{
+        decl::{Decl, DeclValue},
+        expr::{Expr, ExprValue},
+        node::NodeInterface,
+        stmt::{Stmt, StmtValue},
+        ty::{LiquidType, LiquidTypeValue, Type, TypeValue},
+        AsASTPool
+    },
+    token::TokenType
 };
 use pulsar_utils::{
     disjoint_sets::DisjointSets,
     environment::Environment,
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
     id::Gen,
-    loc::SpanProvider,
-    pool::{AsPool, Handle, HandleArray}
+    pool::{AsPool, Handle, HandleArray},
+    span::SpanProvider
 };
 use std::{fmt::Display, iter::zip};
 
@@ -63,7 +66,10 @@ impl<T> UnificationConstraint<T> {
 pub type TypeConstraint = UnificationConstraint<Type>;
 pub type LiquidTypeConstraint = UnificationConstraint<LiquidType>;
 
-trait Unifier<T: NodeInterface + Eq, P: AsPool<UnificationConstraint<T>, ()>> {
+trait Unifier<
+    T: NodeInterface + Eq + Display,
+    P: AsPool<UnificationConstraint<T>, ()>
+> {
     fn type_pool_mut(&mut self) -> &mut P;
     fn constraints(&mut self) -> &mut Vec<Handle<UnificationConstraint<T>>>;
 
@@ -71,7 +77,9 @@ trait Unifier<T: NodeInterface + Eq, P: AsPool<UnificationConstraint<T>, ()>> {
         let handle = self
             .type_pool_mut()
             .add(UnificationConstraint::new(expected, actual));
+
         self.constraints().push(handle);
+        log::info!("encountered constraint: {} = {}", expected, actual);
     }
 
     fn derive_constraint(
@@ -82,6 +90,14 @@ trait Unifier<T: NodeInterface + Eq, P: AsPool<UnificationConstraint<T>, ()>> {
             .type_pool_mut()
             .add(UnificationConstraint::derived(expected, actual, source));
         self.constraints().push(handle);
+
+        log::info!(
+            "encountered constraint: {} = {} (from {} = {})",
+            expected,
+            actual,
+            source.expected(),
+            source.actual()
+        );
     }
 
     fn unify_constraint(
@@ -382,8 +398,7 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                 op_result_type
             }
             // for now, all ops are on integers
-            ExprValue::InfixBop(lhs, op, rhs)
-            | ExprValue::PostfixBop(lhs, op, rhs, _) => {
+            ExprValue::InfixBop(lhs, op, rhs) => {
                 let op_lhs_type =
                     self.pool.generate(TypeValue::Int64, *op, *op);
                 let op_rhs_type = self.pool.duplicate(op_lhs_type);
@@ -394,6 +409,33 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                 self.new_constraint(op_rhs_type, rhs_type);
                 op_result_type
             }
+            ExprValue::PostfixBop(lhs, op, index, op2)
+                if op.ty == TokenType::LeftBracket
+                    && op2.ty == TokenType::RightBracket =>
+            {
+                let lhs_type = self.visit_expr(*lhs)?;
+                let index_type = self.visit_expr(*index)?;
+
+                // index must be an integer
+                let op_index_type =
+                    self.pool.generate(TypeValue::Int64, *op, *op);
+                self.new_constraint(op_index_type, index_type);
+
+                // lhs must be an array with:
+                // - some inner element type (`result_type`)
+                // - some length (`index_liquid_type`)
+                let result_type = self.new_type_var(expr);
+                let index_liquid_type =
+                    self.pool.generate(LiquidTypeValue::All, *op, *op);
+                let expected_lhs_type = self.pool.generate(
+                    TypeValue::Array(result_type, index_liquid_type),
+                    lhs.start_token(),
+                    lhs.end_token()
+                );
+                self.new_constraint(expected_lhs_type, lhs_type);
+                result_type
+            }
+            _ => todo!()
         };
         self.pool.set_ty(expr, expr_type);
         Some(expr_type)
@@ -498,11 +540,11 @@ impl<'pool, 'err, P: AsInferencePool> Unifier<Type, P>
                         .expect("failed to union");
                 }
                 (TypeValue::Var(_), _) => {
-                    dsu.union(actual_rep, expected_rep, false)
+                    dsu.union(expected_rep, actual_rep, false)
                         .expect("failed to union");
                 }
                 (_, TypeValue::Var(_)) => {
-                    dsu.union(expected_rep, actual_rep, false)
+                    dsu.union(actual_rep, expected_rep, false)
                         .expect("failed to union");
                 }
                 _ if expected.can_unify_with(&actual) => {
@@ -567,17 +609,17 @@ impl<'pool, 'err, P: AsInferencePool> Unifier<LiquidType, P>
                         .expect("failed to union");
                 }
                 (LiquidTypeValue::All, _) => {
-                    dsu.union(actual, expected, false)
+                    dsu.union(expected, actual, false)
                         .expect("failed to union");
                 }
                 (_, LiquidTypeValue::All) => {
-                    dsu.union(expected, actual, false)
+                    dsu.union(actual, expected, false)
                         .expect("failed to union");
                 }
                 (LiquidTypeValue::Equal(a), LiquidTypeValue::Equal(b))
                     if a == b =>
                 {
-                    dsu.union(expected, actual, false);
+                    dsu.union(actual, expected, false);
                 }
                 _ => {
                     self.report_unification_failure(constraint, None);

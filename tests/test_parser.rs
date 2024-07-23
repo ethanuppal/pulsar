@@ -8,7 +8,8 @@ mod tests {
     use insta::assert_snapshot;
     use pulsar_frontend::{lexer::Lexer, parser::Parser};
     use pulsar_lang::{context::Context, utils::OptionCheckError};
-    use pulsar_utils::{error::ErrorManager, loc::Source};
+    use pulsar_utils::{error::ErrorManager, span::Source};
+    use std::fmt::Write;
 
     fn parser_output(filename: &str) -> anyhow::Result<String> {
         let mut ctx = Context::new().unwrap();
@@ -24,7 +25,7 @@ mod tests {
 
         if let Some(ast) = ast {
             for decl in ast {
-                output.push_str(&format!("{}\n", decl));
+                writeln!(&mut output, "{}", decl).unwrap();
             }
         }
         let mut buffer = Vec::new();

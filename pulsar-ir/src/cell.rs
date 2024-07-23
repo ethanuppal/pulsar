@@ -16,6 +16,8 @@ pub enum Cell {
     Register(usize)
 }
 
+pub const BITS_PER_BYTE: usize = 8;
+
 impl Cell {
     pub fn from(ty: &Type) -> Self {
         match ty.value {
@@ -27,7 +29,11 @@ impl Cell {
                 let LiquidTypeValue::Equal(length) = element_count.value else {
                     panic!("liquid type not resolved");
                 };
-                Self::Memory(Memory::new(length, element_type.size(), 1))
+                Self::Memory(Memory::new(
+                    length,
+                    element_type.size() * BITS_PER_BYTE,
+                    1
+                ))
             }
             TypeValue::Function {
                 inputs: _,

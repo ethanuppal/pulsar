@@ -1,7 +1,6 @@
-func identity(x: Int) -> (y: Int) {
-    x = y
-}
-
-func main(a: Int[64][64], b: Int[64][64]) -> (c: Int[64][64]) {
-    
+func main(a: Int[64], b: Int[64]) -> (c: Int[64]) {
+    for i in 0 ..< 64 {
+        let temp = 4
+        c[i] = a[i] + b[i]
+    }
 }

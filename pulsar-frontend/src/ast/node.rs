@@ -8,8 +8,8 @@ use crate::{
     token::{Token, TokenType}
 };
 use pulsar_utils::{
-    loc::{Loc, SpanProvider},
-    pool::{AsPool, Handle}
+    pool::{AsPool, Handle},
+    span::{Loc, SpanProvider}
 };
 use std::{
     fmt::{self, Display},

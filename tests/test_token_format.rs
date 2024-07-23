@@ -3,11 +3,13 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
+// this test was mainly written so I could learn the syntax for proptest
+
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
     use pulsar_frontend::token::{Token, TokenType};
-    use pulsar_utils::loc::{Loc, Source};
+    use pulsar_utils::span::{Loc, Source};
     use std::rc::Rc;
 
     fn arb_token_type() -> impl Strategy<Value = TokenType> {
@@ -69,7 +71,7 @@ mod tests {
             loc in arb_loc(),
         ) {
             assert_eq!(
-                format!("({}, ty = {:?}, loc = {})", value, ty, loc),
+                format!("({}, ty = {}, loc = {})", value, ty.name(), loc),
                 format!("{:?}",  Token { ty, value, loc })
             );
         }

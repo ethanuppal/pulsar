@@ -6,8 +6,8 @@
 use super::token::{Token, TokenType};
 use pulsar_utils::{
     error::{ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
-    loc::{Loc, Source, Span},
-    pool::{AsPool, Handle, HandleArray}
+    pool::{AsPool, Handle, HandleArray},
+    span::{Loc, Source, Span}
 };
 use std::rc::Rc;
 
@@ -80,6 +80,30 @@ impl<'err, 'pool, P: AsPool<Token, ()>> Lexer<'err, 'pool, P> {
         (self.loc.pos as usize) == self.buffer.len()
     }
 
+    /// Whether the following characters match those provided by `iter`.
+    fn next_are<I: Iterator<Item = char>>(&self, iter: I) -> bool {
+        for (i, c) in iter.enumerate() {
+            if (self.loc.pos as usize) + i >= self.buffer.len()
+                || self.buffer[(self.loc.pos as usize) + i] != c
+            {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Whether a character `offset` ahead of current, if one exists, satisfies
+    /// the predicate `f`.
+    fn peek_matches<F: FnOnce(char) -> bool>(
+        &self, offset: usize, f: F
+    ) -> bool {
+        if (self.loc.pos as usize) + offset >= self.buffer.len() {
+            false
+        } else {
+            f(self.buffer[(self.loc.pos as usize) + offset])
+        }
+    }
+
     /// Consumes a single character in the buffer.
     fn advance(&mut self) {
         if self.current() == '\n' {
@@ -149,14 +173,23 @@ impl<'err, 'pool, P: AsPool<Token, ()>> Lexer<'err, 'pool, P> {
     }
 }
 
+enum LexSemantics {
+    Keyword
+}
+
 macro_rules! lex {
-    ($self:ident; $(| $token:expr => {$token_type:expr})* | _ $finally:block) => {
+    ($self:ident; $(| $(@[$semantics:expr])? $token:expr => {$token_type:expr})* | _ $finally:block) => {
         $(
             {
                 let input_token_length = ($token).len();
                 let loc_pos = $self.loc.pos as usize;
                 if loc_pos + input_token_length <= $self.buffer.len()
-                    && $self.buffer[loc_pos..loc_pos + input_token_length].iter().copied().eq($token.chars()) {
+                    && $self.next_are($token.chars())
+                    $(&& match $semantics {
+                        LexSemantics::Keyword => $self.peek_matches(input_token_length, |c| c.is_whitespace()),
+                        #[allow(unreachable_patterns)]
+                        _ => true
+                    })? {
                     return Some($self.make_token($token_type, input_token_length));
                 };
             }
@@ -194,10 +227,10 @@ impl<'err, 'pool, P: AsPool<Token, ()>> Lexer<'err, 'pool, P> {
             | "." => { TokenType::Dot }
             | "," => { TokenType::Comma }
             | "\n" => { TokenType::Newline }
-            | "func" => { TokenType::Func }
-            | "let" => { TokenType::Let }
-            | "for" => { TokenType::For }
-            | "in" => { TokenType::In }
+            | @[LexSemantics::Keyword] "func" => { TokenType::Func }
+            | @[LexSemantics::Keyword] "let" => { TokenType::Let }
+            | @[LexSemantics::Keyword] "for" => { TokenType::For }
+            | @[LexSemantics::Keyword] "in" => { TokenType::In }
             | _ {
                 if self.current().is_numeric() {
                     Some(self.make_number_token())

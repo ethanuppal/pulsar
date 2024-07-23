@@ -6,12 +6,20 @@
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
-    use pulsar_frontend::{lexer::Lexer, parser::Parser};
+    use pulsar_frontend::{
+        ast::{expr::Expr, node::AsNodePool},
+        lexer::Lexer,
+        parser::Parser
+    };
     use pulsar_lang::{context::Context, utils::OptionCheckError};
-    use pulsar_utils::{error::ErrorManager, loc::Source};
+    use pulsar_utils::{
+        error::ErrorManager,
+        pool::{AsPool, HandleArray},
+        span::{Source, SpanProvider}
+    };
+    use std::fmt::Write;
 
     fn typeinferer_output(filename: &str) -> anyhow::Result<String> {
-        todo!();
         let mut ctx = Context::new().unwrap();
         let source = Source::load_file(filename)?;
         let mut error_manager = ErrorManager::with_max_count(10);
@@ -26,13 +34,18 @@ mod tests {
         let mut output = String::new();
 
         for decl in ast {
-            output.push_str(&format!("{}\n", decl));
+            writeln!(&mut output, "{}", decl).unwrap();
         }
 
         if error_manager.has_errors() {
             let mut buffer = Vec::new();
             error_manager.consume_and_write(&mut buffer)?;
             output.push_str(&String::from_utf8_lossy(&buffer));
+        }
+
+        let exprs: HandleArray<Expr> = ctx.as_pool_mut().as_array();
+        for expr in exprs {
+            println!("{} {}: {}", expr.span(), expr, ctx.get_ty(expr));
         }
 
         Ok(output)
@@ -44,7 +57,7 @@ mod tests {
         ($num:expr) => {
             paste! {
                 #[test]
-                fn [<test_parser_ $num>]() {
+                fn [<test_type_inferer_ $num>]() {
                     assert_snapshot!(typeinferer_output(
                         &format!("tests/data/infer{}.plsr", $num)
                     ).expect("failed to parse/infer input"));

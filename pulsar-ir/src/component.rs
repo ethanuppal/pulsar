@@ -14,27 +14,37 @@ use std::{
 
 pub struct Component {
     label: Label,
-    inputs: Vec<Handle<Cell>>,
-    outputs: Vec<Handle<Cell>>,
+    inputs: Vec<(Variable, Handle<Cell>)>,
+    outputs: Vec<(Variable, Handle<Cell>)>,
     internal_cells: Vec<Handle<Cell>>,
     /// Like reg-alloc but for cells. need better way to represent
     cell_alloc: HashMap<Variable, Handle<Cell>>,
-    cfg: Control
+    pub(crate) cfg: Control
 }
 
 impl Component {
     pub fn new(
-        label: Label, inputs: Vec<Handle<Cell>>, outputs: Vec<Handle<Cell>>,
-        cfg: Control
+        label: Label, inputs: Vec<(Variable, Handle<Cell>)>,
+        outputs: Vec<(Variable, Handle<Cell>)>, cfg: Control
     ) -> Self {
+        let initial_cell_alloc =
+            inputs.iter().chain(&outputs).cloned().collect();
         Self {
             label,
             inputs,
             outputs,
             internal_cells: Vec::new(),
-            cell_alloc: HashMap::new(),
+            cell_alloc: initial_cell_alloc,
             cfg
         }
+    }
+
+    pub fn inputs(&self) -> &[(Variable, Handle<Cell>)] {
+        &self.inputs
+    }
+
+    pub fn outputs(&self) -> &[(Variable, Handle<Cell>)] {
+        &self.outputs
     }
 }
 
@@ -46,24 +56,26 @@ impl PrettyPrint for Component {
             self.label,
             self.inputs
                 .iter()
-                .map(ToString::to_string)
+                .map(|(var, _)| var.to_string())
                 .collect::<Vec<_>>()
                 .join(", "),
             self.outputs
                 .iter()
-                .map(ToString::to_string)
+                .map(|(var, _)| var.to_string())
                 .collect::<Vec<_>>()
                 .join(", ")
         )?;
         f.increase_indent();
 
-        writeln!(f, "cells {{");
+        writeln!(f, "cells {{")?;
         {
             f.increase_indent();
-            self.cfg.pretty_print(f)?;
+            for (var, cell) in &self.cell_alloc {
+                writeln!(f, "{} = {}", var, cell)?;
+            }
             f.decrease_indent();
         }
-        writeln!(f, "}}\ncontrol {{");
+        writeln!(f, "}}\ncontrol {{")?;
         {
             f.increase_indent();
             self.cfg.pretty_print(f)?;

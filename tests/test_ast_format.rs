@@ -14,7 +14,7 @@ mod tests {
     };
     use pulsar_lang::context::Context;
     use pulsar_utils::{
-        loc::Loc,
+        span::Loc,
         pool::{AsPool, Handle}
     };
     use std::cell::RefCell;

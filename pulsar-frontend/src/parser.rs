@@ -115,14 +115,15 @@ impl ParseErrorContext {
 ///     - [`parse_array_literal_expr_value`](Parser::parse_array_literal_expr_value)
 ///     - [`parse_literal_expr_value`](Parser::parse_literal_expr_value)
 ///     - [`parse_unary_prefix_expr_value`](Parser::parse_unary_prefix_expr_value)
-///     - [`parse_postfix_binary_expr_value`](Parser::parse_postfix_binary_expr_value)
+///     - [`parse_postfix_binary_expr`](Parser::parse_postfix_binary_expr)
 ///     - [`parse_call_expr_value`](Parser::parse_call_expr_value)
-///     - [`parse_primary_expr_value_aux`](Parser::parse_primary_expr_value_aux)
-///     - [`parse_primary_expr_value`](Parser::parse_primary_expr_value)
+///     - [`parse_primary_expr_aux`](Parser::parse_primary_expr_aux)
+///     - [`parse_primary_expr`](Parser::parse_primary_expr)
 ///     - [`parse_infix_binary_expr`](Parser::parse_infix_binary_expr)
 ///     - [`parse_expr`](Parser::parse_expr)
 /// - Statements
 ///     - [`parse_let`](Parser::parse_let)
+///     - [`parse_assign`](Parser::parse_assign)
 ///     - [`parse_block`](Parser::parse_block)
 ///     - [`end_stmt`](Parser::end_stmt)
 ///     - [`parse_stmt_value`](Parser::parse_stmt_value)
@@ -270,10 +271,11 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 .with_code(ErrorCode::UnexpectedToken)
                 .span(actual)
                 .message(format!(
-                    "Expected '{:?}' {}",
-                    expected_ty, context.loc
+                    "Expected '{}' {}",
+                    expected_ty.name(),
+                    context.loc
                 ))
-                .explain(format!("Received '{:?}' here", actual.ty))
+                .explain(format!("Received '{}' here", actual.ty.name()))
                 .maybe_fix(context.fix)
                 .build()
         );
@@ -297,12 +299,12 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                     "Expected one of {} {}",
                     expected_tys
                         .iter()
-                        .map(|ty| format!("'{:?}'", ty))
+                        .map(|ty| format!("'{}'", ty.name()))
                         .collect::<Vec<String>>()
                         .join(", "),
                     context.loc
                 ))
-                .explain(format!("Received '{:?}' here", actual.ty))
+                .explain(format!("Received '{}' here", actual.ty.name()))
                 .maybe_fix(context.fix)
                 .build()
         );
@@ -333,7 +335,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             .at_level(Level::Error)
             .with_code(ErrorCode::InvalidTopLevelConstruct)
             .span(token)
-            .message(format!("Unexpected {:?} at top level", token.ty))
+            .message(format!("Unexpected {} at top level", token.ty.name()))
             .fix(
                 "Allowed constructs at top level include functions and imports"
             )
@@ -403,14 +405,18 @@ macro_rules! expect_n {
             let $token = $self.current();
             match $self.current().ty {
                 $(
-                    $token_type => $action,
+                    $token_type => {
+                        $self.advance();
+                        $action
+                    },
                 )*
                 _ => {
                     let token_type_patterns = [$(stringify!($token_type)),*];
                     let mut token_types = Vec::new();
                     for subpattern in token_type_patterns {
                         for sub in subpattern.split('|').map(str::trim) {
-                            token_types.push(serde_json::from_str(&sub).expect("failed to round-trip serialize"));
+                            println!("{}", sub);
+                            token_types.push(TokenType::from_pattern(sub).expect("failed to round-trip serialize"));
                         }
                     }
                     $self.report_expected_tokens(

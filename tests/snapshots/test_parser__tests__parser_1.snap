@@ -34,7 +34,7 @@ info[I0003]: parser1.plsr:8:5: Attempting to recover understanding of code
    9 │  }
      │  
 
-error[E0003]: parser1.plsr:12:5: Expected one of 'integer', 'float', 'char', 'left-bracket', 'identifier' at start of literal expression
+error[E0003]: parser1.plsr:12:5: Expected one of 'integer', 'left-bracket', 'identifier' in literal expression
      │  
   11 │  func foo() {
   12 │      func nested() {

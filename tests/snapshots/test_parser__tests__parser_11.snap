@@ -1,0 +1,11 @@
+---
+source: tests/test_parser.rs
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\",\n                11)).expect(\"failed to parse input\")"
+---
+func for_loops() -> () {
+    for i in 0 ..< 10 {
+        for j in 0 ..< 10 {
+            let a = (i + (4 * j))
+        }
+    }
+}

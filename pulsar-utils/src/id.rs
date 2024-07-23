@@ -1,7 +1,7 @@
 //! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
 //! redistribute it and/or modify it under the terms of the GNU General Public
-//! License as published by the Free Software Foundation, either version 3 of the
-//! License, or (at your option) any later version.
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
 pub type Id = usize;
 
@@ -13,6 +13,11 @@ pub struct Gen {
 impl Gen {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A unique identifier generator guaranteed to never produce `remove`.
+    pub fn new_skipping(skip: Id) -> Self {
+        Self { next: skip + 1 }
     }
 
     // Clippy wants me to implement [`Iterator`] or rename this from `next`.

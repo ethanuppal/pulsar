@@ -13,18 +13,20 @@ use pulsar_frontend::{
     parser::Parser,
     type_inferer::TypeInferer
 };
-use pulsar_ir::from_ast;
+use pulsar_ir::{from_ast, pass::PassRunner};
 use pulsar_lang::{context::Context, utils::OptionCheckError};
 use pulsar_utils::{
     error::ErrorManager,
-    loc::{Source, SpanProvider},
-    pool::{AsPool, HandleArray, Pool}
+    pool::{AsPool, HandleArray},
+    span::{Source, SpanProvider}
 };
 use std::env;
 
 pub fn main() -> anyhow::Result<()> {
-    let mut pool = Pool::<[i32; 7], ()>::new()?;
-    pool.add([1, 2, 3, 4, 6, 7, 8]);
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Warn)
+        .format_timestamp(None)
+        .init();
 
     let mut args = env::args();
     args.next(); // ignore program path
@@ -51,12 +53,17 @@ pub fn main() -> anyhow::Result<()> {
     //     println!("{}", decl);
     // }
 
-    let exprs: HandleArray<Expr> = ctx.as_pool_mut().as_array();
-    for expr in exprs {
-        println!("{} {}: {}", expr.span(), expr, ctx.get_ty(expr));
-    }
+    // let exprs: HandleArray<Expr> = ctx.as_pool_mut().as_array();
+    // for expr in exprs {
+    //     if ctx.get_ty(expr).is_invalid() {
+    //         println!("{} {}: invalid type", expr.span(), expr);
+    //     } else {
+    //         println!("{} {}: {}", expr.span(), expr, ctx.get_ty(expr));
+    //     }
+    // }
 
-    let comps = from_ast::ast_to_ir(ast, &mut ctx);
+    let pass_runner = PassRunner::default();
+    let comps = from_ast::ast_to_ir(ast, pass_runner, &mut ctx);
 
     for comp in comps {
         println!("{}", comp);

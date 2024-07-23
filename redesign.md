@@ -53,3 +53,6 @@ also technically all memories will get replaced with reads from registers/input 
 oh crap writing memory back is bad since you can't agen that for perfect prefetch
 
 also as a note what I realized obviously is that the agen is also gonna have to compute some values when they depend on the loop bounds but that's just data independent stuff that probably takes a few cycles if it has a multiplier but whatever
+
+currently the IR gen stuff is really messy
+like the gen function is messy, component is messy, etc

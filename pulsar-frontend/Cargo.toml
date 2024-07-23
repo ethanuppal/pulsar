@@ -15,5 +15,4 @@ readme.workspace = true
 lazy_static.workspace = true
 pulsar-utils.workspace = true
 inform.workspace = true
-serde.workspace = true
-serde_json.workspace = true
+log.workspace = true

@@ -12,7 +12,18 @@ pub enum Operand {
     Variable(Variable),
     /// Non-canonical
     PartialAccess(Box<Operand>, Box<Operand>),
-    Access(Box<Operand>, Vec<Operand>)
+    Access(Variable, Vec<Operand>)
+}
+
+impl Operand {
+    /// Assumes that
+    pub fn gen_var(&self) -> Option<Variable> {
+        match self {
+            Operand::Variable(var) | Operand::Access(var, _) => Some(*var),
+            Operand::PartialAccess(operand, _) => operand.gen_var(),
+            _ => None
+        }
+    }
 }
 
 impl Display for Operand {

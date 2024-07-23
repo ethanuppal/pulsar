@@ -3,6 +3,7 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
+use core::hash;
 use memmap2::{MmapMut, MmapOptions};
 use std::{
     fmt::{self, Debug, Display},
@@ -17,7 +18,11 @@ use std::{
 /// 64MB.
 const ARENA_SIZE_BYTES: usize = 64 * 1024 * 1024;
 
-/// Pointer to a value allocated in a [`Pool`].
+/// Pointer to a value allocated in a [`Pool`]. The semantics are:
+///
+/// - [`PartialEq`], [`Eq`], [`Display`], [`Debug`] from the `T` value itself.
+/// - [`Clone`], [`Copy`], [`Hash`], [`Deref`], [`DerefMut`], [`AsRef`],
+///   [`AsMut`] from the pointer.
 pub struct Handle<T> {
     pointer: *mut T
 }
@@ -77,7 +82,7 @@ impl<T: PartialEq> PartialEq for Handle<T> {
 impl<T: Eq> Eq for Handle<T> {}
 
 impl<T> Hash for Handle<T> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
         self.pointer.hash(state);
     }
 }
@@ -124,6 +129,7 @@ struct MMapArena<T> {
 }
 
 impl<T> MMapArena<T> {
+    /// Does nothing if `T` has zero size.
     fn new(size: usize) -> io::Result<Self> {
         Ok(Self {
             store: if mem::size_of::<T>() == 0 {
@@ -176,7 +182,8 @@ impl<T> MMapArena<T> {
     }
 }
 
-/// Memory pool. See the [`AsPool`] trait.
+/// Memory pool: see the [`AsPool`] trait. Memory is only allocated for one of
+/// `Value`, `Metadata` when they are non-zero-size types.
 pub struct Pool<Value, Metadata> {
     contents: MMapArena<Value>,
     metadata: MMapArena<Metadata>
