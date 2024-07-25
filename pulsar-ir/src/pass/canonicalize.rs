@@ -4,6 +4,7 @@
 //! the License, or (at your option) any later version.
 
 use crate::{
+    component::ComponentViewMut,
     control::{Control, Par, Seq},
     from_ast::AsGeneratorPool,
     port::Port,
@@ -121,12 +122,16 @@ impl Canonicalize {
 }
 
 impl<P: AsGeneratorPool> Visitor<P> for Canonicalize {
-    fn start_seq(&mut self, seq: &mut Seq, pool: &mut P) -> Action {
+    fn start_seq(
+        &mut self, seq: &mut Seq, _comp_view: &mut ComponentViewMut, pool: &mut P
+    ) -> Action {
         self.collapse_partial_accesses(&mut seq.children, pool);
         Action::None
     }
 
-    fn start_par(&mut self, par: &mut Par, pool: &mut P) -> Action {
+    fn start_par(
+        &mut self, par: &mut Par, _comp_view: &mut ComponentViewMut, pool: &mut P
+    ) -> Action {
         self.collapse_partial_accesses(&mut par.children, pool);
         Action::None
     }

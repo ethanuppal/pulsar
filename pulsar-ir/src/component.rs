@@ -5,7 +5,10 @@
 
 use crate::{cell::Cell, control::Control, label::Label, variable::Variable};
 use inform::fmt::IndentFormatter;
-use pulsar_frontend::ast::pretty_print::PrettyPrint;
+use pulsar_frontend::{
+    ast::pretty_print::PrettyPrint,
+    attribute::{AttributeProvider, Attributes}
+};
 use pulsar_utils::pool::Handle;
 use std::{
     collections::HashMap,
@@ -14,11 +17,12 @@ use std::{
 
 pub struct Component {
     label: Label,
+    attributes: Attributes,
     inputs: Vec<(Variable, Handle<Cell>)>,
     outputs: Vec<(Variable, Handle<Cell>)>,
     // internal_cells: Vec<Handle<Cell>>,
     /// Like reg-alloc but for cells. need better way to represent
-    pub cell_alloc: HashMap<Variable, Handle<Cell>>,
+    cell_alloc: HashMap<Variable, Handle<Cell>>,
     pub(crate) cfg: Control
 }
 
@@ -31,6 +35,7 @@ impl Component {
             inputs.iter().chain(&outputs).cloned().collect();
         Self {
             label,
+            attributes: Attributes::default(),
             inputs,
             outputs,
             // internal_cells: Vec::new(),
@@ -39,12 +44,26 @@ impl Component {
         }
     }
 
+    pub fn label(&self) -> &Label {
+        &self.label
+    }
+
     pub fn inputs(&self) -> &[(Variable, Handle<Cell>)] {
         &self.inputs
     }
 
     pub fn outputs(&self) -> &[(Variable, Handle<Cell>)] {
         &self.outputs
+    }
+}
+
+impl AttributeProvider for Component {
+    fn attributes_ref(&self) -> &Attributes {
+        &self.attributes
+    }
+
+    fn attributes_mut(&mut self) -> &mut Attributes {
+        &mut self.attributes
     }
 }
 
@@ -93,5 +112,28 @@ impl PrettyPrint for Component {
 impl Display for Component {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         PrettyPrint::fmt(self, f)
+    }
+}
+
+/// A mutable view into a [`Component`] while its control is being mutably
+/// borrowed.
+pub struct ComponentViewMut<'comp> {
+    pub label: &'comp mut Label,
+    pub inputs: &'comp mut Vec<(Variable, Handle<Cell>)>,
+    pub outputs: &'comp mut Vec<(Variable, Handle<Cell>)>,
+    pub cell_alloc: &'comp mut HashMap<Variable, Handle<Cell>>
+}
+
+impl Component {
+    pub fn as_views_mut(&mut self) -> (&mut Control, ComponentViewMut) {
+        (
+            &mut self.cfg,
+            ComponentViewMut {
+                label: &mut self.label,
+                inputs: &mut self.inputs,
+                outputs: &mut self.outputs,
+                cell_alloc: &mut self.cell_alloc
+            }
+        )
     }
 }

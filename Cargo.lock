@@ -636,6 +636,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulsar-backend"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "pulsar-frontend",
+ "pulsar-ir",
+ "pulsar-utils",
+]
+
+[[package]]
 name = "pulsar-frontend"
 version = "0.0.0"
 dependencies = [
@@ -684,6 +694,7 @@ version = "0.0.0"
 dependencies = [
  "colored",
  "lazy_static",
+ "log",
  "memmap2",
 ]
 

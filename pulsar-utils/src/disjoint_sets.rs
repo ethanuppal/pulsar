@@ -4,7 +4,7 @@
 //! the License, or (at your option) any later version.
 use std::{
     collections::HashMap,
-    fmt::{self, Debug},
+    fmt::{self, Debug, Display},
     hash::Hash,
     iter::Map
 };
@@ -57,7 +57,9 @@ impl<T: Eq + Hash + Clone> DisjointSets<T> {
     /// optimization is used, acheiving near-linear time complexity.
     /// Otherwise, the canonical representative of `b` is chosen as the new
     /// canonical representative, which leads to log-linear complexity.
-    pub fn union(&mut self, a: T, b: T, by_rank: bool) -> Option<T> {
+    pub fn union(&mut self, a: T, b: T, by_rank: bool) -> Option<T>
+    where
+        T: Display {
         let a = self.find(a)?;
         let b = self.find(b)?;
         if a != b {
@@ -74,6 +76,7 @@ impl<T: Eq + Hash + Clone> DisjointSets<T> {
                     }
                 }
             } else {
+                // log::trace!("making {} the parent of {}", b, a);
                 // Use `b` as new parent
                 self.nodes.get_mut(&a)?.parent = b.clone();
             }

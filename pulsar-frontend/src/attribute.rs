@@ -8,7 +8,10 @@ type Repr = u16;
 #[repr(u8)]
 pub enum Attribute {
     /// Not present in user source.
-    Generated
+    Generated = 1 << 0,
+    /// A main accelerator kernel for which an address generator should be
+    /// created.
+    Kernel = 1 << 1
 }
 
 #[derive(Default, PartialEq, Eq, Clone, Copy)]
@@ -38,5 +41,18 @@ impl<T: IntoIterator<Item = Attribute>> From<T> for Attributes {
             result.add(attr);
         }
         result
+    }
+}
+
+pub trait AttributeProvider {
+    fn attributes_ref(&self) -> &Attributes;
+    fn attributes_mut(&mut self) -> &mut Attributes;
+
+    fn has_attribute(&self, attr: Attribute) -> bool {
+        self.attributes_ref().has(attr)
+    }
+
+    fn add_attribute(&mut self, attr: Attribute) {
+        self.attributes_mut().add(attr);
     }
 }

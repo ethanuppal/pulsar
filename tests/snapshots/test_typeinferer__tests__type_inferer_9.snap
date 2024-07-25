@@ -7,4 +7,5 @@ error[E0009]: infer9.plsr:2:5: Unbound function or variable `return`
    1 │  func main() {
    2 │      return = 1
    3 │  }
-     │
+     │  
+For more information, pass `--explain 9`

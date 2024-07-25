@@ -20,6 +20,14 @@ pub enum Port {
 }
 
 impl Port {
+    pub fn root_var(&self) -> Option<Variable> {
+        match self {
+            Port::Variable(var) | Port::Access(var, _) => Some(*var),
+            Port::PartialAccess(port, _) => port.root_var(),
+            _ => None
+        }
+    }
+
     /// The variables this port references.
     pub fn vars(&self) -> Vec<Variable> {
         match self {

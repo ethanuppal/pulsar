@@ -3,20 +3,18 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Deref
-};
-
-use pulsar_utils::{id::Id, pool::Handle};
-
 use crate::{
-    component::Component,
+    component::{Component, ComponentViewMut},
     control::{Control, For, IfElse, Par, Seq},
     from_ast::AsGeneratorPool,
     port::Port,
     variable::Variable,
     visitor::{Action, Visitor}
+};
+use pulsar_utils::{id::Id, pool::Handle};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref
 };
 
 /// Conservative dead-code elimination. If an port assigned to does not
@@ -114,25 +112,35 @@ impl<P: AsGeneratorPool> Visitor<P> for DeadCode {
             comp.outputs().iter().map(|(var, _)| var).cloned().collect();
     }
 
-    fn finish_for(&mut self, for_: &mut For, _pool: &mut P) -> Action {
+    fn finish_for(
+        &mut self, for_: &mut For, _comp_view: &mut ComponentViewMut,
+        _pool: &mut P
+    ) -> Action {
         self.extend_gen_set(for_.id, for_.body.id());
         Action::None
     }
 
     fn finish_if_else(
-        &mut self, if_else: &mut IfElse, _pool: &mut P
+        &mut self, if_else: &mut IfElse, _comp_view: &mut ComponentViewMut,
+        _pool: &mut P
     ) -> Action {
         self.extend_gen_set(if_else.id, if_else.true_branch.id());
         self.extend_gen_set(if_else.id, if_else.false_branch.id());
         Action::None
     }
 
-    fn finish_seq(&mut self, seq: &mut Seq, _pool: &mut P) -> Action {
+    fn finish_seq(
+        &mut self, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
+        _pool: &mut P
+    ) -> Action {
         self.calculate_gen_set(seq.id, &mut seq.children);
         self.dead_code(seq.id, &mut seq.children)
     }
 
-    fn finish_par(&mut self, par: &mut Par, _pool: &mut P) -> Action {
+    fn finish_par(
+        &mut self, par: &mut Par, _comp_view: &mut ComponentViewMut,
+        _pool: &mut P
+    ) -> Action {
         self.calculate_gen_set(par.id, &mut par.children);
         self.dead_code(par.id, &mut par.children)
     }

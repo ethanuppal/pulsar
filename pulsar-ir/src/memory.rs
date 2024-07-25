@@ -3,6 +3,7 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
+#[derive(Clone)]
 pub struct MemoryLevel {
     pub length: usize,
     pub bank: usize
@@ -22,6 +23,10 @@ impl Memory {
             levels: vec![MemoryLevel { length, bank }],
             element
         }
+    }
+
+    pub fn from(levels: Vec<MemoryLevel>, element: usize) -> Self {
+        Self { levels, element }
     }
 
     pub fn levels(&self) -> &[MemoryLevel] {

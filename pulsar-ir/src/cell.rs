@@ -3,7 +3,7 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use crate::memory::Memory;
+use crate::memory::{Memory, MemoryLevel};
 use pulsar_frontend::ast::ty::{LiquidTypeValue, Type, TypeValue};
 use std::fmt::{self, Display};
 
@@ -21,18 +21,22 @@ impl Cell {
     pub fn from(ty: &Type) -> Self {
         match ty.value {
             TypeValue::Unit => Self::Register(0),
-            TypeValue::Var(_) => panic!(),
+            TypeValue::Var(..) => panic!(),
             TypeValue::Name(_) => todo!(),
             TypeValue::Int64 => Self::Register(64),
             TypeValue::Array(element_type, element_count) => {
                 let LiquidTypeValue::Equal(length) = element_count.value else {
                     panic!("liquid type not resolved");
                 };
-                Self::Memory(Memory::new(
-                    length,
-                    element_type.size() * BITS_PER_BYTE,
-                    1
-                ))
+                let mut levels = vec![MemoryLevel { length, bank: 1 }];
+                let element = match Cell::from(&element_type) {
+                    Cell::Memory(sub_memory) => {
+                        levels.extend(sub_memory.levels().iter().cloned());
+                        sub_memory.element()
+                    }
+                    Cell::Register(element) => element
+                };
+                Self::Memory(Memory::from(levels, element))
             }
             TypeValue::Function {
                 inputs: _,

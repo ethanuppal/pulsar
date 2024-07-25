@@ -16,7 +16,7 @@ use crate::{
         expr::{Expr, ExprValue},
         node::NodeInterface,
         stmt::{Stmt, StmtValue},
-        ty::{LiquidTypeValue, Type, TypeValue},
+        ty::{LiquidTypeValue, TypeValue},
         AsASTPool, AST
     },
     op::Associativity
@@ -210,7 +210,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     /// Skips past tokens that can be arbitrarily inserted, such as newlines.
     fn consume_ignored(&mut self) {
-        while !self.is_eof() && self.current().ty == TokenType::Newline {
+        while !self.is_eof() && self.is_at(TokenType::Newline) {
             self.advance()
         }
     }
@@ -351,12 +351,12 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     /// [Reports](Parser::report): `token` represents an invalid start to a
     /// statement.
-    fn report_invalid_token(&mut self, token: Handle<Token>) {
+    fn report_invalid_start_to_statement(&mut self, token: Handle<Token>) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
-                .with_code(ErrorCode::InvalidTokenForStatement)
+                .with_code(ErrorCode::InvalidTokenToStartStatement)
                 .span(token)
                 .message("Invalid token at the start of a statement")
                 .build()
@@ -386,9 +386,15 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     }
 }
 
-// TODO: see if you can remove or actually make useful
+/// ```
+/// let ctx = ParseErrorContext::new();
+/// expect_n! { self /* lexer */; current /* name for matched token */; ctx;
+///     TokenType::A => { foo },
+///     TokenType::B | TokenType::C => { bar }
+/// }
+/// ```
 macro_rules! expect_n {
-    ($self:ident; $token:ident; $context:expr; $($token_type:pat => $action:expr),*) => {
+    ($self:ident; $context:expr; match $token:ident: $($token_type:pat => $action:expr),*) => {
         if $self.is_eof() {
             $self.report_unexpected_eof($context);
             None
@@ -450,9 +456,10 @@ macro_rules! contained_in {
     };
 }
 
-/// Constructs a function returning `Option<N>` for some [`NodeInterface`] `N`
-/// given a function returning `Option<N::V>`, assuming that the parser's pool
-/// is [`AsNodePool<N>`]. For example. `parse_full_node!(self.foo())`.
+/// Constructs an expression returning `Option<N>` for some [`NodeInterface`]
+/// `N` given a member function returning `Option<N::V>`, and assuming that the
+/// parser's pool implements [`AsNodePool<N>`]. For example, if `self.foo()`
+/// returns `Option<N::V>`, you can use `parse_full_node!(self.foo())`.
 macro_rules! parse_full_node {
     ($self:ident.$method:ident($($arg:expr),*)) => {{
         let start_token = $self.current().clone();
@@ -501,78 +508,78 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         self.synchronize(|_| false, "Seeking top-level construct");
     }
 
-    fn parse_primary_type<S: AsRef<str>>(
-        &mut self, name: Option<S>
-    ) -> Option<TypeValue> {
-        let type_token = self.expect(
-            TokenType::Identifier,
-            name.map_or(
-                ParseErrorContext::new().for_("primary type"),
-                |name| ParseErrorContext::new().in_(name)
-            )
-        )?;
-        Some(match type_token.value.as_str() {
-            "Int64" | "Int" => TypeValue::Int64,
-            "Unit" => TypeValue::Unit,
-            other => TypeValue::Name(other.into())
-        })
-    }
+    /// Requires: `self.is_at(TokenType::RightBracket)`.
+    fn parse_array_type(&mut self) -> Option<TypeValue> {
+        self.unget();
 
-    fn parse_array_type(&mut self, inner: Handle<Type>) -> Option<TypeValue> {
-        let (_, size_token, close_token) = contained_in! { self;
+        let (_, result, _) = contained_in! { self;
             TokenType::LeftBracket, "array type", TokenType::RightBracket;
-            self.expect(TokenType::Integer, ParseErrorContext::new().for_("array size"))?
-        }?;
 
-        let size = size_token
+            let inner = parse_full_node!(self.parse_type(Some("element type")))?;
+
+            self.expect(TokenType::Semicolon , ParseErrorContext::new().between("array element type and size"))?;
+
+            let size_token = self.expect(TokenType::Integer, ParseErrorContext::new().for_("array size"))?;
+
+            let size = size_token
             .value
             .as_str()
             .parse::<i64>()
             .expect("number token can be parsed as number");
-        match size.cmp(&0) {
-            cmp::Ordering::Less => {
-                self.report(
-                    ErrorBuilder::new()
-                        .of_style(Style::Primary)
-                        .at_level(Level::Error)
-                        .with_code(ErrorCode::MalformedType)
-                        .span(size_token)
-                        .message("Array size cannot be negative")
-                        .build()
-                );
-                return None;
+            match size.cmp(&0) {
+                cmp::Ordering::Less => {
+                    self.report(
+                        ErrorBuilder::new()
+                            .of_style(Style::Primary)
+                            .at_level(Level::Error)
+                            .with_code(ErrorCode::MalformedType)
+                            .span(size_token)
+                            .message("Array size cannot be negative")
+                            .build()
+                    );
+                    return None;
+                }
+                cmp::Ordering::Equal => {
+                    self.report(
+                        ErrorBuilder::new()
+                            .of_style(Style::Primary)
+                            .at_level(Level::Warning)
+                            .with_code(ErrorCode::MalformedType)
+                            .span(size_token)
+                            .message("Array size is zero")
+                            .build()
+                    );
+                }
+                _ => {}
             }
-            cmp::Ordering::Equal => {
-                self.report(
-                    ErrorBuilder::new()
-                        .of_style(Style::Primary)
-                        .at_level(Level::Warning)
-                        .with_code(ErrorCode::MalformedType)
-                        .span(size_token)
-                        .message("Array size is zero")
-                        .build()
-                );
-            }
-            _ => {}
-        }
 
-        let result_value = TypeValue::Array(
-            inner,
-            self.ast_pool.generate(
+            let size_liquid_type = self.ast_pool.generate(
                 LiquidTypeValue::Equal(size as usize),
                 size_token,
                 size_token
-            )
-        );
-        if self.is_at(TokenType::LeftBracket) {
-            let result = self.ast_pool.new(
-                result_value,
-                inner.start_token(),
-                close_token
             );
-            self.parse_array_type(result)
-        } else {
-            Some(result_value)
+
+            TypeValue::Array(inner, size_liquid_type)
+        }?;
+        Some(result)
+    }
+
+    fn parse_primary_type<S: AsRef<str>>(
+        &mut self, name: Option<S>
+    ) -> Option<TypeValue> {
+        let parse_ctx = name
+            .map_or(ParseErrorContext::new().for_("primary type"), |name| {
+                ParseErrorContext::new().in_(name)
+            });
+        expect_n! { self; parse_ctx; match current:
+            TokenType::Identifier => {
+                Some(match current.value.as_str() {
+                    "Int64" | "Int" => TypeValue::Int64,
+                    "Unit" => TypeValue::Unit,
+                    other => TypeValue::Name(other.into())
+                })
+            },
+            TokenType::LeftBracket => self.parse_array_type()
         }
     }
 
@@ -583,15 +590,15 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
             );
             return None;
         }
-        let start = self.current();
+        // let start = self.current();
         let primary_value = self.parse_primary_type(name)?;
-        let end = self.previous();
-        if self.is_at(TokenType::LeftBracket) {
-            let primary = self.ast_pool.new(primary_value, start, end);
-            self.parse_array_type(primary)
-        } else {
-            Some(primary_value)
-        }
+        // let end = self.previous();
+        // if self.is_at(TokenType::LeftBracket) {
+        //     let primary = self.ast_pool.new(primary_value, start, end);
+        //     self.parse_array_type(primary)
+        // } else {
+        Some(primary_value)
+        // }
     }
 
     // ============================== EXPRESSIONS ==============================
@@ -641,7 +648,9 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     }
 
     fn parse_literal_expr_value(&mut self) -> Option<ExprValue> {
-        expect_n!(self; literal_token; ParseErrorContext::new().in_("literal expression");
+        expect_n!(self; ParseErrorContext::new().in_("literal expression");
+            match literal_token:
+
             TokenType::Integer => Some(ExprValue::ConstantInt(
                 literal_token.value.parse::<i64>().unwrap()
             )),
@@ -854,7 +863,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
 
     // ============================== STATEMENTS ===============================
 
-    /// Requires: `self.current().ty == TokenType::Let`.`
+    /// Requires: `self.is_at(TokenType::Let)`.
     fn parse_let(&mut self) -> Option<StmtValue> {
         self.expect(
             TokenType::Let,
@@ -867,7 +876,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         )?;
 
         let mut hint = None;
-        if self.current().ty == TokenType::Colon {
+        if self.is_at(TokenType::Colon) {
             self.advance();
             hint = Some(parse_full_node!(
                 self.parse_type(Some("let binding type hint"))
@@ -907,7 +916,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
         Some(StmtValue::Assign(lhs, assign, rhs))
     }
 
-    /// Requires: `self.current().ty == TokenType::For`;
+    /// Requires: `self.is_at(TokenType::For)`;
     fn parse_for(&mut self) -> Option<StmtValue> {
         self.expect(
             TokenType::For,
@@ -969,7 +978,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     fn end_stmt(&mut self) -> Option<Handle<Token>> {
         let ending_token = self.previous();
 
-        if !self.is_eof() && self.current().ty == TokenType::RightBrace {
+        if !self.is_eof() && self.is_at(TokenType::RightBrace) {
             return Some(ending_token);
         }
 
@@ -1000,7 +1009,7 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 } else if other.begins_top_level_construct() {
                     self.report_unexpected_top_level(self.current());
                 } else {
-                    self.report_invalid_token(self.current());
+                    self.report_invalid_start_to_statement(self.current());
                 }
                 self.advance(); // to prevent infinite loop
                 None

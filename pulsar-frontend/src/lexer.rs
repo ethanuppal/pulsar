@@ -177,6 +177,24 @@ enum LexSemantics {
     Keyword
 }
 
+/// Implements an inefficient pattern checker and token emitter. For example,
+/// ```
+/// lex! { self;
+///     | "..." => { TokenType::Dots }
+///     | "." => { TokenType::Dot }
+///     | @[LexSemantics::Keyword] "for" => { TokenType::For }
+///     | @[LexSemantics::Keyword] "let" => { TokenType::Let }
+///     | _ {
+///         Some(self.make_token(TokenType::Lol, 400))
+///     }
+/// }
+/// ```
+/// first checks whether the input stream matches `"..."`, and if it does, it
+/// consumes those 3 characters and returns `Some` token with type
+/// `TokenType::Dots`; if `LexSemantics::Keyword` is specified, either EOF or
+/// whitespace is required after the pattern; the final `_` block does not have
+/// an arrow and wraps a rust expression that returns an
+/// `Option<Handle<Token>>`.
 macro_rules! lex {
     ($self:ident; $(| $(@[$semantics:expr])? $token:expr => {$token_type:expr})* | _ $finally:block) => {
         $(
@@ -226,6 +244,7 @@ impl<'err, 'pool, P: AsPool<Token, ()>> Lexer<'err, 'pool, P> {
             | "..<" => { TokenType::DotsUntil }
             | "." => { TokenType::Dot }
             | "," => { TokenType::Comma }
+            | ";" => { TokenType::Semicolon }
             | "\n" => { TokenType::Newline }
             | @[LexSemantics::Keyword] "func" => { TokenType::Func }
             | @[LexSemantics::Keyword] "let" => { TokenType::Let }

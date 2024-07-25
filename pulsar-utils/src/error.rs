@@ -10,21 +10,77 @@ use std::{
     io
 };
 
-#[repr(i32)]
-#[derive(Clone, Copy, Debug)]
-pub enum ErrorCode {
-    /// Quite unfortunate indeed.
-    WompWomp,
-    UnrecognizedCharacter,
-    UnexpectedEOF,
-    UnexpectedToken,
-    InvalidTopLevelConstruct,
-    ConstructShouldBeTopLevel,
-    InvalidTokenForStatement,
-    InvalidOperatorSyntax,
-    MalformedType,
-    UnboundName,
-    StaticAnalysisIssue
+/// Also applies the following procedural macros:
+/// ```
+/// #[repr(i32)]
+/// #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// ```
+macro_rules! string_associated_pub_enum {
+    {
+        @$func_name:ident pub enum $enum_name:ident {
+            $(
+                #[str = $variant_str:literal]
+                $variant_name:ident
+            ),*
+        }
+    } => {
+        #[repr(i32)]
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub enum $enum_name {
+            $(
+                $variant_name
+            ),*,
+            COUNT
+        }
+
+        impl $enum_name {
+            pub fn $func_name(&self) -> &'static str {
+                match self {
+                    $(
+                        Self::$variant_name => $variant_str
+                    ),*,
+                    _ => panic!()
+                }
+            }
+
+            pub fn from(value: i32) -> Option<Self> {
+                if value >= 0 && value < (Self::COUNT as i32) {
+                    Some(unsafe { std::mem::transmute::<i32, $enum_name>(value) })
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
+string_associated_pub_enum! {
+    @description pub enum ErrorCode {
+        #[str = "Quite unfortunate indeed."]
+        WompWomp,
+        #[str = "The lexer encountered a character that isn't a valid part of any language construct. Currently, UTF-8 and certain symbols are not handled."]
+        UnrecognizedCharacter,
+        #[str = "The end of file was encountered in the middle of parsing a language construct. For example, missing the ending brace to a function causes this error."]
+        UnexpectedEOF,
+        #[str = "A different token was encountered than expected."]
+        UnexpectedToken,
+        #[str = "The only valid top-level construct is a function."]
+        InvalidTopLevelConstruct,
+        #[str = "Functions should be placed at the top level."]
+        ConstructShouldBeTopLevel,
+        #[str = "The parser encountered an incorrect token when expecting the start of a statement. Valid statements begin with `let`, `for`, or an lvalue expression."]
+        InvalidTokenToStartStatement,
+        #[str = "An operator was misued."]
+        InvalidOperatorSyntax,
+        #[str = "A type was syntactically incorrect. For example, an array type was declared with negative size."]
+        MalformedType,
+        #[str = "The oarser encountered an identifier not bound to any variable or function in scope."]
+        UnboundName,
+        #[str = "Types were not fully resolved at compile time."]
+        AmbiguousType,
+        #[str = "Hindley-Milner constraints were not satisfiable."]
+        UnificationFailure
+    }
 }
 
 impl Display for ErrorCode {
@@ -39,7 +95,7 @@ impl Default for ErrorCode {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Level {
     Info,
     Note,
@@ -362,11 +418,28 @@ impl ErrorManager {
     pub fn consume_and_write<W: io::Write>(
         &mut self, output: &mut W
     ) -> io::Result<()> {
+        let mut primary_level = Level::Error;
+        let mut primary_code = ErrorCode::WompWomp;
         for (i, error) in self.errors.iter().enumerate() {
+            if error.style == Style::Primary {
+                primary_level = error.level;
+                primary_code = error.code;
+            }
             if error.style == Style::Primary && i > 0 {
                 writeln!(output)?;
             }
             writeln!(output, "{}", error)?;
+            if primary_level == Level::Error
+                && (i + 1 == self.errors.len()
+                    || self.errors[i + 1].style == Style::Primary)
+                && primary_code != ErrorCode::WompWomp
+            {
+                writeln!(
+                    output,
+                    "For more information, pass `--explain {}`",
+                    primary_code
+                )?;
+            }
         }
         self.errors.clear();
         self.primary_count = 0;

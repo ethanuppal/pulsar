@@ -4,8 +4,8 @@ expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\",\n         
 ---
 func main() -> () {
     let small = [1]
-    let small2: Int64[{ x | x = 1 }] = small
+    let small2: [Int64; 1] = small
 }
 [infer5.plsr:2:18, infer5.plsr:2:19) 1: Int64
-[infer5.plsr:2:17, infer5.plsr:2:20) [1]: Int64[{ x | x = 1 }]
-[infer5.plsr:3:26, infer5.plsr:3:31) small: Int64[{ x | x = 1 }]
+[infer5.plsr:2:17, infer5.plsr:2:20) [1]: [Int64; 1]
+[infer5.plsr:3:28, infer5.plsr:3:33) small: [Int64; 1]

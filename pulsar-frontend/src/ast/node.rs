@@ -4,7 +4,7 @@
 //! the License, or (at your option) any later version.
 
 use crate::{
-    attribute::{Attribute, Attributes},
+    attribute::{Attribute, AttributeProvider, Attributes},
     token::{Token, TokenType}
 };
 use pulsar_utils::{
@@ -16,7 +16,7 @@ use std::{
     marker::PhantomData
 };
 
-pub trait NodeInterface: Sized + SpanProvider {
+pub trait NodeInterface: Sized + SpanProvider + AttributeProvider {
     type V;
     type T;
 
@@ -47,10 +47,14 @@ pub trait NodeInterface: Sized + SpanProvider {
     fn end_token(&self) -> Handle<Token>;
 
     /// Whether this node has the attribute `attr`.
-    fn has_attribute(&self, attr: Attribute) -> bool;
+    fn has_attribute(&self, attr: Attribute) -> bool {
+        AttributeProvider::has_attribute(self, attr)
+    }
 
     /// Annotates this node with the attribute `attr`.
-    fn add_attribute(&mut self, attr: Attribute);
+    fn add_attribute(&mut self, attr: Attribute) {
+        AttributeProvider::add_attribute(self, attr)
+    }
 }
 
 /// AST node with attributes.
@@ -85,14 +89,6 @@ impl<V, T> NodeInterface for Node<V, T> {
 
     fn end_token(&self) -> Handle<Token> {
         self.end_token
-    }
-
-    fn has_attribute(&self, attr: Attribute) -> bool {
-        self.attributes.has(attr)
-    }
-
-    fn add_attribute(&mut self, attr: Attribute) {
-        self.attributes.add(attr);
     }
 }
 
@@ -129,6 +125,16 @@ impl<V, T> SpanProvider for Node<V, T> {
             loc.col += length;
         }
         loc
+    }
+}
+
+impl<V, T> AttributeProvider for Node<V, T> {
+    fn attributes_ref(&self) -> &Attributes {
+        &self.attributes
+    }
+
+    fn attributes_mut(&mut self) -> &mut Attributes {
+        &mut self.attributes
     }
 }
 

@@ -2,7 +2,7 @@
 members = [
     "pulsar-frontend",
     "pulsar-ir",
-    # "pulsar-backend",
+    "pulsar-backend",
     "pulsar-utils",
     # "calyx-builder",
 ]
@@ -40,6 +40,7 @@ log = { version = "0.4.22", features = ["release_max_level_off"] }
 env_logger = "0.11.3"
 either = "1.13.0"
 match_deref = "0.1.1"
+anyhow = "1.0.86"
 
 [package]
 name = "pulsar-lang"
@@ -76,8 +77,8 @@ pulsar-ir.workspace = true
 pulsar-utils.workspace = true
 log.workspace = true
 env_logger.workspace = true
+anyhow.workspace = true
 paste = "1.0.15"
-anyhow = "1.0.86"
 
 [dev-dependencies]
 proptest = "1.4.0"

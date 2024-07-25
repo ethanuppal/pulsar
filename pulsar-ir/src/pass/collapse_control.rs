@@ -6,6 +6,7 @@
 use pulsar_utils::pool::Handle;
 
 use crate::{
+    component::ComponentViewMut,
     control::{Control, Par, Seq},
     from_ast::AsGeneratorPool,
     visitor::{Action, Visitor}
@@ -31,11 +32,15 @@ impl CollapseControl {
 }
 
 impl<P: AsGeneratorPool> Visitor<P> for CollapseControl {
-    fn finish_seq(&mut self, seq: &mut Seq, _pool: &mut P) -> Action {
+    fn finish_seq(
+        &mut self, seq: &mut Seq, _comp_view: &mut ComponentViewMut, _pool: &mut P
+    ) -> Action {
         self.collapse(&mut seq.children)
     }
 
-    fn finish_par(&mut self, par: &mut Par, _pool: &mut P) -> Action {
+    fn finish_par(
+        &mut self, par: &mut Par, _comp_view: &mut ComponentViewMut, _pool: &mut P
+    ) -> Action {
         self.collapse(&mut par.children)
     }
 }

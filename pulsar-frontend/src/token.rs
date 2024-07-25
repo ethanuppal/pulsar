@@ -83,6 +83,7 @@ token_type_enum! {
     Colon,
     Comma,
     Arrow,
+    Semicolon,
     Newline
 }
 
@@ -111,6 +112,7 @@ impl fmt::Display for TokenType {
                 Self::DotsUntil => "..<",
                 Self::Divider => "---",
                 Self::Comma => ",",
+                Self::Semicolon => ";",
                 Self::Arrow => "->",
                 _ => default.as_str()
             }

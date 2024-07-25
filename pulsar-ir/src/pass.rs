@@ -34,7 +34,7 @@ impl<P: AsGeneratorPool> PassRunner<P> {
     /// The minimal pass runner permitted.
     pub fn core() -> Self {
         let mut runner = Self { passes: Vec::new() };
-        runner.register(WellFormed);
+        runner.register(WellFormed::default());
         runner.register(Canonicalize);
         runner
     }
@@ -98,7 +98,7 @@ impl<P: AsGeneratorPool> Default for PassRunner<P> {
             runner.register(DeadCode::default());
         });
         runner.register(CollapseControl);
-        runner.register(CellAlloc::default());
+        runner.register(CellAlloc);
         runner
     }
 }

@@ -11,20 +11,26 @@ use inform::fmt::IndentFormatter;
 use pulsar_utils::{id::Id, pool::Handle};
 use std::{
     cmp,
-    fmt::{self, Display, Write},
+    fmt::{self, Debug, Display, Write},
     hash::Hash,
     mem
 };
 
 /// This isn't a real liquid type. Notably, the only constraint it can
 /// express is equality to a given number.
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum LiquidTypeValue {
     Equal(usize),
-    All
+    All(Id, Option<String>)
 }
 
 pub type LiquidType = Node<LiquidTypeValue, ()>;
+
+impl Debug for LiquidType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.value.fmt(f)
+    }
+}
 
 impl PartialEq for LiquidType {
     fn eq(&self, other: &Self) -> bool {
@@ -46,13 +52,15 @@ impl PartialOrd for LiquidType {
             (LiquidTypeValue::Equal(a), LiquidTypeValue::Equal(b)) => {
                 a.partial_cmp(b)?
             }
-            (LiquidTypeValue::Equal(_), LiquidTypeValue::All) => {
+            (LiquidTypeValue::Equal(_), LiquidTypeValue::All(..)) => {
                 cmp::Ordering::Less
             }
-            (LiquidTypeValue::All, LiquidTypeValue::Equal(_)) => {
+            (LiquidTypeValue::All(..), LiquidTypeValue::Equal(_)) => {
                 cmp::Ordering::Greater
             }
-            (LiquidTypeValue::All, LiquidTypeValue::All) => cmp::Ordering::Equal
+            (LiquidTypeValue::All(..), LiquidTypeValue::All(..)) => {
+                cmp::Ordering::Equal
+            }
         })
     }
 }
@@ -63,7 +71,10 @@ impl PrettyPrint for LiquidType {
             LiquidTypeValue::Equal(value) => {
                 write!(f, "{{ x | x = {} }}", value)
             }
-            LiquidTypeValue::All => write!(f, "{{ x | x >= 0 }}")
+            LiquidTypeValue::All(ref id, ref name) => {
+                let var = name.clone().unwrap_or(format!("x{}", id));
+                write!(f, "{{ {} | {} >= 0 }}", var, var)
+            }
         }
     }
 }
@@ -74,10 +85,10 @@ impl Display for LiquidType {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum TypeValue {
     Unit,
-    Var(Id),
+    Var(Id, Option<String>),
     Name(String),
     Int64,
 
@@ -90,13 +101,15 @@ pub enum TypeValue {
     }
 }
 
+pub type Type = Node<TypeValue, ()>;
+
 impl Type {
     /// The number of bytes to store one instance of a value of the current
     /// type.
     pub fn size(&self) -> usize {
         match self.value {
             TypeValue::Unit => 0,
-            TypeValue::Var(_) => {
+            TypeValue::Var(..) => {
                 panic!("Type::Var should have been resolved by type inference")
             }
             TypeValue::Name(_) => {
@@ -119,7 +132,7 @@ impl Type {
 
     pub fn mangle(&self) -> String {
         match &self.value {
-            TypeValue::Var(_) => panic!("cannot mangle type var"),
+            TypeValue::Var(..) => panic!("cannot mangle type var"),
             TypeValue::Unit => "u".into(),
             TypeValue::Name(name) => format!("{}{}", name.len(), name),
             TypeValue::Int64 => "q".into(),
@@ -151,7 +164,7 @@ impl Type {
     pub fn subterms(&self) -> Vec<Handle<Type>> {
         match &self.value {
             TypeValue::Unit
-            | TypeValue::Var(_)
+            | TypeValue::Var(..)
             | TypeValue::Name(_)
             | TypeValue::Int64 => Vec::new(),
             TypeValue::Array(element_type, _) => vec![*element_type],
@@ -166,7 +179,7 @@ impl Type {
     pub fn liquid_subterms(&self) -> Vec<Handle<LiquidType>> {
         match self.value {
             TypeValue::Unit
-            | TypeValue::Var(_)
+            | TypeValue::Var(..)
             | TypeValue::Name(_)
             | TypeValue::Int64
             | TypeValue::Function { .. } => Vec::new(),
@@ -175,17 +188,32 @@ impl Type {
     }
 }
 
-pub type Type = Node<TypeValue, ()>;
+impl Debug for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.value.fmt(f)
+    }
+}
 
 impl PrettyPrint for Type {
     fn pretty_print(&self, f: &mut IndentFormatter<'_, '_>) -> fmt::Result {
         match &self.value {
             TypeValue::Unit => write!(f, "Unit"),
-            TypeValue::Var(var) => write!(f, "'t{}", var),
+            TypeValue::Var(var, _) => write!(f, "'t{}", var),
             TypeValue::Name(name) => write!(f, "{}", name),
             TypeValue::Int64 => write!(f, "Int64"),
             TypeValue::Array(element_type, element_count) => {
-                write!(f, "{}[{}]", element_type, element_count)
+                write!(
+                    f,
+                    "[{}; {}]",
+                    element_type,
+                    if let LiquidTypeValue::Equal(element_count) =
+                        element_count.value
+                    {
+                        element_count.to_string()
+                    } else {
+                        "?".into()
+                    }
+                )
             }
             TypeValue::Function { inputs, outputs } => write!(
                 f,

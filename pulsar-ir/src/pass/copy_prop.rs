@@ -4,6 +4,7 @@
 //! the License, or (at your option) any later version.
 
 use crate::{
+    component::ComponentViewMut,
     control::{Control, Par, Seq},
     from_ast::AsGeneratorPool,
     port::Port,
@@ -71,12 +72,16 @@ impl CopyProp {
 }
 
 impl<P: AsGeneratorPool> Visitor<P> for CopyProp {
-    fn finish_seq(&mut self, seq: &mut Seq, _pool: &mut P) -> Action {
+    fn finish_seq(
+        &mut self, seq: &mut Seq, _comp_view: &mut ComponentViewMut, _pool: &mut P
+    ) -> Action {
         self.copy_prop(&mut seq.children);
         Action::None
     }
 
-    fn finish_par(&mut self, par: &mut Par, _pool: &mut P) -> Action {
+    fn finish_par(
+        &mut self, par: &mut Par, _comp_view: &mut ComponentViewMut, _pool: &mut P
+    ) -> Action {
         self.copy_prop(&mut par.children);
         Action::None
     }

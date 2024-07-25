@@ -96,4 +96,5 @@ mod tests {
     generate_test!(9);
     generate_test!(10);
     generate_test!(11);
+    generate_test!(12);
 }

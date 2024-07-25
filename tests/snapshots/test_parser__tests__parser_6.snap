@@ -3,6 +3,6 @@ source: tests/test_parser.rs
 expression: "parser_output(&format!(\"tests/data/parser{}.plsr\",\n                6)).expect(\"failed to parse input\")"
 ---
 func main() -> () {
-    let input: Int64[{ x | x = 64 }] = [...]
+    let input: [Int64; 64] = [...]
     let squares = input
 }

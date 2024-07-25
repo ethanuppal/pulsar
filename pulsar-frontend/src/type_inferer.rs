@@ -25,8 +25,14 @@ use pulsar_utils::{
     pool::{AsPool, Handle, HandleArray},
     span::SpanProvider
 };
-use std::{fmt::Display, hash::Hash, iter::zip};
+use std::{
+    collections::{HashSet, VecDeque},
+    fmt::Display,
+    hash::Hash,
+    iter::zip
+};
 
+#[derive(Debug)]
 pub struct UnificationConstraint<T> {
     expected: Handle<T>,
     actual: Handle<T>,
@@ -61,24 +67,58 @@ impl<T> UnificationConstraint<T> {
     pub fn actual(&self) -> Handle<T> {
         self.source.map_or(self.actual, |source| source.actual())
     }
+
+    pub fn immediate(&self) -> Option<&Self> {
+        if self.source.is_some() {
+            Some(self)
+        } else {
+            None
+        }
+    }
 }
 
 pub type TypeConstraint = UnificationConstraint<Type>;
 pub type LiquidTypeConstraint = UnificationConstraint<LiquidType>;
+
+trait HasTypeVars<T> {
+    fn type_vars(&self) -> Vec<(Handle<T>, Option<String>)>;
+}
+
+impl HasTypeVars<LiquidType> for Handle<LiquidType> {
+    fn type_vars(&self) -> Vec<(Handle<LiquidType>, Option<String>)> {
+        vec![]
+    }
+}
+
+impl HasTypeVars<Type> for Handle<Type> {
+    fn type_vars(&self) -> Vec<(Handle<Type>, Option<String>)> {
+        if let TypeValue::Var(_, name) = &self.value {
+            vec![(*self, name.clone())]
+        } else {
+            self.subterms()
+                .iter()
+                .map(|subterm| subterm.type_vars())
+                .collect::<Vec<_>>()
+                .concat()
+        }
+    }
+}
 
 trait Unifier<
     T: NodeInterface + Eq + Hash + Display,
     P: AsPool<UnificationConstraint<T>, ()>
 > {
     fn type_pool_mut(&mut self) -> &mut P;
-    fn constraints(&mut self) -> &mut Vec<Handle<UnificationConstraint<T>>>;
+    fn constraints(
+        &mut self
+    ) -> &mut VecDeque<Handle<UnificationConstraint<T>>>;
 
     fn new_constraint(&mut self, expected: Handle<T>, actual: Handle<T>) {
         let handle = self
             .type_pool_mut()
             .add(UnificationConstraint::new(expected, actual));
 
-        self.constraints().push(handle);
+        self.constraints().push_back(handle);
         log::trace!("encountered constraint: {} = {}", expected, actual);
     }
 
@@ -89,7 +129,7 @@ trait Unifier<
         let handle = self
             .type_pool_mut()
             .add(UnificationConstraint::derived(expected, actual, source));
-        self.constraints().push(handle);
+        self.constraints().push_back(handle);
 
         log::trace!(
             "encountered constraint: {} = {} (from {} = {})",
@@ -107,7 +147,7 @@ trait Unifier<
 
     fn unify_constraints(&mut self) -> Option<DisjointSets<Handle<T>>> {
         let mut dsu = DisjointSets::new();
-        while let Some(constraint) = self.constraints().pop() {
+        while let Some(constraint) = self.constraints().pop_front() {
             dsu.add(constraint.expected);
             dsu.add(constraint.actual);
             self.unify_constraint(&mut dsu, constraint).ok()?;
@@ -124,8 +164,8 @@ pub trait AsInferencePool:
 pub struct TypeInferer<'pool, 'err, P: AsInferencePool> {
     ast: HandleArray<Decl>,
     env: Environment<String, Handle<Type>>,
-    type_constraints: Vec<Handle<TypeConstraint>>,
-    liquid_type_constraints: Vec<Handle<LiquidTypeConstraint>>,
+    type_constraints: VecDeque<Handle<TypeConstraint>>,
+    liquid_type_constraints: VecDeque<Handle<LiquidTypeConstraint>>,
     gen: Gen,
     pool: &'pool mut P,
     error_manager: &'err mut ErrorManager
@@ -139,8 +179,8 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
         Self {
             ast,
             env: Environment::new(),
-            type_constraints: Vec::new(),
-            liquid_type_constraints: Vec::new(),
+            type_constraints: VecDeque::new(),
+            liquid_type_constraints: VecDeque::new(),
             gen: Gen::new(),
             pool,
             error_manager
@@ -171,7 +211,7 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
             for (ty, sub_ty) in &substitution {
                 #[allow(clippy::single_match)] // since might add more later
                 match sub_ty.value {
-                    TypeValue::Var(_) => {
+                    TypeValue::Var(..) => {
                         self.report_ambiguous_type(
                             *sub_ty,
                             "Type variable not resolved (bug?)".into()
@@ -192,7 +232,7 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
             for (ty, sub_ty) in &substitution {
                 #[allow(clippy::single_match)] // since might add more later
                 match sub_ty.value {
-                    LiquidTypeValue::All => {
+                    LiquidTypeValue::All(..) => {
                         self.report_ambiguous_type(
                             *sub_ty,
                             "Type variable not resolved (bug?)".into()
@@ -235,7 +275,7 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
-                .with_code(ErrorCode::StaticAnalysisIssue)
+                .with_code(ErrorCode::AmbiguousType)
                 .span(ty)
                 .message(format!("Ambiguous type `{}`", ty))
                 .explain(explain)
@@ -261,33 +301,89 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
     >(
         &mut self, constraint: Handle<UnificationConstraint<T>>,
         dsu: &mut DisjointSets<Handle<T>>, fix: Option<String>
-    ) {
+    ) where
+        Handle<T>: HasTypeVars<T> {
         let expected = dsu.find(constraint.expected()).unwrap();
         let actual = dsu.find(constraint.actual()).unwrap();
+
         let mut builder = ErrorBuilder::new()
             .of_style(Style::Primary)
             .at_level(Level::Error)
-            .with_code(ErrorCode::StaticAnalysisIssue)
+            .with_code(ErrorCode::UnificationFailure)
             .span(expected)
             .message(format!(
                 "Failed to unify types `{}` and `{}`",
                 expected, actual
             ))
-            .explain(format!("Expected `{}` here", expected));
+            .explain(format!("Expected `{}` here,", expected));
         if let Some(fix) = fix {
             builder = builder.fix(fix);
         }
         self.report(builder.build());
+
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Secondary)
                 .at_level(Level::Error)
-                .with_code(ErrorCode::StaticAnalysisIssue)
                 .span(actual)
                 .continues()
-                .explain(format!("but received `{}`.", actual))
+                .explain(format!("but received `{}` here.", actual))
                 .build()
         );
+
+        let expected_type_vars = expected.type_vars();
+        let actual_type_vars = actual.type_vars();
+        let type_vars = expected_type_vars
+            .iter()
+            .chain(&actual_type_vars)
+            .flat_map(|(ty, name)| name.as_ref().map(|name| (ty, name)))
+            .collect::<Vec<_>>();
+        let mut seen = HashSet::new();
+        let type_vars = type_vars
+            .into_iter()
+            .filter(|(ty, _)| seen.insert(*ty))
+            .collect::<Vec<_>>();
+
+        for (ty, name) in type_vars {
+            self.report(
+                ErrorBuilder::new()
+                    .of_style(Style::Secondary)
+                    .at_level(Level::Info)
+                    .span(ty)
+                    .continues()
+                    .explain(format!("Call the type of {} `{}`.", name, ty))
+                    .build()
+            );
+        }
+
+        if let Some(immediate) = constraint.immediate() {
+            self.report(
+                ErrorBuilder::new()
+                    .of_style(Style::Secondary)
+                    .at_level(Level::Info)
+                    .with_code(ErrorCode::UnificationFailure)
+                    .message(format!(
+                        "Error encountered while unifiying `{}` with `{}`",
+                        immediate.expected, immediate.actual
+                    ))
+                    .span(immediate.expected)
+                    .explain(format!("Expected `{}` here,", immediate.expected))
+                    .build()
+            );
+            self.report(
+                ErrorBuilder::new()
+                    .of_style(Style::Secondary)
+                    .at_level(Level::Info)
+                    .with_code(ErrorCode::UnificationFailure)
+                    .continues()
+                    .span(immediate.actual)
+                    .explain(format!(
+                        "but received `{}` here.",
+                        immediate.actual
+                    ))
+                    .build()
+            );
+        }
     }
 }
 
@@ -319,11 +415,16 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
         }
     }
 
-    fn new_type_var<N: NodeInterface, NRef: AsRef<N>>(
-        &mut self, source: NRef
+    /// The description should be a noun (phrase) preceded by a determiner such
+    /// as "this".
+    fn new_type_var<N: NodeInterface, NRef: AsRef<N>, S: AsRef<str>>(
+        &mut self, source: NRef, description: Option<S>
     ) -> Handle<Type> {
         self.pool.generate(
-            TypeValue::Var(self.gen.next()),
+            TypeValue::Var(
+                self.gen.next(),
+                description.map(|d| d.as_ref().to_string())
+            ),
             source.as_ref().start_token(),
             source.as_ref().end_token()
         )
@@ -349,7 +450,10 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
             ExprValue::Call(_, _) => todo!(),
             ExprValue::ArrayLiteral(elements, should_continue) => {
                 if elements.is_empty() && should_continue.is_some() {
-                    self.new_type_var(expr)
+                    self.new_type_var(
+                        expr,
+                        Some("this empty and size-indeterminate array literal")
+                    )
                 } else {
                     let element_count = elements.len();
                     let mut elements = elements.iter();
@@ -362,11 +466,17 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                         }
                         first_type
                     } else {
-                        self.new_type_var(expr)
+                        self.new_type_var(
+                            expr,
+                            Some("the array literal's element")
+                        )
                     };
                     let liquid_type = self.pool.generate(
                         if should_continue.is_some() {
-                            LiquidTypeValue::All
+                            LiquidTypeValue::All(
+                                self.gen.next(),
+                                Some("length".into())
+                            )
                         } else {
                             LiquidTypeValue::Equal(element_count)
                         },
@@ -410,21 +520,28 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
 
                 // index must be an integer
                 let op_index_type =
-                    self.pool.generate(TypeValue::Int64, *op, *op);
+                    self.pool.generate(TypeValue::Int64, *op, *op2);
                 self.new_constraint(op_index_type, index_type);
 
                 // lhs must be an array with:
                 // - some inner element type (`result_type`)
                 // - some length (`index_liquid_type`)
-                let result_type = self.new_type_var(expr);
-                let index_liquid_type =
-                    self.pool.generate(LiquidTypeValue::All, *op, *op);
-                let expected_lhs_type = self.pool.generate(
-                    TypeValue::Array(result_type, index_liquid_type),
+                let result_type =
+                    self.new_type_var(expr, Some("the array's element"));
+                let lhs_size_liquid_type = self.pool.generate(
+                    LiquidTypeValue::All(
+                        self.gen.next(),
+                        Some("length".into())
+                    ),
                     lhs.start_token(),
                     lhs.end_token()
                 );
-                self.new_constraint(expected_lhs_type, lhs_type);
+                let actual_lhs_type = self.pool.generate(
+                    TypeValue::Array(result_type, lhs_size_liquid_type),
+                    lhs.start_token(),
+                    lhs.end_token()
+                );
+                self.new_constraint(lhs_type, actual_lhs_type);
                 result_type
             }
             _ => todo!()
@@ -516,7 +633,7 @@ impl<'pool, 'err, P: AsInferencePool> Unifier<Type, P>
         self.pool
     }
 
-    fn constraints(&mut self) -> &mut Vec<Handle<TypeConstraint>> {
+    fn constraints(&mut self) -> &mut VecDeque<Handle<TypeConstraint>> {
         &mut self.type_constraints
     }
 
@@ -524,27 +641,27 @@ impl<'pool, 'err, P: AsInferencePool> Unifier<Type, P>
         &mut self, dsu: &mut DisjointSets<Handle<Type>>,
         constraint: Handle<TypeConstraint>
     ) -> Result<(), ()> {
-        let expected = constraint.expected;
-        let expected_rep =
-            dsu.find(expected).expect("expected type not added to dsu");
-        let actual = constraint.actual;
-        let actual_rep =
-            dsu.find(actual).expect("actual type not added to dsu");
+        let expected_rep = dsu
+            .find(constraint.expected)
+            .expect("expected type not added to dsu");
+        let actual_rep = dsu
+            .find(constraint.actual)
+            .expect("actual type not added to dsu");
         if expected_rep != actual_rep {
             match (&expected_rep.value, &actual_rep.value) {
-                (TypeValue::Var(_), TypeValue::Var(_)) => {
+                (TypeValue::Var(..), TypeValue::Var(..)) => {
                     dsu.union(actual_rep, expected_rep, false)
                         .expect("failed to union");
                 }
-                (TypeValue::Var(_), _) => {
+                (TypeValue::Var(..), _) => {
                     dsu.union(expected_rep, actual_rep, false)
                         .expect("failed to union");
                 }
-                (_, TypeValue::Var(_)) => {
+                (_, TypeValue::Var(..)) => {
                     dsu.union(actual_rep, expected_rep, false)
                         .expect("failed to union");
                 }
-                _ if expected.can_unify_with(&actual) => {
+                _ if expected_rep.can_unify_with(&actual_rep) => {
                     dsu.union(actual_rep, expected_rep, false)
                         .expect("failed to union");
                     for (expected_subterm, actual_subterm) in
@@ -583,7 +700,7 @@ impl<'pool, 'err, P: AsInferencePool> Unifier<LiquidType, P>
         self.pool
     }
 
-    fn constraints(&mut self) -> &mut Vec<Handle<LiquidTypeConstraint>> {
+    fn constraints(&mut self) -> &mut VecDeque<Handle<LiquidTypeConstraint>> {
         &mut self.liquid_type_constraints
     }
 
@@ -591,34 +708,33 @@ impl<'pool, 'err, P: AsInferencePool> Unifier<LiquidType, P>
         &mut self, dsu: &mut DisjointSets<Handle<LiquidType>>,
         constraint: Handle<UnificationConstraint<LiquidType>>
     ) -> Result<(), ()> {
-        let expected = constraint.expected;
         let expected_rep = dsu
-            .find(expected)
+            .find(constraint.expected)
             .expect("expected liquid type not added to dsu");
-        let actual = constraint.actual;
         let actual_rep = dsu
-            .find(actual)
+            .find(constraint.actual)
             .expect("actual liquid type not added to dsu");
         if expected_rep != actual_rep {
             match (&expected_rep.value, &actual_rep.value) {
-                (LiquidTypeValue::All, LiquidTypeValue::All) => {
-                    dsu.union(actual, expected, false)
+                (LiquidTypeValue::All(..), LiquidTypeValue::All(..)) => {
+                    dsu.union(actual_rep, expected_rep, false)
                         .expect("failed to union");
                 }
-                (LiquidTypeValue::All, _) => {
-                    dsu.union(expected, actual, false)
+                (LiquidTypeValue::All(..), _) => {
+                    dsu.union(expected_rep, actual_rep, false)
                         .expect("failed to union");
                 }
-                (_, LiquidTypeValue::All) => {
-                    dsu.union(actual, expected, false)
+                (_, LiquidTypeValue::All(..)) => {
+                    dsu.union(actual_rep, expected_rep, false)
                         .expect("failed to union");
                 }
                 (LiquidTypeValue::Equal(a), LiquidTypeValue::Equal(b))
                     if a == b =>
                 {
-                    dsu.union(actual, expected, false);
+                    dsu.union(actual_rep, expected_rep, false);
                 }
                 _ => {
+                    println!("{:?}", constraint);
                     self.report_unification_failure(constraint, dsu, None);
                     return Err(());
                 }

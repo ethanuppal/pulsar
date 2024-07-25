@@ -8,30 +8,50 @@
 //     Output, PulsarBackend
 // };
 use pulsar_frontend::{
-    lexer::Lexer, parser::Parser, type_inferer::TypeInferer
+    attribute::{Attribute, AttributeProvider},
+    lexer::Lexer,
+    parser::Parser,
+    type_inferer::TypeInferer
 };
 use pulsar_ir::{from_ast, pass::PassRunner};
 use pulsar_lang::{context::Context, utils::OptionCheckError};
-use pulsar_utils::{error::ErrorManager, span::Source};
+use pulsar_utils::{
+    error::{ErrorCode, ErrorManager},
+    span::Source
+};
 use std::env;
 
 pub fn main() -> anyhow::Result<()> {
     env_logger::builder()
         .filter(None, log::LevelFilter::Info)
-        .parse_default_env()
+        .parse_env("LOG")
         .format_timestamp(None)
         .init();
 
-    log::info!("Parsing...");
-
     let mut args = env::args();
     args.next(); // ignore program path
-    let filename = args.next().unwrap_or("data/test.plsr".into());
+    let first_arg = args.next();
+    if first_arg == Some("--explain".into()) {
+        let error_code = args
+            .next()
+            .expect("missing code after --explain")
+            .parse::<i32>()
+            .expect("invalid error code");
+        let error_code =
+            ErrorCode::from(error_code).expect("invalid error code");
+        println!("Code: {}", error_code);
+        println!("Description: {}", error_code.description());
+        return Ok(());
+    }
+
+    let filename = first_arg.unwrap_or("data/test.plsr".into());
     let source = Source::load_file(filename.clone())?;
 
     let mut ctx = Context::new()?;
 
     let mut error_manager = ErrorManager::with_max_count(50);
+
+    log::info!("Parsing...");
 
     let tokens = Lexer::new(source, &mut ctx, &mut error_manager)
         .lex()
@@ -47,21 +67,21 @@ pub fn main() -> anyhow::Result<()> {
         .infer()
         .check_errors(&mut error_manager)?;
 
-    {
-        use pulsar_frontend::ast::{expr::Expr, node::AsNodePool};
-        use pulsar_utils::{
-            pool::{AsPool, HandleArray},
-            span::SpanProvider
-        };
+    // {
+    //     use pulsar_frontend::ast::{expr::Expr, node::AsNodePool};
+    //     use pulsar_utils::{
+    //         pool::{AsPool, HandleArray},
+    //         span::SpanProvider
+    //     };
 
-        let exprs: HandleArray<Expr> = ctx.as_pool_mut().as_array();
-        for expr in exprs {
-            if ctx.get_ty(expr).is_invalid() {
-                panic!("[{}] {} did not have type resolved", expr.span(), expr);
-            }
-            println!("{} {}: {}", expr.span(), expr, ctx.get_ty(expr));
-        }
-    }
+    //     let exprs: HandleArray<Expr> = ctx.as_pool_mut().as_array();
+    //     for expr in exprs {
+    //         if ctx.get_ty(expr).is_invalid() {
+    //             panic!("[{}] {} did not have type resolved", expr.span(),
+    // expr);         }
+    //         println!("{} {}: {}", expr.span(), expr, ctx.get_ty(expr));
+    //     }
+    // }
 
     // for decl in ast {
     //     println!("{}", decl);
@@ -70,11 +90,23 @@ pub fn main() -> anyhow::Result<()> {
     log::info!("Optimizing...");
 
     let pass_runner = PassRunner::default();
-    let comps = from_ast::ast_to_ir(ast, pass_runner, &mut ctx);
+    let mut comps = from_ast::ast_to_ir(ast, pass_runner, &mut ctx);
 
-    for comp in comps {
+    for comp in &comps {
         println!("{}", comp);
     }
+
+    if let Some(main) = comps
+        .iter_mut()
+        .find(|comp| comp.label().name.unmangled() == "main")
+    {
+        main.add_attribute(Attribute::Kernel);
+    }
+
+    for comp in comps
+        .iter()
+        .filter(|comp| comp.has_attribute(Attribute::Kernel))
+    {}
 
     log::info!("Emitting calyx accelerator and address generator (TODO)...");
 
