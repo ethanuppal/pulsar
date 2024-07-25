@@ -5,15 +5,15 @@
 
 use super::{
     label::{Label, Name, Visibility},
-    operand::Operand,
-    variable::Variable,
-    Ir
+    port::Port,
+    variable::Variable
 };
 use crate::{
     cell::Cell,
     component::Component,
-    control::{AsControlPool, Control, For, SeqParBuilder, DEFAULT_CONTROL_ID},
-    memory::Memory,
+    control::{
+        AsControlPool, Control, ControlBuilder, For, DEFAULT_CONTROL_ID
+    },
     pass::PassRunner
 };
 use pulsar_frontend::{
@@ -31,13 +31,15 @@ use pulsar_utils::{
     pool::{AsPool, Handle}
 };
 
-pub trait AsGeneratorPool: AsControlPool + AsPool<Cell, ()> {}
+pub trait AsGeneratorPool:
+    AsControlPool + AsPool<Port, ()> + AsPool<Cell, ()> {
+}
 
 #[derive(Default)]
 pub struct ComponentGenerator {
     var_gen: Gen,
-    env: Environment<String, Variable>,
-    cells: Environment<Variable, Cell>
+    env: Environment<String, Variable>
+    // cells: Environment<Variable, Cell>
 }
 
 pub fn ast_to_ir<P: AsGeneratorPool>(
@@ -58,8 +60,7 @@ pub fn ast_to_ir<P: AsGeneratorPool>(
                 body,
                 &mut pass_runner,
                 pool
-            ),
-            _ => panic!("tried to turn not-a-function into a component")
+            )
         })
         .collect()
 }
@@ -100,13 +101,13 @@ impl ComponentGenerator {
         );
 
         let mut control_gen = Gen::new_skipping(DEFAULT_CONTROL_ID);
-        let mut control = SeqParBuilder::new(&mut control_gen, pool);
+        let mut builder = ControlBuilder::new(&mut control_gen, pool);
         for stmt in body {
-            self.gen_stmt(*stmt, &mut control)
+            self.gen_stmt(*stmt, &mut builder)
         }
 
         let mut comp =
-            Component::new(label, input_cells, output_cells, control.into());
+            Component::new(label, input_cells, output_cells, builder.into());
         pass_runner.run(&mut comp, pool);
         comp
     }
@@ -116,44 +117,59 @@ impl ComponentGenerator {
         Variable::from(self.var_gen.next())
     }
 
-    /// Generates IR for `expr` in `par`, returning its result.
-    fn gen_expr<P: AsControlPool>(
-        &mut self, expr: Handle<Expr>, control: &mut SeqParBuilder<P>
-    ) -> Operand {
+    /// Generates IR for `expr` in `par`, returning its result. If `expr` is an
+    /// lvalue, no additional control is built.
+    fn gen_expr<P: AsGeneratorPool>(
+        &mut self, expr: Handle<Expr>, builder: &mut ControlBuilder<P>
+    ) -> Port {
         match &expr.value {
-            ExprValue::ConstantInt(value) => Operand::Constant(*value),
+            ExprValue::ConstantInt(value) => Port::Constant(*value),
             ExprValue::InfixBop(lhs, op, rhs) => {
-                let lhs = self.gen_expr(*lhs, control);
-                let rhs = self.gen_expr(*rhs, control);
+                let lhs = self.gen_expr(*lhs, builder);
+                let rhs = self.gen_expr(*rhs, builder);
                 let result = self.new_var();
                 match op.ty {
                     TokenType::Plus => {
-                        control.push(Ir::Add(result, lhs, rhs));
+                        builder.push_add(result, lhs, rhs);
                     }
                     TokenType::Times => {
-                        control.push(Ir::Mul(result, lhs, rhs));
+                        builder.push_mul(result, lhs, rhs);
                     }
                     _ => todo!("haven't implemented all infix bops")
                 }
-                Operand::Variable(result)
+                Port::Variable(result)
             }
             ExprValue::BoundName(name) => {
-                Operand::Variable(*self.env.find(name.value.clone()).unwrap_or_else(|| panic!("unbound name `{}` should have been caught in type inference", name.value)))
+                Port::Variable(*self.env.find(name.value.clone()).unwrap_or_else(|| panic!("unbound name `{}` should have been caught in type inference", name.value)))
             }
             ExprValue::PostfixBop(array, op1, index, op2)
                 if op1.ty == TokenType::LeftBracket
                     && op2.ty == TokenType::RightBracket =>
             {
-                let array_operand = self.gen_expr(*array, control);
-                let index_operand = self.gen_expr(*index, control);
-                Operand::PartialAccess(Box::new(array_operand), Box::new(index_operand))
-            }
+                let array_port = self.gen_expr(*array, builder);
+                let index_port = self.gen_expr(*index, builder);
+                Port::PartialAccess(builder.add_port(array_port), builder.add_port(index_port))
+            },
+            ExprValue::ArrayLiteral(elements, _should_continue) => {
+                let result = Port::Variable(self.new_var());
+                let result_handle = builder.add_port(result.clone()); // leakedA
+                let mut i = 0;
+                #[allow(clippy::explicit_counter_loop)] // for 2nd loop of zeros
+                for element in elements {
+                    let index = builder.new_const(i as i64);
+                    let element_port = self.gen_expr(*element, builder);
+                    builder.push_assign(Port::PartialAccess(result_handle, index), element_port);
+                    i += 1
+                }
+                // TODO: figure out a nice way to get the liquid type for array length here
+                result
+            },
             _ => todo!()
         }
     }
 
-    fn gen_stmt<P: AsControlPool>(
-        &mut self, stmt: Handle<Stmt>, control: &mut SeqParBuilder<P>
+    fn gen_stmt<P: AsGeneratorPool>(
+        &mut self, stmt: Handle<Stmt>, builder: &mut ControlBuilder<P>
     ) {
         match &stmt.value {
             StmtValue::Let {
@@ -161,18 +177,18 @@ impl ComponentGenerator {
                 hint: _,
                 value
             } => {
-                let value_operand = self.gen_expr(*value, control);
+                let value_port = self.gen_expr(*value, builder);
                 let name_var = self.new_var();
                 self.env.bind(name.value.clone(), name_var);
-                control.push(Ir::assign(name_var, value_operand));
+                builder.push_assign(name_var, value_port);
             }
             StmtValue::Assign(lhs, _, rhs) => {
-                let rhs_operand = self.gen_expr(*rhs, control);
-                let lhs_operand = self.gen_expr(*lhs, control);
-                control.push(Ir::assign(lhs_operand, rhs_operand));
+                let rhs_port = self.gen_expr(*rhs, builder);
+                let lhs_port = self.gen_expr(*lhs, builder);
+                builder.push_assign(lhs_port, rhs_port);
             }
             StmtValue::Divider(_) => {
-                control.split();
+                builder.split();
             }
             StmtValue::For {
                 var,
@@ -183,10 +199,10 @@ impl ComponentGenerator {
                 self.env.push();
                 let variant = self.new_var();
                 self.env.bind(var.value.clone(), variant);
-                let lower_operand = self.gen_expr(*lower, control);
-                let upper_operand = self.gen_expr(*exclusive_upper, control);
-                let body = control.with_inner(|gen, pool| {
-                    let mut builder = SeqParBuilder::new(gen, pool);
+                let lower_port = self.gen_expr(*lower, builder);
+                let upper_port = self.gen_expr(*exclusive_upper, builder);
+                let body = builder.with_inner(|gen, pool| {
+                    let mut builder = ControlBuilder::new(gen, pool);
                     self.env.push();
                     for stmt in body {
                         self.gen_stmt(*stmt, &mut builder);
@@ -196,13 +212,9 @@ impl ComponentGenerator {
                     pool.add(control)
                 });
                 self.env.pop();
-                let id = control.next_id();
-                control.push(Control::For(For::new(
-                    id,
-                    variant,
-                    lower_operand,
-                    upper_operand,
-                    body
+                let id = builder.next_id();
+                builder.push(Control::For(For::new(
+                    id, variant, lower_port, upper_port, body
                 )));
             }
         }

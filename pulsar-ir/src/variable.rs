@@ -4,7 +4,10 @@
 //! the License, or (at your option) any later version.
 
 use pulsar_utils::id::Id;
-use std::fmt::{self, Display};
+use std::{
+    cmp,
+    fmt::{self, Display}
+};
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Variable {
@@ -24,13 +27,13 @@ impl Display for Variable {
 }
 
 impl PartialOrd for Variable {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.id.partial_cmp(&other.id)
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for Variable {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
         self.id.cmp(&other.id)
     }
 }

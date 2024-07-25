@@ -1,0 +1,10 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\",\n                1)).expect(\"failed to parse/infer input\")"
+---
+error[E0009]: infer1.plsr:2:25: Unbound function or variable `a`
+     │  
+   1 │  func main() {
+   2 │      let arr: Int[64] = [a, b, ...]
+   3 │  }
+     │

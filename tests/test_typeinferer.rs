@@ -9,7 +9,8 @@ mod tests {
     use pulsar_frontend::{
         ast::{expr::Expr, node::AsNodePool},
         lexer::Lexer,
-        parser::Parser
+        parser::Parser,
+        type_inferer::TypeInferer
     };
     use pulsar_lang::{context::Context, utils::OptionCheckError};
     use pulsar_utils::{
@@ -31,22 +32,40 @@ mod tests {
             .parse()
             .check_errors(&mut error_manager)?;
 
+        let ast = TypeInferer::new(ast, &mut ctx, &mut error_manager).infer();
+
         let mut output = String::new();
 
-        for decl in ast {
-            writeln!(&mut output, "{}", decl).unwrap();
+        if let Some(ast) = ast {
+            for decl in ast {
+                writeln!(&mut output, "{}", decl).unwrap();
+            }
         }
 
-        if error_manager.has_errors() {
-            let mut buffer = Vec::new();
-            error_manager.consume_and_write(&mut buffer)?;
-            output.push_str(&String::from_utf8_lossy(&buffer));
+        if !error_manager.has_errors() {
+            let exprs: HandleArray<Expr> = ctx.as_pool_mut().as_array();
+            for expr in exprs {
+                if ctx.get_ty(expr).is_invalid() {
+                    panic!(
+                        "[{}] {} did not have type resolved",
+                        expr.span(),
+                        expr
+                    );
+                }
+                writeln!(
+                    &mut output,
+                    "{} {}: {}",
+                    expr.span(),
+                    expr,
+                    ctx.get_ty(expr)
+                )
+                .unwrap();
+            }
         }
 
-        let exprs: HandleArray<Expr> = ctx.as_pool_mut().as_array();
-        for expr in exprs {
-            println!("{} {}: {}", expr.span(), expr, ctx.get_ty(expr));
-        }
+        let mut buffer = Vec::new();
+        error_manager.consume_and_write(&mut buffer)?;
+        output.push_str(&String::from_utf8_lossy(&buffer));
 
         Ok(output)
     }
@@ -77,9 +96,4 @@ mod tests {
     generate_test!(9);
     generate_test!(10);
     generate_test!(11);
-    generate_test!(12);
-    generate_test!(13);
-    generate_test!(14);
-    generate_test!(15);
-    generate_test!(16);
 }

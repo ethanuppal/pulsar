@@ -4,5 +4,5 @@ expression: "parser_output(&format!(\"tests/data/parser{}.plsr\",\n             
 ---
 func unit() -> (unit: Unit) {}
 func int() -> (int: Int64) {}
-func array() -> (array: Int64[64]) {}
+func array() -> (array: Int64[{ x | x = 64 }]) {}
 func array(input: MyCustomType1) -> (custom: MyCustomType2) {}

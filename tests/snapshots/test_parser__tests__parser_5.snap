@@ -4,11 +4,11 @@ expression: "parser_output(&format!(\"tests/data/parser{}.plsr\",\n             
 ---
 func main() -> () {
     let val: Int64 = 1
-    let arr1d: Int64[5] = [1, 2, ...]
-    let zeros64: Int64[64] = [...]
-    let arr2d: Int64[5][6] = [...]
-    let warn: Int64[0] = [...]
-    let warn2: Int64[0][4] = [...]
+    let arr1d: Int64[{ x | x = 5 }] = [1, 2, ...]
+    let zeros64: Int64[{ x | x = 64 }] = [...]
+    let arr2d: Int64[{ x | x = 5 }][{ x | x = 6 }] = [...]
+    let warn: Int64[{ x | x = 0 }] = [...]
+    let warn2: Int64[{ x | x = 0 }][{ x | x = 4 }] = [...]
 }
 warning[W0008]: parser5.plsr:6:19: Array size is zero
      │  

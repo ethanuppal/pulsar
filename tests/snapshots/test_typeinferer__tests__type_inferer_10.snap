@@ -1,0 +1,17 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\",\n                10)).expect(\"failed to parse/infer input\")"
+---
+error[E0010]: infer10.plsr:1:24: Failed to unify types `Int64` and `'t0[{ x | x = 0 }]`
+     │  
+   1 │  func bad() -> (return: Int) {
+     │                         └── Expected `Int64` here
+   2 │      return = []
+     │  
+   ...
+     │  
+   1 │  func bad() -> (return: Int) {
+   2 │      return = [] 
+     │               └─ but received `'t0[{ x | x = 0 }]`.
+   3 │  }
+     │

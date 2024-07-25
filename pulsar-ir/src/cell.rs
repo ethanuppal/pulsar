@@ -3,10 +3,9 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use std::fmt::{self, Display};
-
 use crate::memory::Memory;
 use pulsar_frontend::ast::ty::{LiquidTypeValue, Type, TypeValue};
+use std::fmt::{self, Display};
 
 /// A hardware element capable of storage.
 pub enum Cell {
@@ -47,14 +46,13 @@ impl Display for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Cell::Memory(memory) => {
-                write!(
-                    f,
-                    "Memory(length={}, element={}, bank={})",
-                    memory.length, memory.element, memory.bank
-                )
+                for level in memory.levels() {
+                    write!(f, "[{} bank {}]", level.length, level.bank)?;
+                }
+                Cell::Register(memory.element()).fmt(f)
             }
             Cell::Register(bit_width) => {
-                write!(f, "Register(width={})", bit_width)
+                write!(f, "[0:{}]()", bit_width - 1)
             }
         }
     }

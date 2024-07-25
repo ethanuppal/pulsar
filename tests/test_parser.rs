@@ -28,6 +28,7 @@ mod tests {
                 writeln!(&mut output, "{}", decl).unwrap();
             }
         }
+
         let mut buffer = Vec::new();
         error_manager.consume_and_write(&mut buffer)?;
         output.push_str(&String::from_utf8_lossy(&buffer));

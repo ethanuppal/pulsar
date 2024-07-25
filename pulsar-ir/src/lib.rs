@@ -3,13 +3,9 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use pulsar_frontend::op::Op;
-
-use self::{operand::Operand, variable::Variable};
-use std::{
-    convert,
-    fmt::{self, Display}
-};
+use self::{port::Port, variable::Variable};
+use pulsar_utils::pool::Handle;
+use std::fmt::{self, Display};
 
 pub mod cell;
 pub mod component;
@@ -17,36 +13,32 @@ pub mod control;
 pub mod from_ast;
 pub mod label;
 pub mod memory;
-pub mod operand;
 pub mod pass;
+pub mod port;
 pub mod variable;
 pub mod visitor;
 
+#[derive(Clone)]
 pub enum Ir {
-    Add(Variable, Operand, Operand),
-    Mul(Variable, Operand, Operand),
-    Assign(Operand, Operand)
+    Add(Handle<Port>, Handle<Port>, Handle<Port>),
+    Mul(Handle<Port>, Handle<Port>, Handle<Port>),
+    Assign(Handle<Port>, Handle<Port>)
 }
 
 impl Ir {
-    pub fn assign<R: Into<Operand>>(result: R, operand: Operand) -> Self {
-        Self::Assign(result.into(), operand)
-    }
-
-    pub fn kill(&self) -> Operand {
+    pub fn kill(&self) -> Handle<Port> {
         match self {
-            Ir::Add(lhs, _, _) | Ir::Mul(lhs, _, _) => Operand::from(*lhs),
-            Ir::Assign(lhs, _) => lhs.clone()
+            Ir::Add(lhs, _, _) | Ir::Mul(lhs, _, _) | Ir::Assign(lhs, _) => *lhs
         }
     }
 
-    pub fn gen(&self) -> Vec<&Operand> {
+    pub fn gen(&self) -> Vec<Handle<Port>> {
         match self {
-            Ir::Add(_, operand, operand2) | Ir::Mul(_, operand, operand2) => {
-                vec![operand, operand2]
+            Ir::Add(_, port, port2) | Ir::Mul(_, port, port2) => {
+                vec![*port, *port2]
             }
-            Ir::Assign(_attr, operand) => {
-                vec![operand]
+            Ir::Assign(_, port) => {
+                vec![*port]
             }
         }
     }
@@ -66,7 +58,7 @@ impl Display for Ir {
     }
 }
 
-impl From<Variable> for Operand {
+impl From<Variable> for Port {
     fn from(value: Variable) -> Self {
         Self::Variable(value)
     }

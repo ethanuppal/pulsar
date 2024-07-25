@@ -12,12 +12,13 @@ use pulsar_utils::{id::Id, pool::Handle};
 use std::{
     cmp,
     fmt::{self, Display, Write},
+    hash::Hash,
     mem
 };
 
 /// This isn't a real liquid type. Notably, the only constraint it can
 /// express is equality to a given number.
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub enum LiquidTypeValue {
     Equal(usize),
     All
@@ -32,6 +33,12 @@ impl PartialEq for LiquidType {
 }
 
 impl Eq for LiquidType {}
+
+impl Hash for LiquidType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value.hash(state)
+    }
+}
 
 impl PartialOrd for LiquidType {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
@@ -53,8 +60,10 @@ impl PartialOrd for LiquidType {
 impl PrettyPrint for LiquidType {
     fn pretty_print(&self, f: &mut IndentFormatter<'_, '_>) -> fmt::Result {
         match self.value {
-            LiquidTypeValue::Equal(value) => write!(f, "{}", value),
-            LiquidTypeValue::All => write!(f, "?")
+            LiquidTypeValue::Equal(value) => {
+                write!(f, "{{ x | x = {} }}", value)
+            }
+            LiquidTypeValue::All => write!(f, "{{ x | x >= 0 }}")
         }
     }
 }
@@ -209,5 +218,11 @@ impl PartialEq for Type {
 }
 
 impl Eq for Type {}
+
+impl Hash for Type {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value.hash(state)
+    }
+}
 
 pub trait AsTypePool: AsNodePool<Type> + AsNodePool<LiquidType> {}

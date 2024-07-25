@@ -6,68 +6,77 @@
 use crate::{
     control::{Control, Par, Seq},
     from_ast::AsGeneratorPool,
-    operand::Operand,
-    variable::Variable,
+    port::Port,
     visitor::{Action, Visitor},
     Ir
 };
 use pulsar_utils::pool::Handle;
-use std::{
-    cmp,
-    collections::HashMap,
-    ops::{Deref, DerefMut}
-};
+use std::collections::HashMap;
 
 pub struct CopyProp;
 
+/// Replaces the port that `ir` assigns to with `new_kill`.
+fn replace_kill(ir: &Ir, new_kill: Handle<Port>) -> Ir {
+    match ir {
+        Ir::Add(_, a, b) => Ir::Add(new_kill, *a, *b),
+        Ir::Mul(_, a, b) => Ir::Mul(new_kill, *a, *b),
+        Ir::Assign(_, b) => Ir::Assign(new_kill, *b)
+    }
+}
+
 impl CopyProp {
     fn copy_prop(&self, seq: &mut [Handle<Control>]) {
-        let mut assigns = HashMap::<Variable, Operand>::new();
+        let mut assigns = HashMap::<Handle<Port>, Ir>::new();
 
         fn replace(
-            assigns: &HashMap<Variable, Operand>, operand: &Operand
-        ) -> Operand {
-            if let Operand::Variable(var) = operand {
-                assigns.get(var).unwrap_or(operand)
-            } else {
-                operand
-            }
-            .clone()
+            assigns: &HashMap<Handle<Port>, Ir>, port: Handle<Port>
+        ) -> Handle<Port> {
+            *assigns
+                .get(&port)
+                .and_then(|ir| {
+                    if let Ir::Assign(_, src) = ir {
+                        Some(src)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(&port)
         }
 
         for child in seq {
             if let Control::Enable(ir) = &mut **child {
-                *ir = match ir {
+                *ir = match *ir {
                     Ir::Add(kill, src1, src2) => Ir::Add(
-                        *kill,
+                        kill,
                         replace(&assigns, src1),
                         replace(&assigns, src2)
                     ),
                     Ir::Mul(kill, src1, src2) => Ir::Mul(
-                        *kill,
+                        kill,
                         replace(&assigns, src1),
                         replace(&assigns, src2)
                     ),
                     Ir::Assign(kill, src) => {
-                        let src = replace(&assigns, src);
-                        if let Operand::Variable(kill) = kill {
-                            assigns.insert(*kill, src.clone());
+                        if let Some(latest_killer) = assigns.get(&src) {
+                            replace_kill(latest_killer, kill)
+                        } else {
+                            Ir::Assign(kill, src)
                         }
-                        Ir::Assign(kill.clone(), src)
                     }
-                }
+                };
+                assigns.insert(ir.kill(), ir.clone());
             }
         }
     }
 }
 
 impl<P: AsGeneratorPool> Visitor<P> for CopyProp {
-    fn finish_seq(&mut self, seq: &mut Seq, pool: &mut P) -> Action {
+    fn finish_seq(&mut self, seq: &mut Seq, _pool: &mut P) -> Action {
         self.copy_prop(&mut seq.children);
         Action::None
     }
 
-    fn finish_par(&mut self, par: &mut Par, pool: &mut P) -> Action {
+    fn finish_par(&mut self, par: &mut Par, _pool: &mut P) -> Action {
         self.copy_prop(&mut par.children);
         Action::None
     }

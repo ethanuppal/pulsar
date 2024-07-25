@@ -8,25 +8,21 @@
 //     Output, PulsarBackend
 // };
 use pulsar_frontend::{
-    ast::{expr::Expr, node::AsNodePool},
-    lexer::Lexer,
-    parser::Parser,
-    type_inferer::TypeInferer
+    lexer::Lexer, parser::Parser, type_inferer::TypeInferer
 };
 use pulsar_ir::{from_ast, pass::PassRunner};
 use pulsar_lang::{context::Context, utils::OptionCheckError};
-use pulsar_utils::{
-    error::ErrorManager,
-    pool::{AsPool, HandleArray},
-    span::{Source, SpanProvider}
-};
+use pulsar_utils::{error::ErrorManager, span::Source};
 use std::env;
 
 pub fn main() -> anyhow::Result<()> {
     env_logger::builder()
-        .filter_level(log::LevelFilter::Warn)
+        .filter(None, log::LevelFilter::Info)
+        .parse_default_env()
         .format_timestamp(None)
         .init();
+
+    log::info!("Parsing...");
 
     let mut args = env::args();
     args.next(); // ignore program path
@@ -45,22 +41,33 @@ pub fn main() -> anyhow::Result<()> {
         .parse()
         .check_errors(&mut error_manager)?;
 
+    log::info!("Inferring types...");
+
     let ast = TypeInferer::new(ast, &mut ctx, &mut error_manager)
         .infer()
         .check_errors(&mut error_manager)?;
+
+    {
+        use pulsar_frontend::ast::{expr::Expr, node::AsNodePool};
+        use pulsar_utils::{
+            pool::{AsPool, HandleArray},
+            span::SpanProvider
+        };
+
+        let exprs: HandleArray<Expr> = ctx.as_pool_mut().as_array();
+        for expr in exprs {
+            if ctx.get_ty(expr).is_invalid() {
+                panic!("[{}] {} did not have type resolved", expr.span(), expr);
+            }
+            println!("{} {}: {}", expr.span(), expr, ctx.get_ty(expr));
+        }
+    }
 
     // for decl in ast {
     //     println!("{}", decl);
     // }
 
-    // let exprs: HandleArray<Expr> = ctx.as_pool_mut().as_array();
-    // for expr in exprs {
-    //     if ctx.get_ty(expr).is_invalid() {
-    //         println!("{} {}: invalid type", expr.span(), expr);
-    //     } else {
-    //         println!("{} {}: {}", expr.span(), expr, ctx.get_ty(expr));
-    //     }
-    // }
+    log::info!("Optimizing...");
 
     let pass_runner = PassRunner::default();
     let comps = from_ast::ast_to_ir(ast, pass_runner, &mut ctx);
@@ -68,6 +75,8 @@ pub fn main() -> anyhow::Result<()> {
     for comp in comps {
         println!("{}", comp);
     }
+
+    log::info!("Emitting calyx accelerator and address generator (TODO)...");
 
     // let command_output = Command::new("fud")
     //     .args(["c", "global.root"])

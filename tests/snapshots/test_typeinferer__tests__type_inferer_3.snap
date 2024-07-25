@@ -1,0 +1,18 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\",\n                3)).expect(\"failed to parse/infer input\")"
+---
+error[E0010]: infer3.plsr:2:14: Failed to unify types `Int64[{ x | x = 10 }]` and `Int64[{ x | x = 1 }]`
+     │  
+   1 │  func main() {
+   2 │      let big: Int[10] = [...]
+     │               └────── Expected `Int64[{ x | x = 10 }]` here
+   3 │      let small: Int[1] = big
+     │  
+   ...
+     │  
+   2 │      let big: Int[10] = [...]
+   3 │      let small: Int[1] = big
+     │                 └───── but received `Int64[{ x | x = 1 }]`.
+   4 │  }
+     │

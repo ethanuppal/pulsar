@@ -3,50 +3,102 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use canonicalize::Canonicalize;
-use collapse_control::CollapseControl;
-use copy_prop::CopyProp;
-use dead_code::DeadCode;
-
 use crate::{
     component::Component, from_ast::AsGeneratorPool, visitor::Visitor
 };
+use canonicalize::Canonicalize;
+use cell_alloc::CellAlloc;
+use collapse_control::CollapseControl;
+use copy_prop::CopyProp;
+use dead_code::DeadCode;
+use well_formed::WellFormed;
 
 pub mod canonicalize;
 pub mod cell_alloc;
 pub mod collapse_control;
 pub mod copy_prop;
 pub mod dead_code;
+pub mod well_formed;
+
+enum PassOp<P: AsGeneratorPool> {
+    Boxed(Box<dyn Visitor<P>>),
+    Coverge(usize),
+    EndConverge
+}
 
 pub struct PassRunner<P: AsGeneratorPool> {
-    passes: Vec<Box<dyn Visitor<P>>>
+    passes: Vec<PassOp<P>>
 }
 
 impl<P: AsGeneratorPool> PassRunner<P> {
-    /// This pass runner has no registered passes. Use [`Runner::default`] for
-    /// default passes to be already registered.
-    pub fn empty() -> Self {
-        Self { passes: Vec::new() }
+    /// The minimal pass runner permitted.
+    pub fn core() -> Self {
+        let mut runner = Self { passes: Vec::new() };
+        runner.register(WellFormed);
+        runner.register(Canonicalize);
+        runner
     }
 
     pub fn register<V: Visitor<P> + 'static>(&mut self, pass: V) {
-        self.passes.push(Box::new(pass));
+        self.passes.push(PassOp::Boxed(Box::new(pass)));
+    }
+
+    pub fn register_converge<F: FnOnce(&mut Self)>(
+        &mut self, iter_limit: usize, f: F
+    ) {
+        self.passes.push(PassOp::Coverge(iter_limit));
+        f(self);
+        self.passes.push(PassOp::EndConverge);
     }
 
     pub fn run(&mut self, comp: &mut Component, pool: &mut P) {
-        for pass in &mut self.passes {
-            pass.traverse_component(comp, pool)
+        let mut in_convergence = false;
+        let mut convergence_iter_limit = 0;
+        let mut convergence_region = Vec::new();
+
+        for pass_op in &mut self.passes {
+            match pass_op {
+                PassOp::Boxed(pass) => {
+                    if in_convergence {
+                        convergence_region.push(pass);
+                    } else {
+                        pass.traverse_component(comp, pool);
+                    }
+                }
+                PassOp::Coverge(iter_limit) => {
+                    in_convergence = true;
+                    convergence_iter_limit = *iter_limit;
+                }
+                PassOp::EndConverge => {
+                    if in_convergence {
+                        loop {
+                            let mut did_modify = false;
+                            for pass in &mut convergence_region {
+                                did_modify |=
+                                    pass.traverse_component(comp, pool);
+                            }
+                            if !did_modify || convergence_iter_limit == 0 {
+                                break;
+                            }
+                            convergence_iter_limit -= 1;
+                        }
+                        in_convergence = false;
+                    }
+                }
+            };
         }
     }
 }
 
 impl<P: AsGeneratorPool> Default for PassRunner<P> {
     fn default() -> Self {
-        let mut runner = Self::empty();
-        runner.register(Canonicalize);
-        runner.register(CopyProp);
-        runner.register(DeadCode::default());
+        let mut runner = Self::core();
+        runner.register_converge(10, |runner| {
+            runner.register(CopyProp);
+            runner.register(DeadCode::default());
+        });
         runner.register(CollapseControl);
+        runner.register(CellAlloc::default());
         runner
     }
 }

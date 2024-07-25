@@ -78,7 +78,7 @@ clean:
 .PHONY: docs
 docs:
 	@echo '[INFO] Building and viewing documentation'
-	@cargo doc -p pulsar-frontend -p pulsar-ir -p pulsar-backend -p pulsar-utils -p pulsar --no-deps
+	@cargo doc -p pulsar-frontend -p pulsar-ir -p pulsar-backend -p pulsar-utils -p pulsar-lang --no-deps --examples
 		
 
 .PHONY: cloc

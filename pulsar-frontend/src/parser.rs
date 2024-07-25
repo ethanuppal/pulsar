@@ -35,18 +35,12 @@ pub type Block = (Handle<Token>, Vec<Handle<Stmt>>, Handle<Token>);
 #[derive(Default)]
 struct ParseErrorContext {
     loc: String,
-    fix: Option<String>,
     refback: Option<Error>
 }
 
 impl ParseErrorContext {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    pub fn fix<S: AsRef<str>>(mut self, msg: S) -> Self {
-        self.fix = Some(msg.as_ref().to_string());
-        self
     }
 
     pub fn refback(mut self, error: Error) -> Self {
@@ -249,7 +243,6 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                 .with_code(ErrorCode::UnexpectedEOF)
                 .span(self.buffer.last().unwrap())
                 .explain(format!("Unexpected EOF {}", context.loc))
-                .maybe_fix(context.fix)
                 .build()
         );
         if let Some(refback) = context.refback {
@@ -276,7 +269,6 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                     context.loc
                 ))
                 .explain(format!("Received '{}' here", actual.ty.name()))
-                .maybe_fix(context.fix)
                 .build()
         );
         if let Some(refback) = context.refback {
@@ -305,7 +297,6 @@ impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
                     context.loc
                 ))
                 .explain(format!("Received '{}' here", actual.ty.name()))
-                .maybe_fix(context.fix)
                 .build()
         );
         if let Some(refback) = context.refback {

@@ -31,11 +31,11 @@ impl CollapseControl {
 }
 
 impl<P: AsGeneratorPool> Visitor<P> for CollapseControl {
-    fn finish_seq(&mut self, seq: &mut Seq, pool: &mut P) -> Action {
+    fn finish_seq(&mut self, seq: &mut Seq, _pool: &mut P) -> Action {
         self.collapse(&mut seq.children)
     }
 
-    fn finish_par(&mut self, par: &mut Par, pool: &mut P) -> Action {
+    fn finish_par(&mut self, par: &mut Par, _pool: &mut P) -> Action {
         self.collapse(&mut par.children)
     }
 }

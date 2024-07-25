@@ -3,30 +3,45 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
+use pulsar_utils::pool::Handle;
+
 use super::variable::Variable;
 use std::fmt::{self, Display};
 
+/// A port represents a constant or an lvalue.
 #[derive(PartialEq, Eq, Hash, Clone)]
-pub enum Operand {
+pub enum Port {
     Constant(i64),
     Variable(Variable),
-    /// Non-canonical
-    PartialAccess(Box<Operand>, Box<Operand>),
-    Access(Variable, Vec<Operand>)
+    /// Non-canonical -- the `Canonicalize` collapses these into
+    /// [`Port::Access`].
+    PartialAccess(Handle<Port>, Handle<Port>),
+    Access(Variable, Vec<Handle<Port>>)
 }
 
-impl Operand {
-    /// Assumes that
-    pub fn gen_var(&self) -> Option<Variable> {
+impl Port {
+    /// The variables this port references.
+    pub fn vars(&self) -> Vec<Variable> {
         match self {
-            Operand::Variable(var) | Operand::Access(var, _) => Some(*var),
-            Operand::PartialAccess(operand, _) => operand.gen_var(),
-            _ => None
+            Port::Variable(var) => vec![*var],
+            Port::Access(array_var, indices) => {
+                let mut result = vec![*array_var];
+                for index in indices {
+                    result.extend(index.vars());
+                }
+                result
+            }
+            Port::PartialAccess(array, index) => {
+                let mut result = array.vars();
+                result.extend(index.vars());
+                result
+            }
+            _ => vec![]
         }
     }
 }
 
-impl Display for Operand {
+impl Display for Port {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Constant(value) => value.fmt(f),

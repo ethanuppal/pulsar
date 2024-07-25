@@ -3,19 +3,32 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-/// todo: everything about this, including like multilayering and stuff
-pub struct Memory {
+pub struct MemoryLevel {
     pub length: usize,
-    pub element: usize,
     pub bank: usize
 }
+
+pub struct Memory {
+    levels: Vec<MemoryLevel>,
+    element: usize
+}
+
+// how to handle multidimensional memories with banking per level and other
+// stuff?
 
 impl Memory {
     pub fn new(length: usize, element: usize, bank: usize) -> Self {
         Self {
-            length,
-            element,
-            bank
+            levels: vec![MemoryLevel { length, bank }],
+            element
         }
+    }
+
+    pub fn levels(&self) -> &[MemoryLevel] {
+        &self.levels
+    }
+
+    pub fn element(&self) -> usize {
+        self.element
     }
 }

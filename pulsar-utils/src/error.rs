@@ -329,7 +329,13 @@ impl ErrorManager {
         }
     }
 
-    /// Whether the error manager has recorded an error.
+    /// Whether the error manager contains any recorded items, not just primary
+    /// errors.
+    pub fn has_items(&self) -> bool {
+        !self.errors.is_empty()
+    }
+
+    /// Whether the error manager has recorded a primary error.
     pub fn has_errors(&self) -> bool {
         self.primary_count > 0
     }

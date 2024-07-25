@@ -56,3 +56,10 @@ also as a note what I realized obviously is that the agen is also gonna have to 
 
 currently the IR gen stuff is really messy
 like the gen function is messy, component is messy, etc
+
+
+ok so here's the plan wrt ports
+the main issue is that we need to guarantee that a port can always represent a single lvalue so that we can treat the IR as a standard software assignment IR where order of operands in assignment matters - since otherwise you have to treat it as a graph
+so there are two main things w need to do for this
+- one is to somehow guarantee that when an expression is an lvalue, the gen_expr function doesn't add any additional assignments.
+- the other is to have some sort of way for ports to represent arbitrary extion of something including chaining of . etc which means like we have to probably streict like structs can't contain arrays yeah this is a good idea 

@@ -12,30 +12,47 @@ use crate::{
 
 pub enum Action {
     None,
+    ModifiedInternally,
     Remove,
     Replace(Control)
 }
 
 impl Action {
-    fn execute(self, control: &mut Control) {
+    fn execute(self, control: &mut Control, did_modify: &mut bool) {
         match self {
             Action::None => {}
+            Action::ModifiedInternally => {
+                *did_modify = true;
+            }
             Action::Remove => {
                 *control = Control::Empty;
+                *did_modify = true;
             }
             Action::Replace(new_control) => {
                 *control = new_control;
+                *did_modify = true;
             }
         }
     }
 }
 
+/// To override traversal behavior, implement `traverse_component` and
+/// `traverse_control`, although it is highly unlikely to use anything beside
+/// the default implementation of these functions.
 pub trait Visitor<P: AsGeneratorPool> {
     #[allow(unused_variables)]
-    fn start_component(&mut self, comp: &mut Component) {}
+    fn start_component(&mut self, comp: &mut Component, pool: &mut P) {}
+    #[allow(unused_variables)]
+    fn finish_component(&mut self, comp: &mut Component, pool: &mut P) {}
 
     #[allow(unused_variables)]
     fn start_for(&mut self, for_: &mut For, pool: &mut P) -> Action {
+        Action::None
+    }
+    #[allow(unused_variables)]
+    fn start_for_with_comp(
+        &mut self, for_: &mut For, comp: &mut Component, pool: &mut P
+    ) -> Action {
         Action::None
     }
     #[allow(unused_variables)]
@@ -72,12 +89,22 @@ pub trait Visitor<P: AsGeneratorPool> {
         Action::None
     }
 
-    fn traverse_component(&mut self, comp: &mut Component, pool: &mut P) {
-        self.start_component(comp);
-        self.traverse_control(&mut comp.cfg, pool);
+    /// Returns whether the traversal had any effect on the component.
+    fn traverse_component(
+        &mut self, comp: &mut Component, pool: &mut P
+    ) -> bool {
+        self.start_component(comp, pool);
+        let did_modify = self.traverse_control(&mut comp.cfg, pool);
+        self.finish_component(comp, pool);
+        did_modify
     }
 
-    fn traverse_control(&mut self, control: &mut Control, pool: &mut P) {
+    /// Returns whether the traversal had any effect on the component.
+    fn traverse_control(
+        &mut self, control: &mut Control, pool: &mut P
+    ) -> bool {
+        let mut did_modify = false;
+
         match control {
             Control::Empty => Action::None,
             Control::For(for_) => self.start_for(for_, pool),
@@ -86,26 +113,28 @@ pub trait Visitor<P: AsGeneratorPool> {
             Control::IfElse(if_else) => self.start_if_else(if_else, pool),
             Control::Enable(enable) => self.start_enable(enable, pool)
         }
-        .execute(control);
+        .execute(control, &mut did_modify);
 
         match control {
             Control::Empty => {}
             Control::For(for_) => {
-                self.traverse_control(&mut for_.body, pool);
+                did_modify |= self.traverse_control(&mut for_.body, pool);
             }
             Control::Seq(seq) => {
                 for child in &mut seq.children {
-                    self.traverse_control(child, pool);
+                    did_modify |= self.traverse_control(child, pool);
                 }
             }
             Control::Par(par) => {
                 for child in &mut par.children {
-                    self.traverse_control(child, pool);
+                    did_modify |= self.traverse_control(child, pool);
                 }
             }
             Control::IfElse(if_else) => {
-                self.traverse_control(&mut if_else.true_branch, pool);
-                self.traverse_control(&mut if_else.false_branch, pool);
+                did_modify |=
+                    self.traverse_control(&mut if_else.true_branch, pool);
+                did_modify |=
+                    self.traverse_control(&mut if_else.false_branch, pool);
             }
             Control::Enable(_) => {}
         }
@@ -118,6 +147,8 @@ pub trait Visitor<P: AsGeneratorPool> {
             Control::IfElse(if_else) => self.finish_if_else(if_else, pool),
             Control::Enable(_) => Action::None
         }
-        .execute(control);
+        .execute(control, &mut did_modify);
+
+        did_modify
     }
 }

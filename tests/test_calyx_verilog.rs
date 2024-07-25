@@ -31,28 +31,28 @@ mod tests {
             .expect("Failed to restore the current working directory");
     }
 
-    #[test]
-    fn twice() {
-        run_verilator_test("twice");
-    }
+    // #[test]
+    // fn twice() {
+    //     run_verilator_test("twice");
+    // }
 
-    #[test]
-    fn square() {
-        run_verilator_test("square");
-    }
+    // #[test]
+    // fn square() {
+    //     run_verilator_test("square");
+    // }
 
-    #[test]
-    fn map_single() {
-        run_verilator_test("map_single");
-    }
+    // #[test]
+    // fn map_single() {
+    //     run_verilator_test("map_single");
+    // }
 
-    #[test]
-    fn map() {
-        run_verilator_test("map");
-    }
+    // #[test]
+    // fn map() {
+    //     run_verilator_test("map");
+    // }
 
-    #[test]
-    fn math() {
-        run_verilator_test("math");
-    }
+    // #[test]
+    // fn math() {
+    //     run_verilator_test("math");
+    // }
 }

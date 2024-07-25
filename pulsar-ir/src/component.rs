@@ -16,9 +16,9 @@ pub struct Component {
     label: Label,
     inputs: Vec<(Variable, Handle<Cell>)>,
     outputs: Vec<(Variable, Handle<Cell>)>,
-    internal_cells: Vec<Handle<Cell>>,
+    // internal_cells: Vec<Handle<Cell>>,
     /// Like reg-alloc but for cells. need better way to represent
-    cell_alloc: HashMap<Variable, Handle<Cell>>,
+    pub cell_alloc: HashMap<Variable, Handle<Cell>>,
     pub(crate) cfg: Control
 }
 
@@ -33,7 +33,7 @@ impl Component {
             label,
             inputs,
             outputs,
-            internal_cells: Vec::new(),
+            // internal_cells: Vec::new(),
             cell_alloc: initial_cell_alloc,
             cfg
         }
@@ -70,7 +70,9 @@ impl PrettyPrint for Component {
         writeln!(f, "cells {{")?;
         {
             f.increase_indent();
-            for (var, cell) in &self.cell_alloc {
+            let mut cell_alloc_list: Vec<_> = self.cell_alloc.iter().collect();
+            cell_alloc_list.sort_by(|a, b| a.0.cmp(b.0));
+            for (var, cell) in &cell_alloc_list {
                 writeln!(f, "{} = {}", var, cell)?;
             }
             f.decrease_indent();

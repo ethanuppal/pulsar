@@ -25,7 +25,7 @@ use pulsar_utils::{
     pool::{AsPool, Handle, HandleArray},
     span::SpanProvider
 };
-use std::{fmt::Display, iter::zip};
+use std::{fmt::Display, hash::Hash, iter::zip};
 
 pub struct UnificationConstraint<T> {
     expected: Handle<T>,
@@ -67,7 +67,7 @@ pub type TypeConstraint = UnificationConstraint<Type>;
 pub type LiquidTypeConstraint = UnificationConstraint<LiquidType>;
 
 trait Unifier<
-    T: NodeInterface + Eq + Display,
+    T: NodeInterface + Eq + Hash + Display,
     P: AsPool<UnificationConstraint<T>, ()>
 > {
     fn type_pool_mut(&mut self) -> &mut P;
@@ -79,7 +79,7 @@ trait Unifier<
             .add(UnificationConstraint::new(expected, actual));
 
         self.constraints().push(handle);
-        log::info!("encountered constraint: {} = {}", expected, actual);
+        log::trace!("encountered constraint: {} = {}", expected, actual);
     }
 
     fn derive_constraint(
@@ -91,7 +91,7 @@ trait Unifier<
             .add(UnificationConstraint::derived(expected, actual, source));
         self.constraints().push(handle);
 
-        log::info!(
+        log::trace!(
             "encountered constraint: {} = {} (from {} = {})",
             expected,
             actual,
@@ -243,21 +243,6 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
         );
     }
 
-    fn report_called_non_function(&mut self, name: Handle<Token>) {
-        self.report(
-            ErrorBuilder::new()
-                .of_style(Style::Primary)
-                .at_level(Level::Error)
-                .with_code(ErrorCode::StaticAnalysisIssue)
-                .span(name)
-                .message(format!(
-                    "Cannot call non-function value `{}`",
-                    name.value
-                ))
-                .build()
-        );
-    }
-
     // fn report_invalid_operation(&mut self, explain: String, ctx:
     // Handle<Token>) {     self.report(
     //         ErrorBuilder::new()
@@ -271,12 +256,14 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
     //     );
     // }
 
-    fn report_unification_failure<T: SpanProvider + Display>(
+    fn report_unification_failure<
+        T: SpanProvider + Display + Eq + Hash + Clone
+    >(
         &mut self, constraint: Handle<UnificationConstraint<T>>,
-        fix: Option<String>
+        dsu: &mut DisjointSets<Handle<T>>, fix: Option<String>
     ) {
-        let expected = constraint.expected();
-        let actual = constraint.actual();
+        let expected = dsu.find(constraint.expected()).unwrap();
+        let actual = dsu.find(constraint.actual()).unwrap();
         let mut builder = ErrorBuilder::new()
             .of_style(Style::Primary)
             .at_level(Level::Error)
@@ -366,12 +353,17 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                 } else {
                     let element_count = elements.len();
                     let mut elements = elements.iter();
-                    let first = elements.next().unwrap();
-                    let first_type = self.visit_expr(*first)?;
-                    for other in elements {
-                        let other_type = self.visit_expr(*other)?;
-                        self.new_constraint(first_type, other_type);
-                    }
+                    let element_type = if element_count > 0 {
+                        let first = elements.next().unwrap();
+                        let first_type = self.visit_expr(*first)?;
+                        for other in elements {
+                            let other_type = self.visit_expr(*other)?;
+                            self.new_constraint(first_type, other_type);
+                        }
+                        first_type
+                    } else {
+                        self.new_type_var(expr)
+                    };
                     let liquid_type = self.pool.generate(
                         if should_continue.is_some() {
                             LiquidTypeValue::All
@@ -382,7 +374,7 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                         expr.end_token()
                     );
                     self.pool.generate(
-                        TypeValue::Array(first_type, liquid_type),
+                        TypeValue::Array(element_type, liquid_type),
                         expr.start_token(),
                         expr.end_token()
                     )
@@ -459,13 +451,18 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
             StmtValue::Divider(_) => todo!(),
             StmtValue::For {
                 var,
-                lower: _,
-                exclusive_upper: _,
+                lower,
+                exclusive_upper,
                 body
             } => {
                 self.env.push();
                 let loop_var_type =
                     self.pool.generate(TypeValue::Int64, *var, *var);
+                let lower_type = self.visit_expr(*lower)?;
+                let upper_type = self.visit_expr(*exclusive_upper)?;
+                // TODO: figure out better semantic arrangement/source for cnstr
+                self.new_constraint(loop_var_type, lower_type);
+                self.new_constraint(loop_var_type, upper_type);
                 self.env.bind(var.value.clone(), loop_var_type);
 
                 self.env.push();
@@ -570,7 +567,7 @@ impl<'pool, 'err, P: AsInferencePool> Unifier<Type, P>
                     }
                 }
                 _ => {
-                    self.report_unification_failure(constraint, None);
+                    self.report_unification_failure(constraint, dsu, None);
                     return Err(());
                 }
             }
@@ -622,7 +619,7 @@ impl<'pool, 'err, P: AsInferencePool> Unifier<LiquidType, P>
                     dsu.union(actual, expected, false);
                 }
                 _ => {
-                    self.report_unification_failure(constraint, None);
+                    self.report_unification_failure(constraint, dsu, None);
                     return Err(());
                 }
             }

@@ -1,0 +1,23 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\",\n                11)).expect(\"failed to parse/infer input\")"
+---
+func main() -> () {
+    let arr = [1]
+    let first = (arr[0])
+}
+func main2() -> () {
+    let arr = [[1]]
+    let first = (arr[0])
+}
+[infer11.plsr:2:16, infer11.plsr:2:17) 1: Int64
+[infer11.plsr:2:15, infer11.plsr:2:18) [1]: Int64[{ x | x = 1 }]
+[infer11.plsr:3:17, infer11.plsr:3:20) arr: Int64[{ x | x = 1 }]
+[infer11.plsr:3:21, infer11.plsr:3:22) 0: Int64
+[infer11.plsr:3:17, infer11.plsr:3:23) (arr[0]): Int64
+[infer11.plsr:7:17, infer11.plsr:7:18) 1: Int64
+[infer11.plsr:7:16, infer11.plsr:7:19) [1]: Int64[{ x | x = 1 }]
+[infer11.plsr:7:15, infer11.plsr:7:20) [[1]]: Int64[{ x | x = 1 }][{ x | x >= 0 }]
+[infer11.plsr:8:17, infer11.plsr:8:20) arr: Int64[{ x | x = 1 }][{ x | x >= 0 }]
+[infer11.plsr:8:21, infer11.plsr:8:22) 0: Int64
+[infer11.plsr:8:17, infer11.plsr:8:23) (arr[0]): Int64[{ x | x = 1 }]

@@ -1,0 +1,28 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\",\n                7)).expect(\"failed to parse/infer input\")"
+---
+func square(x: Int64) -> (y: Int64) {
+    y = (x * x)
+}
+func add(x: Int64, y: Int64) -> (z: Int64) {
+    z = (x + y)
+}
+func main() -> () {
+    let x = 1
+    let y = 2
+    let z = (x + y)
+}
+[infer7.plsr:2:5, infer7.plsr:2:6) y: Int64
+[infer7.plsr:2:9, infer7.plsr:2:10) x: Int64
+[infer7.plsr:2:13, infer7.plsr:2:14) x: Int64
+[infer7.plsr:2:9, infer7.plsr:2:14) (x * x): Int64
+[infer7.plsr:6:5, infer7.plsr:6:6) z: Int64
+[infer7.plsr:6:9, infer7.plsr:6:10) x: Int64
+[infer7.plsr:6:13, infer7.plsr:6:14) y: Int64
+[infer7.plsr:6:9, infer7.plsr:6:14) (x + y): Int64
+[infer7.plsr:10:13, infer7.plsr:10:14) 1: Int64
+[infer7.plsr:11:13, infer7.plsr:11:14) 2: Int64
+[infer7.plsr:12:13, infer7.plsr:12:14) x: Int64
+[infer7.plsr:12:17, infer7.plsr:12:18) y: Int64
+[infer7.plsr:12:13, infer7.plsr:12:18) (x + y): Int64

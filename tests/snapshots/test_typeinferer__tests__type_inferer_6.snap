@@ -1,0 +1,18 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\",\n                6)).expect(\"failed to parse/infer input\")"
+---
+func main() -> () {
+    let small = [1]
+    let small2: Int64[{ x | x = 1 }] = small
+}
+func foo() -> () {
+    let small = [1]
+    let small2 = small
+}
+[infer6.plsr:2:18, infer6.plsr:2:19) 1: Int64
+[infer6.plsr:2:17, infer6.plsr:2:20) [1]: Int64[{ x | x = 1 }]
+[infer6.plsr:3:26, infer6.plsr:3:31) small: Int64[{ x | x = 1 }]
+[infer6.plsr:7:18, infer6.plsr:7:19) 1: Int64
+[infer6.plsr:7:17, infer6.plsr:7:20) [1]: Int64[{ x | x = 1 }]
+[infer6.plsr:8:18, infer6.plsr:8:23) small: Int64[{ x | x = 1 }]

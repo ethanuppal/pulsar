@@ -81,9 +81,11 @@ impl<T: PartialEq> PartialEq for Handle<T> {
 
 impl<T: Eq> Eq for Handle<T> {}
 
-impl<T> Hash for Handle<T> {
+impl<T: Hash> Hash for Handle<T> {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.pointer.hash(state);
+        unsafe {
+            (*self.pointer).hash(state);
+        }
     }
 }
 

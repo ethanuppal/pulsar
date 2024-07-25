@@ -8,7 +8,6 @@ members = [
 ]
 
 [workspace.package]
-name = "pulsar"
 description = "A high-level programming language for building hardware accelerators"
 homepage = "https://github.com/ethanuppal/pulsar/tree/main"
 repository = "https://github.com/ethanuppal/pulsar/tree/main"
@@ -37,12 +36,10 @@ inform = "0.1.0"
 serde = "1.0.204"
 serde_json = "1.0.120"
 memmap2 = "0.9.4"
-log = "0.4.22"
+log = { version = "0.4.22", features = ["release_max_level_off"] }
 env_logger = "0.11.3"
 either = "1.13.0"
-
-[log]
-features = ["release_max_level_off"]
+match_deref = "0.1.1"
 
 [package]
 name = "pulsar-lang"
