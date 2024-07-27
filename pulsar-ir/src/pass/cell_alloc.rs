@@ -3,27 +3,37 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
+use std::ops::Deref;
+
 use crate::{
     cell::Cell,
     component::ComponentViewMut,
-    control::For,
+    control::{Control, For, Seq},
     from_ast::AsGeneratorPool,
     port::Port,
-    visitor::{Action, Visitor},
+    visitor::{Action, VisitorMut},
     Ir
 };
 
+use super::Pass;
+
 pub struct CellAlloc;
 
-impl<P: AsGeneratorPool> Visitor<P> for CellAlloc {
+pub fn min_bits_to_represent(value: usize) -> usize {
+    if value == 0 {
+        0
+    } else {
+        64 - ((value - 1).leading_zeros() as usize)
+    }
+}
+
+impl<P: AsGeneratorPool> VisitorMut<P> for CellAlloc {
     fn start_for(
         &mut self, for_: &mut For, comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
         let index_reg_bits = match for_.exclusive_upper_bound() {
-            Port::Constant(value) => {
-                64 - ((value - 1).leading_zeros() as usize)
-            }
+            Port::Constant(value) => min_bits_to_represent(*value as usize),
             _ => 64
         };
         comp_view
@@ -32,15 +42,25 @@ impl<P: AsGeneratorPool> Visitor<P> for CellAlloc {
         Action::None
     }
 
-    fn start_enable(
-        &mut self, enable: &mut Ir, comp_view: &mut ComponentViewMut,
+    fn start_seq(
+        &mut self, seq: &mut Seq, comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
-        if let Port::Variable(var) = *enable.kill() {
-            comp_view
-                .cell_alloc
-                .insert(var, pool.add(Cell::Register(64)));
+        for child in &seq.children {
+            if let Control::Enable(enable) = child.deref() {
+                if let Port::Variable(var) = *enable.kill() {
+                    comp_view
+                        .cell_alloc
+                        .insert(var, pool.add(Cell::Register(64)));
+                }
+            }
         }
-        Action::None
+        Action::ModifiedInternally
+    }
+}
+
+impl<P: AsGeneratorPool> Pass<P> for CellAlloc {
+    fn name(&self) -> &str {
+        "cell-alloc"
     }
 }

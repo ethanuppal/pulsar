@@ -8,23 +8,46 @@ use crate::{
     control::{Control, Par, Seq},
     from_ast::AsGeneratorPool,
     port::Port,
-    visitor::{Action, Visitor},
+    visitor::{Action, VisitorMut},
     Ir
 };
 use match_deref::match_deref;
 use pulsar_utils::pool::Handle;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
+
+use super::{copy_prop::replace_kill, Pass};
+
+fn fold_partial_access<P: AsGeneratorPool>(
+    mut port: Handle<Port>, pool: &mut P
+) -> Handle<Port> {
+    println!("folding: {}", port);
+    if let Port::PartialAccess(..) = port.deref() {
+        let mut indices = Vec::new();
+        while let Port::PartialAccess(inner, index) = port.deref() {
+            indices.push(*index);
+            port = *inner;
+        }
+        let Port::Variable(array) = port.deref() else {
+            panic!("partial access chain resolved to non-variable array")
+        };
+        pool.add(Port::Access(*array, indices))
+    } else {
+        port
+    }
+}
 
 /// This pass is applied after `WellFormed` and before all other passes.
 ///
 ///  Incoming invariants:
 /// - The IR has been freshly created via recursive
 ///   `ComponentGenerator::gen_stmt`s.
+///     - Partial access chains exist on lhs ports as fully resolved (because
+///       ports are lvalues).
 /// - All array accesses are gated behind [`Ir::Assign`]s.
 ///
 /// Effects:
-/// - Folds chains of [`Operand::PartialAccess`]s into a single
-///   [`Operand::Access`] ([`Canonicalize::collapse_partial_accesses`]).
+/// - Folds chains of [`Port::PartialAccess`]s into a single [`Port::Access`]
+///   ([`Canonicalize::collapse_partial_accesses`]).
 pub struct Canonicalize;
 
 impl Canonicalize {
@@ -101,38 +124,40 @@ impl Canonicalize {
             i += advance_i;
         }
 
-        // then, since only individual PartialAccess will remain PartialAccess,
-        // we can just turn them into Access
-        for i in 0..(children.len() as isize) - 1 {
-            if let Control::Enable(Ir::Assign(result, access)) =
-                children[i as usize].deref()
-            {
-                if let Port::PartialAccess(array, index) = access.deref() {
-                    let Port::Variable(array_var) = **array else {
-                        panic!("not well-formed: first partial assign indexes non-variable")
-                    };
-                    *children[i as usize] = Control::Enable(Ir::Assign(
-                        *result,
-                        pool.add(Port::Access(array_var, vec![*index]))
-                    ));
+        // then, since only individual/nested PartialAccess will remain
+        // PartialAccess, we can just turn them into Access
+        for child in children {
+            if let Control::Enable(ir) = child.deref_mut() {
+                for gen in ir.gen_mut() {
+                    *gen = fold_partial_access(*gen, pool);
                 }
+                let new_kill = fold_partial_access(ir.kill(), pool);
+                *ir = replace_kill(ir, new_kill);
             }
         }
     }
 }
 
-impl<P: AsGeneratorPool> Visitor<P> for Canonicalize {
+impl<P: AsGeneratorPool> VisitorMut<P> for Canonicalize {
     fn start_seq(
-        &mut self, seq: &mut Seq, _comp_view: &mut ComponentViewMut, pool: &mut P
+        &mut self, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
+        pool: &mut P
     ) -> Action {
         self.collapse_partial_accesses(&mut seq.children, pool);
-        Action::None
+        Action::ModifiedInternally
     }
 
     fn start_par(
-        &mut self, par: &mut Par, _comp_view: &mut ComponentViewMut, pool: &mut P
+        &mut self, par: &mut Par, _comp_view: &mut ComponentViewMut,
+        pool: &mut P
     ) -> Action {
         self.collapse_partial_accesses(&mut par.children, pool);
-        Action::None
+        Action::ModifiedInternally
+    }
+}
+
+impl<P: AsGeneratorPool> Pass<P> for Canonicalize {
+    fn name(&self) -> &str {
+        "canonicalize"
     }
 }

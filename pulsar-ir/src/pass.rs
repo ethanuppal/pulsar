@@ -4,7 +4,7 @@
 //! the License, or (at your option) any later version.
 
 use crate::{
-    component::Component, from_ast::AsGeneratorPool, visitor::Visitor
+    component::Component, from_ast::AsGeneratorPool, visitor::VisitorMut
 };
 use canonicalize::Canonicalize;
 use cell_alloc::CellAlloc;
@@ -20,8 +20,12 @@ pub mod copy_prop;
 pub mod dead_code;
 pub mod well_formed;
 
+pub trait Pass<P: AsGeneratorPool>: VisitorMut<P> {
+    fn name(&self) -> &str;
+}
+
 enum PassOp<P: AsGeneratorPool> {
-    Boxed(Box<dyn Visitor<P>>),
+    Boxed(Box<dyn Pass<P>>),
     Coverge(usize),
     EndConverge
 }
@@ -39,7 +43,7 @@ impl<P: AsGeneratorPool> PassRunner<P> {
         runner
     }
 
-    pub fn register<V: Visitor<P> + 'static>(&mut self, pass: V) {
+    pub fn register<V: Pass<P> + 'static>(&mut self, pass: V) {
         self.passes.push(PassOp::Boxed(Box::new(pass)));
     }
 
@@ -59,6 +63,11 @@ impl<P: AsGeneratorPool> PassRunner<P> {
         for pass_op in &mut self.passes {
             match pass_op {
                 PassOp::Boxed(pass) => {
+                    log::info!(
+                        "{}running pass '{}'",
+                        if in_convergence { "  " } else { "" },
+                        pass.name()
+                    );
                     if in_convergence {
                         convergence_region.push(pass);
                     } else {
@@ -66,10 +75,12 @@ impl<P: AsGeneratorPool> PassRunner<P> {
                     }
                 }
                 PassOp::Coverge(iter_limit) => {
+                    log::info!("begin pass convergence region");
                     in_convergence = true;
                     convergence_iter_limit = *iter_limit;
                 }
                 PassOp::EndConverge => {
+                    log::info!("end pass convergence region");
                     if in_convergence {
                         loop {
                             let mut did_modify = false;

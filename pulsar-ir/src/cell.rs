@@ -7,6 +7,12 @@ use crate::memory::{Memory, MemoryLevel};
 use pulsar_frontend::ast::ty::{LiquidTypeValue, Type, TypeValue};
 use std::fmt::{self, Display};
 
+#[derive(PartialEq, Eq)]
+pub enum Direction {
+    Input,
+    Output
+}
+
 /// A hardware element capable of storage.
 pub enum Cell {
     Memory(Memory),
@@ -42,6 +48,13 @@ impl Cell {
                 inputs: _,
                 outputs: _
             } => panic!()
+        }
+    }
+
+    pub fn port_width(&self) -> usize {
+        match self {
+            Cell::Memory(memory) => memory.element(),
+            Cell::Register(width) => *width
         }
     }
 }

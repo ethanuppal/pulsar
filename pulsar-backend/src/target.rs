@@ -3,10 +3,10 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use pulsar_ir::component::Component;
+use pulsar_ir::{component::Component, from_ast::AsGeneratorPool};
 use std::path::PathBuf;
 
-mod calyx;
+pub mod calyx;
 
 /// This interface hasn't been finalized yet, so it is quite sloppy as written
 pub enum OutputFile {
@@ -15,8 +15,8 @@ pub enum OutputFile {
     File(PathBuf)
 }
 
-pub trait Target {
+pub trait Target<P: AsGeneratorPool> {
     fn emit(
-        &mut self, comp: Component, output: OutputFile
+        &mut self, comp: &Component, pool: &P, output: OutputFile
     ) -> anyhow::Result<()>;
 }

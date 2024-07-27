@@ -1,12 +1,20 @@
+//! Handrolled calyx builder API.
+//!
 //! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
 //! redistribute it and/or modify it under the terms of the GNU General Public
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
+// This code was mostly written before I became better at Rust; as such, it
+// contains a mismatch of different patterns.
+
 use calyx_ir::RRC;
 use pulsar_utils::environment::Environment;
 use std::{
-    collections::HashMap, Display, marker::PhantomData, path::PathBuf
+    collections::HashMap,
+    fmt::{self, Display},
+    marker::PhantomData,
+    path::PathBuf
 };
 
 pub mod macros;
@@ -26,12 +34,24 @@ pub enum CalyxCellKind {
         address_bits: usize
     },
 
+    CombMemoryD2 {
+        size: usize,
+        length_outer: usize,
+        address_bits_outer: usize,
+        length_inner: usize,
+        address_bits_inner: usize
+    },
+
     /// A calyx primitive other than a register, memory, or constant.
     Primitive { name: String, params: Vec<u64> },
 
-    /// `GoDoneComponent { component }` is a cell for a
-    /// component named `component`.
+    /// `GoDoneComponent { component }` is a cell for a component named
+    /// `component`.
     GoDoneComponent { component: String },
+
+    /// `CombComponent(component)` is a cell for a combinational component
+    /// named `component`.
+    CombComponent(String),
 
     /// `Constant { width }` is a `"std_const"` with bit-width `width`.
     Constant { width: usize }
@@ -44,26 +64,15 @@ impl CalyxCellKind {
     pub fn is_primitive(&self) -> bool {
         matches!(
             self,
-            Self::Register { size: _ }
-                | Self::CombMemoryD1 {
-                    size: _,
-                    length: _,
-                    address_bits: _
-                }
-                | Self::Primitive { name: _, params: _ }
+            Self::Register { .. }
+                | Self::CombMemoryD1 { .. }
+                | Self::Primitive { .. }
         )
     }
 
     /// Whether the cell is a memory.
     pub fn is_memory(&self) -> bool {
-        matches!(
-            self,
-            Self::CombMemoryD1 {
-                size: _,
-                length: _,
-                address_bits: _
-            }
-        )
+        matches!(self, Self::CombMemoryD1 { .. } | Self::CombMemoryD2 { .. })
     }
 
     /// The parameters associated with the primitive.
@@ -71,14 +80,27 @@ impl CalyxCellKind {
     /// Requires: `self.is_primitive()`.
     pub(crate) fn primitive_params(&self) -> Vec<u64> {
         match &self {
-            CalyxCellKind::Register { size } => vec![*size as u64],
-            CalyxCellKind::CombMemoryD1 {
+            Self::Register { size } => vec![*size as u64],
+            Self::CombMemoryD1 {
                 size,
                 length,
                 address_bits
             } => vec![*size as u64, *length as u64, *address_bits as u64],
-            CalyxCellKind::Primitive { name: _, params } => params.clone(),
-            CalyxCellKind::GoDoneComponent { component: _ } => {
+            Self::CombMemoryD2 {
+                size,
+                length_outer,
+                address_bits_outer,
+                length_inner,
+                address_bits_inner
+            } => vec![
+                *size as u64,
+                *length_outer as u64,
+                *length_inner as u64,
+                *address_bits_outer as u64,
+                *address_bits_inner as u64,
+            ],
+            Self::Primitive { name: _, params } => params.clone(),
+            Self::GoDoneComponent { .. } | Self::CombComponent(_) => {
                 panic!("Cell not a primitive")
             }
             CalyxCellKind::Constant { width } => vec![*width as u64]
@@ -88,16 +110,14 @@ impl CalyxCellKind {
 
 impl Display for CalyxCellKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self {
-            Self::Register { size: _ } => "std_reg",
-            Self::CombMemoryD1 {
-                size: _,
-                length: _,
-                address_bits: _
-            } => "comb_mem_d1",
+        match self {
+            Self::Register { .. } => "std_reg",
+            Self::CombMemoryD1 { .. } => "comb_mem_d1",
+            Self::CombMemoryD2 { .. } => "comb_mem_d2",
             Self::Primitive { name, params: _ } => name,
             Self::GoDoneComponent { component } => component,
-            Self::Constant { width: _ } => "std_const"
+            Self::CombComponent(component) => component,
+            Self::Constant { .. } => "std_const"
         }
         .fmt(f)
     }
@@ -105,6 +125,10 @@ impl Display for CalyxCellKind {
 
 // might remove these later
 pub type CalyxPort = RRC<calyx_ir::Port>;
+
+// pub trait CalyxPortProvider {
+//     fn get<S: AsRef<str>>(port: S) -> CalyxPort;
+// }
 
 /// A wrapper around [`calyx_ir::Cell`]s containing additional semantic
 /// information (see [`CalyxCellKind`]).
@@ -116,23 +140,27 @@ pub struct CalyxCell {
 
 impl CalyxCell {
     /// See [`calyx_ir::Cell::get`].
-    pub fn get(&self, port: &str) -> CalyxPort {
-        self.value.borrow().get(port)
+    pub fn get<S: AsRef<str>>(&self, port: S) -> CalyxPort {
+        self.value.borrow().get(port.as_ref())
     }
 }
 
 /// An abstraction over a calyx group for adding assignments.
 pub trait CalyxAssignmentContainer {
-    type AssignmentType;
+    type AssignmentMarker;
 
     /// Inserts a single assignment.
-    fn add(&self, assignment: calyx_ir::Assignment<Self::AssignmentType>);
+    fn add(&mut self, assignment: calyx_ir::Assignment<Self::AssignmentMarker>);
+
+    fn add_between(&mut self, lhs: CalyxPort, rhs: CalyxPort) {
+        self.add(calyx_ir::Assignment::new(lhs, rhs));
+    }
 
     /// Inserts a set of assignment.
     fn extend<
-        I: IntoIterator<Item = calyx_ir::Assignment<Self::AssignmentType>>
+        I: IntoIterator<Item = calyx_ir::Assignment<Self::AssignmentMarker>>
     >(
-        &self, assignments: I
+        &mut self, assignments: I
     ) {
         assignments.into_iter().for_each(|a| self.add(a));
     }
@@ -144,9 +172,26 @@ pub struct CalyxGroup {
 }
 
 impl CalyxAssignmentContainer for CalyxGroup {
-    type AssignmentType = calyx_ir::Nothing;
+    type AssignmentMarker = calyx_ir::Nothing;
 
-    fn add(&self, assignment: calyx_ir::Assignment<Self::AssignmentType>) {
+    fn add(
+        &mut self, assignment: calyx_ir::Assignment<Self::AssignmentMarker>
+    ) {
+        self.value.borrow_mut().assignments.push(assignment);
+    }
+}
+
+/// See [`calyx_ir::StaticGroup`].
+pub struct CalyxStaticGroup {
+    pub value: RRC<calyx_ir::StaticGroup>
+}
+
+impl CalyxAssignmentContainer for CalyxStaticGroup {
+    type AssignmentMarker = calyx_ir::StaticTiming;
+
+    fn add(
+        &mut self, assignment: calyx_ir::Assignment<Self::AssignmentMarker>
+    ) {
         self.value.borrow_mut().assignments.push(assignment);
     }
 }
@@ -157,9 +202,11 @@ pub struct CalyxCombGroup {
 }
 
 impl CalyxAssignmentContainer for CalyxCombGroup {
-    type AssignmentType = calyx_ir::Nothing;
+    type AssignmentMarker = calyx_ir::Nothing;
 
-    fn add(&self, assignment: calyx_ir::Assignment<Self::AssignmentType>) {
+    fn add(
+        &mut self, assignment: calyx_ir::Assignment<Self::AssignmentMarker>
+    ) {
         self.value.borrow_mut().assignments.push(assignment);
     }
 }
@@ -182,6 +229,19 @@ pub struct CalyxControl<T: CalyxControlType> {
 }
 
 impl<T: CalyxControlType> CalyxControl<T> {
+    /// Enables the given control in a way dependent on `T: CalyxControlType`.
+    /// It is recommended to use the `T`-specific `enable` and `enable_next` to
+    /// be explicit in semantics.
+    pub fn insert(&mut self, group: &CalyxGroup) {
+        self.children
+            .push(calyx_ir::Control::enable(group.value.clone()));
+    }
+
+    pub fn insert_static(&mut self, group: &CalyxStaticGroup) {
+        self.children
+            .push(calyx_ir::Control::static_enable(group.value.clone()));
+    }
+
     /// Opens a `seq` context where `f` is called. For instance,
     /// ```
     /// fn add_seq(control: &mut CalyxControl, my_group: &CalyxGroup) {
@@ -262,8 +322,7 @@ impl<T: CalyxControlType> Default for CalyxControl<T> {
 impl CalyxControl<Sequential> {
     /// Enables `group` to run in sequence.
     pub fn enable_next(&mut self, group: &CalyxGroup) {
-        self.children
-            .push(calyx_ir::Control::enable(group.value.clone()));
+        self.insert(group);
     }
 
     /// Unwraps the control builder.
@@ -279,8 +338,7 @@ impl CalyxControl<Sequential> {
 impl CalyxControl<Parallel> {
     /// Enables `group` to run in parallel.
     pub fn enable(&mut self, group: &CalyxGroup) {
-        self.children
-            .push(calyx_ir::Control::enable(group.value.clone()));
+        self.insert(group);
     }
 
     /// Unwraps the control builder.
@@ -295,13 +353,18 @@ impl CalyxControl<Parallel> {
 
 /// A wrapper for a calyx component that can only be created through
 /// [`CalyxBuilder::build_component`], where it must live no longer than the
-/// builder that created it.
+/// builder that created it (details later; this is a limitation of calyx
+/// itself, not this builder API).
 ///
 /// The wrapper maintains cell and control manipulation. Cells can be created
 /// through methods such as [`CalyxComponent::named_reg`] or
 /// [`CalyxComponent::component_cell`]. It also contains unique per-component
 /// data initialized via `ComponentData::default` which can be accessed through
 /// appropriate getters.
+///
+/// If you have a reference to this object, ensure that it's lifetime does not
+/// exceed that (`'a`) of the builder it was created from. This may mean adding
+/// `<'a, 'b: 'a>` everywhere for `&'a CalyxComponent<'b, ...>`.
 pub struct CalyxComponent<'a, ComponentData: Default> {
     ext_sigs: &'a HashMap<String, Vec<calyx_ir::PortDef<u64>>>,
     lib_sig: &'a calyx_ir::LibrarySignatures,
@@ -381,7 +444,7 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
     /// A memory cell bound to `name`.
     ///
     /// Requires: `name` has not been bound.
-    pub fn named_mem(
+    pub fn named_mem_d1(
         &mut self, name: String, cell_size: usize, length: usize,
         address_bits: usize
     ) -> CalyxCell {
@@ -413,6 +476,15 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
                 params
             }
         )
+    }
+
+    pub fn new_unnamed_prim(
+        &mut self, prim: &str, params: Vec<u64>
+    ) -> CalyxCell {
+        self.new_unnamed_cell(CalyxCellKind::Primitive {
+            name: prim.into(),
+            params
+        })
     }
 
     /// A cell for a component `component` whose name is guaranteed to begin
@@ -451,7 +523,7 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
         }
     }
 
-    /// Equivlane to `constant(1, 1)`.
+    /// Equivalent to `constant(1, 1)`.
     pub fn signal_out(&mut self) -> CalyxCell {
         self.constant(1, 1)
     }
@@ -493,6 +565,17 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
         }
     }
 
+    /// Creates a new static group guaranteed to start with `prefix`.
+    pub fn add_static_group(
+        &mut self, prefix: &str, latency: usize
+    ) -> CalyxStaticGroup {
+        CalyxStaticGroup {
+            value: self.with_calyx_builder(|b| {
+                b.add_static_group(prefix, latency as u64)
+            })
+        }
+    }
+
     /// Creates a new combinational group guaranteed to start with `prefix`.
     pub fn add_comb_group(&mut self, prefix: &str) -> CalyxCombGroup {
         CalyxCombGroup {
@@ -518,6 +601,8 @@ impl<'a, ComponentData: Default> CalyxComponent<'a, ComponentData> {
                 kind.primitive_params()
             )
         } else if let CalyxCellKind::GoDoneComponent { component } = &kind {
+            self._create_component_cell(key.clone(), component.clone())
+        } else if let CalyxCellKind::CombComponent(component) = &kind {
             self._create_component_cell(key.clone(), component.clone())
         } else {
             panic!("unknown cell kind")

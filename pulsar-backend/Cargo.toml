@@ -16,10 +16,9 @@ pulsar-frontend.workspace = true
 pulsar-ir.workspace = true
 pulsar-utils.workspace = true
 anyhow.workspace = true
-# calyx-builder.workspace = true
+calyx-builder.workspace = true
 
-# calyx-frontend.workspace = true
-# calyx-ir.workspace = true
-# calyx-backend.workspace = true
-# calyx-opt.workspace = true
-# calyx-utils.workspace = true
+calyx-ir.workspace = true
+calyx-backend.workspace = true
+calyx-opt.workspace = true
+calyx-utils.workspace = true

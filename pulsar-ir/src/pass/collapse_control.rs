@@ -9,9 +9,11 @@ use crate::{
     component::ComponentViewMut,
     control::{Control, Par, Seq},
     from_ast::AsGeneratorPool,
-    visitor::{Action, Visitor}
+    visitor::{Action, VisitorMut}
 };
 use std::mem;
+
+use super::Pass;
 
 /// Collapses singleton or empty par/seq.
 pub struct CollapseControl;
@@ -31,16 +33,24 @@ impl CollapseControl {
     }
 }
 
-impl<P: AsGeneratorPool> Visitor<P> for CollapseControl {
+impl<P: AsGeneratorPool> VisitorMut<P> for CollapseControl {
     fn finish_seq(
-        &mut self, seq: &mut Seq, _comp_view: &mut ComponentViewMut, _pool: &mut P
+        &mut self, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
+        _pool: &mut P
     ) -> Action {
         self.collapse(&mut seq.children)
     }
 
     fn finish_par(
-        &mut self, par: &mut Par, _comp_view: &mut ComponentViewMut, _pool: &mut P
+        &mut self, par: &mut Par, _comp_view: &mut ComponentViewMut,
+        _pool: &mut P
     ) -> Action {
         self.collapse(&mut par.children)
+    }
+}
+
+impl<P: AsGeneratorPool> Pass<P> for CollapseControl {
+    fn name(&self) -> &str {
+        "collapse-control"
     }
 }

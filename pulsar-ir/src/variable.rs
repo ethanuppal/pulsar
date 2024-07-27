@@ -9,7 +9,7 @@ use std::{
     fmt::{self, Display}
 };
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub struct Variable {
     id: Id
 }

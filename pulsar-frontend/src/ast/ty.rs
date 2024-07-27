@@ -26,6 +26,15 @@ pub enum LiquidTypeValue {
 
 pub type LiquidType = Node<LiquidTypeValue, ()>;
 
+impl LiquidType {
+    pub fn mangle(&self) -> String {
+        match self.value {
+            LiquidTypeValue::Equal(value) => value.to_string(),
+            LiquidTypeValue::All(_, _) => panic!()
+        }
+    }
+}
+
 impl Debug for LiquidType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.value.fmt(f)
@@ -137,20 +146,20 @@ impl Type {
             TypeValue::Name(name) => format!("{}{}", name.len(), name),
             TypeValue::Int64 => "q".into(),
             TypeValue::Array(element_type, element_count) => {
-                format!("A{}{}", element_count, element_type)
+                format!("A{}E{}", element_count.mangle(), element_type.mangle())
             }
             TypeValue::Function { inputs, outputs } => format!(
                 "F{}{}{}{}",
                 inputs.len(),
                 inputs
                     .iter()
-                    .map(|arg| arg.to_string())
+                    .map(|arg| arg.mangle())
                     .collect::<Vec<_>>()
                     .join(""),
                 outputs.len(),
                 outputs
                     .iter()
-                    .map(|arg| arg.to_string())
+                    .map(|arg| arg.mangle())
                     .collect::<Vec<_>>()
                     .join(""),
             )

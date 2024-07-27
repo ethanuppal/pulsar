@@ -43,8 +43,16 @@ impl For {
         self.variant
     }
 
+    pub fn lower_bound(&self) -> &Port {
+        &self.lower
+    }
+
     pub fn exclusive_upper_bound(&self) -> &Port {
         &self.exclusive_upper
+    }
+
+    pub fn body(&self) -> Handle<Control> {
+        self.body
     }
 }
 
@@ -83,6 +91,10 @@ impl Seq {
 
     pub fn push(&mut self, child: Handle<Control>) {
         self.children.push(child);
+    }
+
+    pub fn children(&self) -> &[Handle<Control>] {
+        &self.children
     }
 }
 
@@ -126,6 +138,10 @@ impl Par {
 
     pub fn push(&mut self, child: Handle<Control>) {
         self.children.push(child);
+    }
+
+    pub fn children(&self) -> &[Handle<Control>] {
+        &self.children
     }
 }
 
@@ -189,6 +205,7 @@ impl Display for IfElse {
     }
 }
 
+/// Only [`Seq`]s and [`Par`]s can hold [`Ir`] operations.
 #[derive(Default)]
 pub enum Control {
     #[default]

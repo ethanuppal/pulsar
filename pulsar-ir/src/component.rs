@@ -11,10 +11,11 @@ use pulsar_frontend::{
 };
 use pulsar_utils::pool::Handle;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::{self, Display, Write}
 };
 
+// average research-grade software moment
 pub struct Component {
     label: Label,
     attributes: Attributes,
@@ -54,6 +55,26 @@ impl Component {
 
     pub fn outputs(&self) -> &[(Variable, Handle<Cell>)] {
         &self.outputs
+    }
+
+    pub fn cells(&self) -> &HashMap<Variable, Handle<Cell>> {
+        &self.cell_alloc
+    }
+
+    pub fn internal_cells(&self) -> Vec<(Variable, Handle<Cell>)> {
+        let mut interface = HashSet::new();
+        for (var, _) in self.inputs.iter().chain(&self.outputs) {
+            interface.insert(var);
+        }
+        self.cell_alloc
+            .iter()
+            .filter(|(var, _)| !interface.contains(var))
+            .map(|(var, cell)| (*var, *cell))
+            .collect()
+    }
+
+    pub fn cfg(&self) -> &Control {
+        &self.cfg
     }
 }
 

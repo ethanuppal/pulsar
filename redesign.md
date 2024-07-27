@@ -63,3 +63,6 @@ the main issue is that we need to guarantee that a port can always represent a s
 so there are two main things w need to do for this
 - one is to somehow guarantee that when an expression is an lvalue, the gen_expr function doesn't add any additional assignments.
 - the other is to have some sort of way for ports to represent arbitrary extion of something including chaining of . etc which means like we have to probably streict like structs can't contain arrays yeah this is a good idea 
+
+a BIG todo is
+don't have ports on components be cells!!!!!

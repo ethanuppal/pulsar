@@ -9,13 +9,15 @@ use crate::{
     from_ast::AsGeneratorPool,
     port::Port,
     variable::Variable,
-    visitor::{Action, Visitor}
+    visitor::{Action, VisitorMut}
 };
 use pulsar_utils::{id::Id, pool::Handle};
 use std::{
     collections::{HashMap, HashSet},
     ops::Deref
 };
+
+use super::Pass;
 
 /// Conservative dead-code elimination. If an port assigned to does not
 /// appear within its scope, and it is not an output port, then the assignment
@@ -102,7 +104,7 @@ impl DeadCode {
     }
 }
 
-impl<P: AsGeneratorPool> Visitor<P> for DeadCode {
+impl<P: AsGeneratorPool> VisitorMut<P> for DeadCode {
     fn start_component(&mut self, comp: &mut Component, _pool: &mut P) {
         log::warn!(
             "You're using the dead code pass, which is currently unstable"
@@ -143,5 +145,11 @@ impl<P: AsGeneratorPool> Visitor<P> for DeadCode {
     ) -> Action {
         self.calculate_gen_set(par.id, &mut par.children);
         self.dead_code(par.id, &mut par.children)
+    }
+}
+
+impl<P: AsGeneratorPool> Pass<P> for DeadCode {
+    fn name(&self) -> &str {
+        "dead-code"
     }
 }

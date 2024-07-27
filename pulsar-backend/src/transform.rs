@@ -3,10 +3,12 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use pulsar_ir::component::Component;
+use pulsar_ir::{component::Component, from_ast::AsGeneratorPool};
 
 pub mod agen;
 
-pub trait Transform {
-    fn apply(&mut self, comp: Component) -> anyhow::Result<Component>;
+pub trait Transform<P: AsGeneratorPool> {
+    fn apply(
+        &mut self, comp: &Component, pool: &mut P
+    ) -> anyhow::Result<Component>;
 }

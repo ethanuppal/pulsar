@@ -12,7 +12,7 @@ categories.workspace = true
 readme.workspace = true
 
 [dependencies]
-calyx-utils = "0.7.1"
-calyx-ir = "0.7.1"
-calyx-frontend = "0.7.1"
+calyx-utils.workspace = true
+calyx-ir.workspace = true
+calyx-frontend.workspace = true
 pulsar-utils.workspace = true

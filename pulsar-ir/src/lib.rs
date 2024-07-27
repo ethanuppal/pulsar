@@ -42,6 +42,17 @@ impl Ir {
             }
         }
     }
+
+    pub fn gen_mut(&mut self) -> Vec<&mut Handle<Port>> {
+        match self {
+            Ir::Add(_, port, port2) | Ir::Mul(_, port, port2) => {
+                vec![port, port2]
+            }
+            Ir::Assign(_, port) => {
+                vec![port]
+            }
+        }
+    }
 }
 
 impl Display for Ir {

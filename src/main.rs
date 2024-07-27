@@ -3,15 +3,17 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
+use pulsar_backend::{
+    target::{calyx::CalyxTarget, OutputFile},
+    transform::agen::AddressGeneratorTransform,
+    BackendBuilder
+};
 // use pulsar_backend::{
 //     calyx::{CalyxBackend, CalyxBackendInput},
 //     Output, PulsarBackend
 // };
 use pulsar_frontend::{
-    attribute::{Attribute, AttributeProvider},
-    lexer::Lexer,
-    parser::Parser,
-    type_inferer::TypeInferer
+    lexer::Lexer, parser::Parser, type_inferer::TypeInferer
 };
 use pulsar_ir::{from_ast, pass::PassRunner};
 use pulsar_lang::{context::Context, utils::OptionCheckError};
@@ -96,19 +98,28 @@ pub fn main() -> anyhow::Result<()> {
         println!("{}", comp);
     }
 
-    if let Some(main) = comps
+    let Some(main) = comps
         .iter_mut()
         .find(|comp| comp.label().name.unmangled() == "main")
-    {
-        main.add_attribute(Attribute::Kernel);
-    }
+    else {
+        panic!("no `main` component")
+    };
 
-    for comp in comps
-        .iter()
-        .filter(|comp| comp.has_attribute(Attribute::Kernel))
-    {}
+    // let mut agens = Vec::new();
+    // for comp in comps
+    //     .iter()
+    //     .filter(|comp| comp.has_attribute(Attribute::Kernel))
+    // {}
 
     log::info!("Emitting calyx accelerator and address generator (TODO)...");
+
+    let mut calyx_backend = BackendBuilder::new().target(CalyxTarget).build();
+    calyx_backend.lower(main, &mut ctx, OutputFile::Stdout)?;
+    let mut agen_backend = BackendBuilder::new()
+        .target(CalyxTarget)
+        .through(AddressGeneratorTransform)
+        .build();
+    agen_backend.lower(main, &mut ctx, OutputFile::Stdout)?;
 
     // let command_output = Command::new("fud")
     //     .args(["c", "global.root"])

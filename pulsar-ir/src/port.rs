@@ -9,7 +9,7 @@ use super::variable::Variable;
 use std::fmt::{self, Display};
 
 /// A port represents a constant or an lvalue.
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum Port {
     Constant(i64),
     Variable(Variable),

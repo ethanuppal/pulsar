@@ -8,16 +8,18 @@ use crate::{
     control::{Control, Par, Seq},
     from_ast::AsGeneratorPool,
     port::Port,
-    visitor::{Action, Visitor},
+    visitor::{Action, VisitorMut},
     Ir
 };
 use pulsar_utils::pool::Handle;
 use std::collections::HashMap;
 
+use super::Pass;
+
 pub struct CopyProp;
 
 /// Replaces the port that `ir` assigns to with `new_kill`.
-fn replace_kill(ir: &Ir, new_kill: Handle<Port>) -> Ir {
+pub fn replace_kill(ir: &Ir, new_kill: Handle<Port>) -> Ir {
     match ir {
         Ir::Add(_, a, b) => Ir::Add(new_kill, *a, *b),
         Ir::Mul(_, a, b) => Ir::Mul(new_kill, *a, *b),
@@ -71,18 +73,26 @@ impl CopyProp {
     }
 }
 
-impl<P: AsGeneratorPool> Visitor<P> for CopyProp {
+impl<P: AsGeneratorPool> VisitorMut<P> for CopyProp {
     fn finish_seq(
-        &mut self, seq: &mut Seq, _comp_view: &mut ComponentViewMut, _pool: &mut P
+        &mut self, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
+        _pool: &mut P
     ) -> Action {
         self.copy_prop(&mut seq.children);
         Action::None
     }
 
     fn finish_par(
-        &mut self, par: &mut Par, _comp_view: &mut ComponentViewMut, _pool: &mut P
+        &mut self, par: &mut Par, _comp_view: &mut ComponentViewMut,
+        _pool: &mut P
     ) -> Action {
         self.copy_prop(&mut par.children);
         Action::None
+    }
+}
+
+impl<P: AsGeneratorPool> Pass<P> for CopyProp {
+    fn name(&self) -> &str {
+        "copy-prop"
     }
 }

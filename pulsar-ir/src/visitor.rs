@@ -39,7 +39,7 @@ impl Action {
 /// To override traversal behavior, implement `traverse_component` and
 /// `traverse_control`, although it is highly unlikely to use anything beside
 /// the default implementation of these functions.
-pub trait Visitor<P: AsGeneratorPool> {
+pub trait VisitorMut<P: AsGeneratorPool> {
     #[allow(unused_variables)]
     fn start_component(&mut self, comp: &mut Component, pool: &mut P) {}
     #[allow(unused_variables)]
@@ -110,7 +110,7 @@ pub trait Visitor<P: AsGeneratorPool> {
         Action::None
     }
 
-    /// Returns whether the traversal had any effect on the component.
+    /// Returns whether the traversal had any effect on the control.
     fn traverse_component(
         &mut self, comp: &mut Component, pool: &mut P
     ) -> bool {
