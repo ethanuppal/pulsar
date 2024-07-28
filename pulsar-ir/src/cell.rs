@@ -9,8 +9,8 @@ use std::fmt::{self, Display};
 
 #[derive(PartialEq, Eq)]
 pub enum Direction {
-    Input,
-    Output
+    WriteTo,
+    ReadFrom
 }
 
 /// A hardware element capable of storage.

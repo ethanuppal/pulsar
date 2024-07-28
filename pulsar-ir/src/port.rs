@@ -3,9 +3,8 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use pulsar_utils::pool::Handle;
-
 use super::variable::Variable;
+use pulsar_utils::pool::Handle;
 use std::fmt::{self, Display};
 
 /// A port represents a constant or an lvalue.

@@ -11,9 +11,7 @@ use super::{
 use crate::{
     cell::Cell,
     component::Component,
-    control::{
-        AsControlPool, Control, ControlBuilder, For, DEFAULT_CONTROL_ID
-    },
+    control::{AsControlPool, Control, ControlBuilder, For},
     pass::PassRunner
 };
 use pulsar_frontend::{
@@ -38,8 +36,7 @@ pub trait AsGeneratorPool:
 #[derive(Default)]
 pub struct ComponentGenerator {
     var_gen: Gen,
-    env: Environment<String, Variable>
-    // cells: Environment<Variable, Cell>
+    env: Environment<String, Variable> // cells: Environment<Variable, Cell>
 }
 
 pub fn ast_to_ir<P: AsGeneratorPool>(
@@ -100,14 +97,14 @@ impl ComponentGenerator {
             Visibility::Public
         );
 
-        let mut control_gen = Gen::new_skipping(DEFAULT_CONTROL_ID);
-        let mut builder = ControlBuilder::new(&mut control_gen, pool);
+        let mut builder = ControlBuilder::new(pool);
         for stmt in body {
             self.gen_stmt(*stmt, &mut builder)
         }
+        let cfg = builder.into();
 
         let mut comp =
-            Component::new(label, input_cells, output_cells, builder.into());
+            Component::new(label, input_cells, output_cells, pool.add(cfg));
         pass_runner.run(&mut comp, pool);
         comp
     }
@@ -201,8 +198,8 @@ impl ComponentGenerator {
                 self.env.bind(var.value.clone(), variant);
                 let lower_port = self.gen_expr(*lower, builder);
                 let upper_port = self.gen_expr(*exclusive_upper, builder);
-                let body = builder.with_inner(|gen, pool| {
-                    let mut builder = ControlBuilder::new(gen, pool);
+                let body = builder.with_pool(|pool| {
+                    let mut builder = ControlBuilder::new(pool);
                     self.env.push();
                     for stmt in body {
                         self.gen_stmt(*stmt, &mut builder);
@@ -212,9 +209,8 @@ impl ComponentGenerator {
                     pool.add(control)
                 });
                 self.env.pop();
-                let id = builder.next_id();
                 builder.push(Control::For(For::new(
-                    id, variant, lower_port, upper_port, body
+                    variant, lower_port, upper_port, body
                 )));
             }
         }

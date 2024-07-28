@@ -152,7 +152,7 @@ pub trait CalyxAssignmentContainer {
     /// Inserts a single assignment.
     fn add(&mut self, assignment: calyx_ir::Assignment<Self::AssignmentMarker>);
 
-    fn add_between(&mut self, lhs: CalyxPort, rhs: CalyxPort) {
+    fn assign(&mut self, lhs: CalyxPort, rhs: CalyxPort) {
         self.add(calyx_ir::Assignment::new(lhs, rhs));
     }
 

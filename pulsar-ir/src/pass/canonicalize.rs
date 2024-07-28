@@ -12,7 +12,7 @@ use crate::{
     Ir
 };
 use match_deref::match_deref;
-use pulsar_utils::pool::Handle;
+use pulsar_utils::{id::Id, pool::Handle};
 use std::ops::{Deref, DerefMut};
 
 use super::{copy_prop::replace_kill, Pass};
@@ -140,7 +140,7 @@ impl Canonicalize {
 
 impl<P: AsGeneratorPool> VisitorMut<P> for Canonicalize {
     fn start_seq(
-        &mut self, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
+        &mut self, _id: Id, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
         self.collapse_partial_accesses(&mut seq.children, pool);
@@ -148,7 +148,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for Canonicalize {
     }
 
     fn start_par(
-        &mut self, par: &mut Par, _comp_view: &mut ComponentViewMut,
+        &mut self, _id: Id, par: &mut Par, _comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
         self.collapse_partial_accesses(&mut par.children, pool);

@@ -7,7 +7,7 @@ use crate::{port::Port, variable::Variable, Ir};
 use inform::fmt::IndentFormatter;
 use pulsar_frontend::ast::pretty_print::PrettyPrint;
 use pulsar_utils::{
-    id::{Gen, Id},
+    id::Id,
     pool::{AsPool, Handle}
 };
 use std::{
@@ -16,7 +16,6 @@ use std::{
 };
 
 pub struct For {
-    pub id: Id,
     variant: Variable,
     lower: Port,
     exclusive_upper: Port,
@@ -27,11 +26,10 @@ impl For {
     /// A for control takes exclusive ownership of its upper and lower bound
     /// ports, so no handles need to be created for them.
     pub fn new(
-        id: Id, variant: Variable, lower: Port, exclusive_upper: Port,
+        variant: Variable, lower: Port, exclusive_upper: Port,
         body: Handle<Control>
     ) -> Self {
         Self {
-            id,
             variant,
             lower,
             exclusive_upper,
@@ -53,6 +51,12 @@ impl For {
 
     pub fn body(&self) -> Handle<Control> {
         self.body
+    }
+
+    /// The number of cycles needed to initialize the loop variant to the lower
+    /// bound.
+    pub fn init_latency(&self) -> usize {
+        1
     }
 }
 
@@ -76,17 +80,14 @@ impl Display for For {
     }
 }
 
+#[derive(Default)]
 pub struct Seq {
-    pub id: Id,
     pub(crate) children: Vec<Handle<Control>>
 }
 
 impl Seq {
-    pub fn new(id: Id) -> Self {
-        Self {
-            id,
-            children: Vec::new()
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn push(&mut self, child: Handle<Control>) {
@@ -117,21 +118,18 @@ impl Display for Seq {
     }
 }
 
+#[derive(Default)]
 pub struct Par {
-    pub id: Id,
     pub(crate) children: Vec<Handle<Control>>
 }
 
 impl Par {
-    pub fn new(id: Id) -> Self {
-        Self {
-            id,
-            children: Vec::new()
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub fn singleton(id: Id, child: Handle<Control>) -> Self {
-        let mut new_self = Self::new(id);
+    pub fn singleton(child: Handle<Control>) -> Self {
+        let mut new_self = Self::new();
         new_self.push(child);
         new_self
     }
@@ -165,7 +163,6 @@ impl Display for Par {
 }
 
 pub struct IfElse {
-    pub id: Id,
     cond: Port,
     pub(crate) true_branch: Handle<Control>,
     pub(crate) false_branch: Handle<Control>
@@ -173,11 +170,9 @@ pub struct IfElse {
 
 impl IfElse {
     pub fn new(
-        id: Id, cond: Port, true_branch: Handle<Control>,
-        false_branch: Handle<Control>
+        cond: Port, true_branch: Handle<Control>, false_branch: Handle<Control>
     ) -> Self {
         Self {
-            id,
             cond,
             true_branch,
             false_branch
@@ -217,20 +212,6 @@ pub enum Control {
     Enable(Ir)
 }
 
-pub const DEFAULT_CONTROL_ID: Id = 0;
-
-impl Control {
-    pub fn id(&self) -> Id {
-        match self {
-            Control::Empty | Control::Enable(_) => DEFAULT_CONTROL_ID,
-            Control::For(for_) => for_.id,
-            Control::Seq(seq) => seq.id,
-            Control::Par(par) => par.id,
-            Control::IfElse(if_else) => if_else.id
-        }
-    }
-}
-
 impl PrettyPrint for Control {
     fn pretty_print(&self, f: &mut IndentFormatter<'_, '_>) -> fmt::Result {
         match self {
@@ -258,22 +239,17 @@ impl From<Ir> for Control {
 
 pub trait AsControlPool: AsPool<Control, usize> {}
 
-pub struct ControlBuilder<'gen, 'pool, P: AsControlPool + AsPool<Port, ()>> {
-    gen: &'gen mut Gen,
+pub struct ControlBuilder<'pool, P: AsControlPool + AsPool<Port, ()>> {
     pool: &'pool mut P,
     /// inv: `pars.len() >= 1`.
     pars: Vec<Par>
 }
 
-impl<'gen, 'pool, P: AsControlPool + AsPool<Port, ()>>
-    ControlBuilder<'gen, 'pool, P>
-{
-    pub fn new(gen: &'gen mut Gen, pool: &'pool mut P) -> Self {
-        let par = Par::new(gen.next());
+impl<'pool, P: AsControlPool + AsPool<Port, ()>> ControlBuilder<'pool, P> {
+    pub fn new(pool: &'pool mut P) -> Self {
         Self {
-            gen,
             pool,
-            pars: vec![par]
+            pars: vec![Par::new()]
         }
     }
 
@@ -289,17 +265,11 @@ impl<'gen, 'pool, P: AsControlPool + AsPool<Port, ()>>
     /// Marks all later [`ControlBuilder::push`]es as occuring in a subsequent
     /// logical time step.
     pub fn split(&mut self) {
-        self.pars.push(Par::new(self.gen.next()));
+        self.pars.push(Par::new());
     }
 
-    pub fn with_inner<R, F: FnOnce(&mut Gen, &mut P) -> R>(
-        &mut self, f: F
-    ) -> R {
-        f(self.gen, self.pool)
-    }
-
-    pub fn next_id(&mut self) -> Id {
-        self.gen.next()
+    pub fn with_pool<R, F: FnOnce(&mut P) -> R>(&mut self, f: F) -> R {
+        f(self.pool)
     }
 
     /// [`Ir::Add`] followed by [`ControlBuilder::push`].
@@ -343,16 +313,16 @@ impl<'gen, 'pool, P: AsControlPool + AsPool<Port, ()>>
     }
 }
 
-impl<'gen, 'pool, P: AsControlPool + AsPool<Port, ()>>
-    From<ControlBuilder<'gen, 'pool, P>> for Control
+impl<'pool, P: AsControlPool + AsPool<Port, ()>> From<ControlBuilder<'pool, P>>
+    for Control
 {
     fn from(mut value: ControlBuilder<P>) -> Self {
         if value.pars.len() == 1 {
-            let mut result = Par::new(0);
+            let mut result = Par::new();
             mem::swap(&mut value.pars[0], &mut result);
             Self::Par(result)
         } else {
-            let mut seq = Seq::new(value.gen.next());
+            let mut seq = Seq::new();
             for par in value.pars {
                 seq.push(value.pool.add(Self::Par(par)));
             }

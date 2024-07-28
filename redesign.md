@@ -66,3 +66,13 @@ so there are two main things w need to do for this
 
 a BIG todo is
 don't have ports on components be cells!!!!!
+
+ok new design plan for agen is:
+
+when visiting
+
+let mut agen = AddressGenerator::new()
+agen.for_(|agen| {
+    agen.read(port);
+    agen.write(port);
+});

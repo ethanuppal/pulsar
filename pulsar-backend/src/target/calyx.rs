@@ -10,7 +10,7 @@ use calyx_builder::{
     finish_component, CalyxAssignmentContainer, CalyxBuilder, CalyxComponent,
     CalyxControl, CalyxControlType, CalyxPort, Sequential
 };
-use calyx_ir as cir;
+use calyx_ir::{self as cir};
 use calyx_opt as copt;
 use calyx_utils as cutil;
 use pulsar_ir::{
@@ -23,7 +23,7 @@ use pulsar_ir::{
     variable::Variable,
     Ir
 };
-use pulsar_utils::pool::Handle;
+use pulsar_utils::{id::Id, pool::Handle};
 use std::{
     collections::HashMap,
     env,
@@ -95,7 +95,7 @@ impl CalyxTarget {
         println!("emitport {}", port);
         match port {
             Port::Constant(value) => {
-                if direction == Direction::Output {
+                if direction == Direction::ReadFrom {
                     calyx_comp.constant(*value, 64).get("out")
                 } else {
                     panic!("constants have no input ports")
@@ -107,7 +107,7 @@ impl CalyxTarget {
                 } else {
                     calyx_comp.new_unnamed_prim("std_wire", vec![64])
                 };
-                calyx_cell.get(if direction == Direction::Input {
+                calyx_cell.get(if direction == Direction::WriteTo {
                     "in"
                 } else {
                     "out"
@@ -122,43 +122,75 @@ impl CalyxTarget {
         }
     }
 
-    fn emit_ir<'a, 'b: 'a, T: CalyxControlType>(
-        &self, ir: &Ir, cells: &HashMap<Variable, Handle<Cell>>,
+    fn emit_ir<'a, 'b: 'a, T: CalyxControlType, P: AsGeneratorPool>(
+        &self, id: Id, ir: &Ir, cells: &HashMap<Variable, Handle<Cell>>,
         calyx_control: &mut CalyxControl<T>,
-        calyx_comp: &'a mut CalyxComponent<'b, ()>
+        calyx_comp: &'a mut CalyxComponent<'b, ()>, pool: &P
     ) {
+        let latency = {
+            // technically both `control` and `ir` own the same thing
+            let control = Handle::<Control>::from_id(id, pool);
+            *pool.get_metadata(control)
+        };
+        let latency = if latency == 0 { 1 } else { latency };
+
         match ir {
             Ir::Add(result, lhs, rhs) => {
-                let result =
-                    self.emit_port(result, Direction::Input, cells, calyx_comp);
+                let result = self.emit_port(
+                    result,
+                    Direction::WriteTo,
+                    cells,
+                    calyx_comp
+                );
                 let lhs =
-                    self.emit_port(lhs, Direction::Output, cells, calyx_comp);
+                    self.emit_port(lhs, Direction::ReadFrom, cells, calyx_comp);
                 let rhs =
-                    self.emit_port(rhs, Direction::Output, cells, calyx_comp);
+                    self.emit_port(rhs, Direction::ReadFrom, cells, calyx_comp);
                 let adder = calyx_comp.new_unnamed_prim("std_add", vec![64]);
-                let mut group = calyx_comp.add_static_group("ir_add", 1);
-                group.add_between(adder.get("left"), lhs);
-                group.add_between(adder.get("right"), rhs);
-                group.add_between(result, adder.get("out"));
+                let mut group = calyx_comp.add_static_group("ir_add", latency);
+                group.assign(adder.get("left"), lhs);
+                group.assign(adder.get("right"), rhs);
+                group.assign(result, adder.get("out"));
                 calyx_control.insert_static(&group);
             }
-            Ir::Mul(result, lhs, rhs) => todo!(),
+            Ir::Mul(result, lhs, rhs) => {
+                let result = self.emit_port(
+                    result,
+                    Direction::WriteTo,
+                    cells,
+                    calyx_comp
+                );
+                let lhs =
+                    self.emit_port(lhs, Direction::WriteTo, cells, calyx_comp);
+                let rhs =
+                    self.emit_port(rhs, Direction::ReadFrom, cells, calyx_comp);
+                let multiplier =
+                    calyx_comp.new_unnamed_prim("std_mult_pipe", vec![64]);
+                let mut group =
+                    calyx_comp.add_static_group("ir_multiply", latency);
+                group.assign(multiplier.get("left"), lhs);
+                group.assign(multiplier.get("right"), rhs);
+                group.assign(result, multiplier.get("out"));
+                calyx_control.insert_static(&group);
+            }
             Ir::Assign(lhs, rhs) => {
                 let lhs =
-                    self.emit_port(lhs, Direction::Input, cells, calyx_comp);
+                    self.emit_port(lhs, Direction::WriteTo, cells, calyx_comp);
                 let rhs =
-                    self.emit_port(rhs, Direction::Output, cells, calyx_comp);
-                let mut group = calyx_comp.add_static_group("ir_assign", 1);
-                group.add_between(lhs, rhs);
+                    self.emit_port(rhs, Direction::ReadFrom, cells, calyx_comp);
+                let mut group =
+                    calyx_comp.add_static_group("ir_assign", latency);
+                group.assign(lhs, rhs);
                 calyx_control.insert_static(&group);
             }
         }
     }
 
-    fn emit_control<'a, 'b: 'a, T: CalyxControlType>(
-        &self, control: &Control, cells: &HashMap<Variable, Handle<Cell>>,
+    fn emit_control<'a, 'b: 'a, T: CalyxControlType, P: AsGeneratorPool>(
+        &self, id: Id, control: &Control,
+        cells: &HashMap<Variable, Handle<Cell>>,
         calyx_control: &mut CalyxControl<T>,
-        calyx_comp: &'a mut CalyxComponent<'b, ()>
+        calyx_comp: &'a mut CalyxComponent<'b, ()>, pool: &P
     ) {
         match control {
             Control::Empty => {}
@@ -166,41 +198,42 @@ impl CalyxTarget {
                 let index = calyx_comp.find(for_.variant().to_string());
                 let lower = self.emit_port(
                     for_.lower_bound(),
-                    Direction::Output,
+                    Direction::ReadFrom,
                     cells,
                     calyx_comp
                 );
                 let exclusive_upper = self.emit_port(
                     for_.exclusive_upper_bound(),
-                    Direction::Output,
+                    Direction::ReadFrom,
                     cells,
                     calyx_comp
                 );
                 let index_bits =
                     cells.get(&for_.variant()).unwrap().port_width();
 
-                let mut init_index =
-                    calyx_comp.add_static_group("init_index", 1);
-                init_index.add_between(index.get("in"), lower);
+                let mut init_index = calyx_comp
+                    .add_static_group("init_index", for_.init_latency());
+                init_index.assign(index.get("in"), lower);
                 let signal_out = calyx_comp.signal_out();
-                init_index
-                    .add_between(index.get("write_en"), signal_out.get("out"));
+                init_index.assign(index.get("write_en"), signal_out.get("out"));
                 calyx_control.insert_static(&init_index);
 
                 let lt = calyx_comp
                     .new_unnamed_prim("std_lt", vec![index_bits as u64]);
                 let mut check_cond = calyx_comp.add_comb_group("check_cond");
-                check_cond.add_between(lt.get("left"), index.get("out"));
-                check_cond.add_between(lt.get("right"), exclusive_upper);
+                check_cond.assign(lt.get("left"), index.get("out"));
+                check_cond.assign(lt.get("right"), exclusive_upper);
                 calyx_control.while_(
                     lt.get("out"),
                     Some(check_cond),
                     |calyx_control| {
                         self.emit_control(
+                            for_.body().id_in(pool),
                             &for_.body(),
                             cells,
                             calyx_control,
-                            calyx_comp
+                            calyx_comp,
+                            pool
                         );
                     }
                 );
@@ -209,10 +242,12 @@ impl CalyxTarget {
                 calyx_control.seq(|calyx_control| {
                     for child in seq.children() {
                         self.emit_control(
+                            child.id_in(pool),
                             child,
                             cells,
                             calyx_control,
-                            calyx_comp
+                            calyx_comp,
+                            pool
                         );
                     }
                 });
@@ -221,23 +256,26 @@ impl CalyxTarget {
                 calyx_control.par(|calyx_control| {
                     for child in par.children() {
                         self.emit_control(
+                            child.id_in(pool),
                             child,
                             cells,
                             calyx_control,
-                            calyx_comp
+                            calyx_comp,
+                            pool
                         );
                     }
                 });
             }
             Control::IfElse(if_else) => todo!(),
             Control::Enable(ir) => {
-                self.emit_ir(ir, cells, calyx_control, calyx_comp);
+                self.emit_ir(id, ir, cells, calyx_control, calyx_comp, pool);
             }
         }
     }
 
-    fn emit_comp<'a, 'b: 'a>(
-        &self, comp: &Component, calyx_comp: &'a mut CalyxComponent<'b, ()>
+    fn emit_comp<'a, 'b: 'a, P: AsGeneratorPool>(
+        &self, comp: &Component, calyx_comp: &'a mut CalyxComponent<'b, ()>,
+        pool: &P
     ) {
         for (var, cell) in comp.internal_cells() {
             match cell.deref() {
@@ -250,10 +288,12 @@ impl CalyxTarget {
 
         let mut calyx_control = CalyxControl::<Sequential>::default();
         self.emit_control(
+            comp.cfg_id(pool),
             comp.cfg(),
             comp.cells(),
             &mut calyx_control,
-            calyx_comp
+            calyx_comp,
+            pool
         );
         *calyx_comp.control() = calyx_control;
     }
@@ -261,7 +301,7 @@ impl CalyxTarget {
 
 impl<P: AsGeneratorPool> Target<P> for CalyxTarget {
     fn emit(
-        &mut self, comp: &Component, _pool: &P, output: super::OutputFile
+        &mut self, comp: &Component, pool: &P, output: super::OutputFile
     ) -> anyhow::Result<()> {
         let mut prelude_file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         prelude_file_path.push("resources");
@@ -282,7 +322,7 @@ impl<P: AsGeneratorPool> Target<P> for CalyxTarget {
 
         self.register_comp(comp, comp_name.clone(), &mut builder);
         let mut calyx_comp = builder.start_component::<()>(comp_name);
-        self.emit_comp(comp, &mut calyx_comp);
+        self.emit_comp(comp, &mut calyx_comp, pool);
         finish_component!(builder, calyx_comp);
 
         let mut calyx_ctx = builder.finalize();

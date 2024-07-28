@@ -11,12 +11,17 @@ use crate::{
     visitor::{Action, VisitorMut},
     Ir
 };
-use pulsar_utils::pool::Handle;
+use pulsar_utils::{id::Id, pool::Handle};
 use std::collections::HashSet;
 
 use super::Pass;
 
 /// This pass and `Canonicalize` after it are applied before every other pass.
+///
+/// A non-exhaustive list of invariants that are enforced include:
+/// - All output ports are assigned to.
+/// - All ports within a `par` are assigned to no more than once.
+/// - All outermost for-loops should have constant-integer bounds.
 #[derive(Default)]
 pub struct WellFormed {
     /// List of ports assigned to.
@@ -27,7 +32,7 @@ pub struct WellFormed {
 
 impl<P: AsGeneratorPool> VisitorMut<P> for WellFormed {
     fn start_enable(
-        &mut self, enable: &mut Ir, _comp_view: &mut ComponentViewMut,
+        &mut self, _id: Id, enable: &mut Ir, _comp_view: &mut ComponentViewMut,
         _pool: &mut P
     ) -> Action {
         if let Port::Constant(_) = &*enable.kill() {

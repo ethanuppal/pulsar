@@ -15,6 +15,8 @@ use std::{
     ptr
 };
 
+use crate::id::Id;
+
 /// 64MB.
 const ARENA_SIZE_BYTES: usize = 64 * 1024 * 1024;
 
@@ -30,6 +32,20 @@ pub struct Handle<T> {
 impl<T> Handle<T> {
     pub fn is_invalid(&self) -> bool {
         self.pointer.is_null() || !self.pointer.is_aligned()
+    }
+
+    pub fn id_in<Metadata, P: AsPool<T, Metadata>>(&self, pool: &P) -> Id {
+        Id::from(unsafe { pool.as_pool_ref().contents.index_of(self.pointer) })
+    }
+
+    pub fn from_id<Metadata, P: AsPool<T, Metadata>>(id: Id, pool: &P) -> Self {
+        if id >= pool.as_pool_ref().contents.count {
+            panic!("invalid id access in pool");
+        }
+        Self::from(unsafe {
+            // 💀
+            pool.as_pool_ref().contents.at_index_ref(id) as *mut T
+        })
     }
 }
 
@@ -107,6 +123,8 @@ impl<T> From<*mut T> for Handle<T> {
     }
 }
 
+/// Either a memory-mapped region or nothing, but without the additional
+/// overhead of an enum tag.
 union MMapArenaStore {
     mmap: ManuallyDrop<MmapMut>,
     ignore: ()
@@ -124,8 +142,11 @@ impl MMapArenaStore {
     }
 }
 
+/// Allocates objects in a memory-mapped region if they have nonzero size.
 struct MMapArena<T> {
+    /// Allocated memory.
     store: MMapArenaStore,
+    /// Number of allocated entries.
     count: usize,
     generic: PhantomData<T>
 }
@@ -144,15 +165,18 @@ impl<T> MMapArena<T> {
         })
     }
 
+    /// The start of the memory-mapped region.
     unsafe fn start(&self) -> *const T {
         self.store.mmap.as_ptr() as *const T
     }
 
+    /// See [`MMapArena::start`].
     unsafe fn start_mut(&mut self) -> *mut T {
         let mmap = &mut self.store.mmap;
         mmap.as_mut_ptr() as *mut T
     }
 
+    /// Allocates and returns a pointer to an object of type `T`.
     unsafe fn alloc(&mut self) -> *mut T {
         if mem::size_of::<T>() == 0 {
             ptr::null_mut()
@@ -167,18 +191,24 @@ impl<T> MMapArena<T> {
         }
     }
 
+    /// Obtains the index of `pointer` by computing the offset from
+    /// `self.start()` and dividing it by `T`'s size.
     unsafe fn index_of(&self, pointer: *mut T) -> usize {
         pointer.offset_from(self.start()) as usize
     }
 
+    /// See [`MMapArena::index_of`].
     unsafe fn at_index_ref(&self, index: usize) -> *const T {
         self.start().add(index) as *mut T
     }
 
+    /// See [`MMapArena::index_of`].
     unsafe fn at_index_mut(&mut self, index: usize) -> *mut T {
         self.start_mut().add(index)
     }
 
+    /// Obtains the start of the memory-mapped region and the current number of
+    /// allocated objects.
     fn as_slice(&mut self) -> (*mut T, usize) {
         unsafe { (self.start_mut(), self.count) }
     }
@@ -263,8 +293,8 @@ pub trait AsPool<Value, Metadata>: Sized {
         self.as_pool_ref().get_metadata(handle)
     }
 
-    fn set_metadata(&mut self, handle: Handle<Value>, ty: Metadata) {
-        self.as_pool_mut().set_metadata(handle, ty);
+    fn set_metadata(&mut self, handle: Handle<Value>, metadata: Metadata) {
+        self.as_pool_mut().set_metadata(handle, metadata);
     }
 }
 

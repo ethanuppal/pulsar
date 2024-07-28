@@ -3,7 +3,7 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use pulsar_utils::pool::Handle;
+use pulsar_utils::{id::Id, pool::Handle};
 
 use crate::{
     component::ComponentViewMut,
@@ -35,14 +35,14 @@ impl CollapseControl {
 
 impl<P: AsGeneratorPool> VisitorMut<P> for CollapseControl {
     fn finish_seq(
-        &mut self, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
+        &mut self, id: Id, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
         _pool: &mut P
     ) -> Action {
         self.collapse(&mut seq.children)
     }
 
     fn finish_par(
-        &mut self, par: &mut Par, _comp_view: &mut ComponentViewMut,
+        &mut self, id: Id, par: &mut Par, _comp_view: &mut ComponentViewMut,
         _pool: &mut P
     ) -> Action {
         self.collapse(&mut par.children)

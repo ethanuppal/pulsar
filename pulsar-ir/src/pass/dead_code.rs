@@ -37,8 +37,8 @@ impl DeadCode {
     ///
     /// Precondition: all non-enable control in `children` already has a gen set
     /// computed.
-    fn calculate_gen_set(
-        &mut self, id: Id, children: &mut Vec<Handle<Control>>
+    fn calculate_gen_set<P: AsGeneratorPool>(
+        &mut self, id: Id, children: &mut Vec<Handle<Control>>, pool: &P
     ) {
         // bad software engineering here lol. see main struct doc comment for
         // why it's slightly broken
@@ -52,7 +52,7 @@ impl DeadCode {
                 // flatten and remove original child set
                 gen_set.extend(
                     self.gen_sets
-                        .remove_entry(&child.id())
+                        .remove_entry(&child.id_in(pool))
                         .expect("precondition")
                         .1
                 );
@@ -115,36 +115,36 @@ impl<P: AsGeneratorPool> VisitorMut<P> for DeadCode {
     }
 
     fn finish_for(
-        &mut self, for_: &mut For, _comp_view: &mut ComponentViewMut,
-        _pool: &mut P
+        &mut self, id: Id, for_: &mut For, _comp_view: &mut ComponentViewMut,
+        pool: &mut P
     ) -> Action {
-        self.extend_gen_set(for_.id, for_.body.id());
+        self.extend_gen_set(id, for_.body.id_in(pool));
         Action::None
     }
 
     fn finish_if_else(
-        &mut self, if_else: &mut IfElse, _comp_view: &mut ComponentViewMut,
-        _pool: &mut P
+        &mut self, id: Id, if_else: &mut IfElse,
+        _comp_view: &mut ComponentViewMut, pool: &mut P
     ) -> Action {
-        self.extend_gen_set(if_else.id, if_else.true_branch.id());
-        self.extend_gen_set(if_else.id, if_else.false_branch.id());
+        self.extend_gen_set(id, if_else.true_branch.id_in(pool));
+        self.extend_gen_set(id, if_else.false_branch.id_in(pool));
         Action::None
     }
 
     fn finish_seq(
-        &mut self, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
-        _pool: &mut P
+        &mut self, id: Id, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
+        pool: &mut P
     ) -> Action {
-        self.calculate_gen_set(seq.id, &mut seq.children);
-        self.dead_code(seq.id, &mut seq.children)
+        self.calculate_gen_set(id, &mut seq.children, pool);
+        self.dead_code(id, &mut seq.children)
     }
 
     fn finish_par(
-        &mut self, par: &mut Par, _comp_view: &mut ComponentViewMut,
-        _pool: &mut P
+        &mut self, id: Id, par: &mut Par, _comp_view: &mut ComponentViewMut,
+        pool: &mut P
     ) -> Action {
-        self.calculate_gen_set(par.id, &mut par.children);
-        self.dead_code(par.id, &mut par.children)
+        self.calculate_gen_set(id, &mut par.children, pool);
+        self.dead_code(id, &mut par.children)
     }
 }
 

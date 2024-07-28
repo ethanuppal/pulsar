@@ -5,6 +5,8 @@
 
 use std::ops::Deref;
 
+use pulsar_utils::id::Id;
+
 use crate::{
     cell::Cell,
     component::ComponentViewMut,
@@ -29,7 +31,7 @@ pub fn min_bits_to_represent(value: usize) -> usize {
 
 impl<P: AsGeneratorPool> VisitorMut<P> for CellAlloc {
     fn start_for(
-        &mut self, for_: &mut For, comp_view: &mut ComponentViewMut,
+        &mut self, id: Id, for_: &mut For, comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
         let index_reg_bits = match for_.exclusive_upper_bound() {
@@ -42,8 +44,11 @@ impl<P: AsGeneratorPool> VisitorMut<P> for CellAlloc {
         Action::None
     }
 
+    // TODO: fix this. it needs to identify common variables in sequence and
+    // assign them a register. right now it just looks root level so if there
+    // are any nested pars it won't work :(
     fn start_seq(
-        &mut self, seq: &mut Seq, comp_view: &mut ComponentViewMut,
+        &mut self, id: Id, seq: &mut Seq, comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
         for child in &seq.children {

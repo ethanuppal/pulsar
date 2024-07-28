@@ -91,8 +91,7 @@ pub fn main() -> anyhow::Result<()> {
 
     log::info!("Optimizing...");
 
-    let pass_runner = PassRunner::default();
-    let mut comps = from_ast::ast_to_ir(ast, pass_runner, &mut ctx);
+    let mut comps = from_ast::ast_to_ir(ast, PassRunner::lowering(), &mut ctx);
 
     for comp in &comps {
         println!("{}", comp);

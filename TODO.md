@@ -1,0 +1,5 @@
+- [x] Fix control id system
+- [ ] Clean up component
+- [ ] Figure out why dealing with mutable `Handle`s is messy
+- [ ] Error when using multiplication in a complex expression without a divider?
+- [ ] It's the user's fault to deal with correctness. Assume input is correct for now

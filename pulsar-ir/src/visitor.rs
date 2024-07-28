@@ -3,6 +3,10 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
+use std::ops::DerefMut;
+
+use pulsar_utils::{id::Id, pool::Handle};
+
 use crate::{
     component::{Component, ComponentViewMut},
     control::{Control, For, IfElse, Par, Seq},
@@ -47,35 +51,35 @@ pub trait VisitorMut<P: AsGeneratorPool> {
 
     #[allow(unused_variables)]
     fn start_for(
-        &mut self, for_: &mut For, comp_view: &mut ComponentViewMut,
+        &mut self, id: Id, for_: &mut For, comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
         Action::None
     }
     #[allow(unused_variables)]
     fn start_seq(
-        &mut self, seq: &mut Seq, comp_view: &mut ComponentViewMut,
+        &mut self, id: Id, seq: &mut Seq, comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
         Action::None
     }
     #[allow(unused_variables)]
     fn start_par(
-        &mut self, par: &mut Par, comp_view: &mut ComponentViewMut,
+        &mut self, id: Id, par: &mut Par, comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
         Action::None
     }
     #[allow(unused_variables)]
     fn start_if_else(
-        &mut self, if_else: &mut IfElse, comp_view: &mut ComponentViewMut,
-        pool: &mut P
+        &mut self, id: Id, if_else: &mut IfElse,
+        comp_view: &mut ComponentViewMut, pool: &mut P
     ) -> Action {
         Action::None
     }
     #[allow(unused_variables)]
     fn start_enable(
-        &mut self, enable: &mut Ir, comp_view: &mut ComponentViewMut,
+        &mut self, id: Id, enable: &mut Ir, comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
         Action::None
@@ -83,29 +87,29 @@ pub trait VisitorMut<P: AsGeneratorPool> {
 
     #[allow(unused_variables)]
     fn finish_for(
-        &mut self, for_: &mut For, comp_view: &mut ComponentViewMut,
+        &mut self, id: Id, for_: &mut For, comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
         Action::None
     }
     #[allow(unused_variables)]
     fn finish_seq(
-        &mut self, seq: &mut Seq, comp_view: &mut ComponentViewMut,
+        &mut self, id: Id, seq: &mut Seq, comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
         Action::None
     }
     #[allow(unused_variables)]
     fn finish_par(
-        &mut self, par: &mut Par, comp_view: &mut ComponentViewMut,
+        &mut self, id: Id, par: &mut Par, comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
         Action::None
     }
     #[allow(unused_variables)]
     fn finish_if_else(
-        &mut self, if_else: &mut IfElse, comp_view: &mut ComponentViewMut,
-        pool: &mut P
+        &mut self, id: Id, if_else: &mut IfElse,
+        comp_view: &mut ComponentViewMut, pool: &mut P
     ) -> Action {
         Action::None
     }
@@ -115,7 +119,7 @@ pub trait VisitorMut<P: AsGeneratorPool> {
         &mut self, comp: &mut Component, pool: &mut P
     ) -> bool {
         self.start_component(comp, pool);
-        let (cfg, mut comp_view) = comp.as_views_mut();
+        let (cfg, mut comp_view) = comp.as_view_mut();
         let did_modify = self.traverse_control(cfg, &mut comp_view, pool);
         self.finish_component(comp, pool);
         did_modify
@@ -123,49 +127,48 @@ pub trait VisitorMut<P: AsGeneratorPool> {
 
     /// Returns whether the traversal had any effect on the component.
     fn traverse_control(
-        &mut self, control: &mut Control, comp_view: &mut ComponentViewMut,
-        pool: &mut P
+        &mut self, mut control: Handle<Control>,
+        comp_view: &mut ComponentViewMut, pool: &mut P
     ) -> bool {
         let mut did_modify = false;
 
-        match control {
+        let id = control.id_in(pool);
+        match control.deref_mut() {
             Control::Empty => Action::None,
-            Control::For(for_) => self.start_for(for_, comp_view, pool),
-            Control::Seq(seq) => self.start_seq(seq, comp_view, pool),
-            Control::Par(par) => self.start_par(par, comp_view, pool),
+            Control::For(for_) => self.start_for(id, for_, comp_view, pool),
+            Control::Seq(seq) => self.start_seq(id, seq, comp_view, pool),
+            Control::Par(par) => self.start_par(id, par, comp_view, pool),
             Control::IfElse(if_else) => {
-                self.start_if_else(if_else, comp_view, pool)
+                self.start_if_else(id, if_else, comp_view, pool)
             }
             Control::Enable(enable) => {
-                self.start_enable(enable, comp_view, pool)
+                self.start_enable(id, enable, comp_view, pool)
             }
         }
-        .execute(control, &mut did_modify);
+        .execute(&mut control, &mut did_modify);
 
-        match control {
+        match control.deref_mut() {
             Control::Empty => {}
             Control::For(for_) => {
-                did_modify |=
-                    self.traverse_control(&mut for_.body, comp_view, pool);
+                did_modify |= self.traverse_control(for_.body, comp_view, pool);
             }
             Control::Seq(seq) => {
-                for child in &mut seq.children {
-                    did_modify |= self.traverse_control(child, comp_view, pool);
+                for child in &seq.children {
+                    did_modify |=
+                        self.traverse_control(*child, comp_view, pool);
                 }
             }
             Control::Par(par) => {
-                for child in &mut par.children {
-                    did_modify |= self.traverse_control(child, comp_view, pool);
+                for child in &par.children {
+                    did_modify |=
+                        self.traverse_control(*child, comp_view, pool);
                 }
             }
             Control::IfElse(if_else) => {
+                did_modify |=
+                    self.traverse_control(if_else.true_branch, comp_view, pool);
                 did_modify |= self.traverse_control(
-                    &mut if_else.true_branch,
-                    comp_view,
-                    pool
-                );
-                did_modify |= self.traverse_control(
-                    &mut if_else.false_branch,
+                    if_else.false_branch,
                     comp_view,
                     pool
                 );
@@ -173,17 +176,18 @@ pub trait VisitorMut<P: AsGeneratorPool> {
             Control::Enable(_) => {}
         }
 
-        match control {
+        let id = control.id_in(pool);
+        match control.deref_mut() {
             Control::Empty => Action::None,
-            Control::For(for_) => self.finish_for(for_, comp_view, pool),
-            Control::Seq(seq) => self.finish_seq(seq, comp_view, pool),
-            Control::Par(par) => self.finish_par(par, comp_view, pool),
+            Control::For(for_) => self.finish_for(id, for_, comp_view, pool),
+            Control::Seq(seq) => self.finish_seq(id, seq, comp_view, pool),
+            Control::Par(par) => self.finish_par(id, par, comp_view, pool),
             Control::IfElse(if_else) => {
-                self.finish_if_else(if_else, comp_view, pool)
+                self.finish_if_else(id, if_else, comp_view, pool)
             }
             Control::Enable(_) => Action::None
         }
-        .execute(control, &mut did_modify);
+        .execute(&mut control, &mut did_modify);
 
         did_modify
     }

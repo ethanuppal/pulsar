@@ -6,6 +6,7 @@
 use crate::{
     component::Component, from_ast::AsGeneratorPool, visitor::VisitorMut
 };
+use calculate_timing::CalculateTiming;
 use canonicalize::Canonicalize;
 use cell_alloc::CellAlloc;
 use collapse_control::CollapseControl;
@@ -13,6 +14,7 @@ use copy_prop::CopyProp;
 use dead_code::DeadCode;
 use well_formed::WellFormed;
 
+pub mod calculate_timing;
 pub mod canonicalize;
 pub mod cell_alloc;
 pub mod collapse_control;
@@ -40,6 +42,19 @@ impl<P: AsGeneratorPool> PassRunner<P> {
         let mut runner = Self { passes: Vec::new() };
         runner.register(WellFormed::default());
         runner.register(Canonicalize);
+        runner
+    }
+
+    /// A standard pass scheme to lower a component for emission.
+    pub fn lowering() -> Self {
+        let mut runner = Self::core();
+        runner.register_converge(10, |runner| {
+            runner.register(CopyProp);
+            runner.register(DeadCode::default());
+        });
+        runner.register(CollapseControl);
+        runner.register(CellAlloc);
+        runner.register(CalculateTiming);
         runner
     }
 
@@ -98,18 +113,5 @@ impl<P: AsGeneratorPool> PassRunner<P> {
                 }
             };
         }
-    }
-}
-
-impl<P: AsGeneratorPool> Default for PassRunner<P> {
-    fn default() -> Self {
-        let mut runner = Self::core();
-        runner.register_converge(10, |runner| {
-            runner.register(CopyProp);
-            runner.register(DeadCode::default());
-        });
-        runner.register(CollapseControl);
-        runner.register(CellAlloc);
-        runner
     }
 }

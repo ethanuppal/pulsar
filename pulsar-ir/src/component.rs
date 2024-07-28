@@ -3,13 +3,16 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use crate::{cell::Cell, control::Control, label::Label, variable::Variable};
+use crate::{
+    cell::Cell, control::Control, from_ast::AsGeneratorPool, label::Label,
+    variable::Variable
+};
 use inform::fmt::IndentFormatter;
 use pulsar_frontend::{
     ast::pretty_print::PrettyPrint,
     attribute::{AttributeProvider, Attributes}
 };
-use pulsar_utils::pool::Handle;
+use pulsar_utils::{id::Id, pool::Handle};
 use std::{
     collections::{HashMap, HashSet},
     fmt::{self, Display, Write}
@@ -24,13 +27,13 @@ pub struct Component {
     // internal_cells: Vec<Handle<Cell>>,
     /// Like reg-alloc but for cells. need better way to represent
     cell_alloc: HashMap<Variable, Handle<Cell>>,
-    pub(crate) cfg: Control
+    pub(crate) cfg: Handle<Control>
 }
 
 impl Component {
     pub fn new(
         label: Label, inputs: Vec<(Variable, Handle<Cell>)>,
-        outputs: Vec<(Variable, Handle<Cell>)>, cfg: Control
+        outputs: Vec<(Variable, Handle<Cell>)>, cfg: Handle<Control>
     ) -> Self {
         let initial_cell_alloc =
             inputs.iter().chain(&outputs).cloned().collect();
@@ -75,6 +78,10 @@ impl Component {
 
     pub fn cfg(&self) -> &Control {
         &self.cfg
+    }
+
+    pub fn cfg_id<P: AsGeneratorPool>(&self, pool: &P) -> Id {
+        self.cfg.id_in(pool)
     }
 }
 
@@ -146,9 +153,9 @@ pub struct ComponentViewMut<'comp> {
 }
 
 impl Component {
-    pub fn as_views_mut(&mut self) -> (&mut Control, ComponentViewMut) {
+    pub fn as_view_mut(&mut self) -> (Handle<Control>, ComponentViewMut) {
         (
-            &mut self.cfg,
+            self.cfg,
             ComponentViewMut {
                 label: &mut self.label,
                 inputs: &mut self.inputs,
