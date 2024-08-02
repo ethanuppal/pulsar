@@ -84,6 +84,13 @@ pub trait VisitorMut<P: AsGeneratorPool> {
     ) -> Action {
         Action::None
     }
+    #[allow(unused_variables)]
+    fn start_delay(
+        &mut self, id: Id, delay: &mut usize, comp_view: &mut ComponentViewMut,
+        pool: &mut P
+    ) -> Action {
+        Action::None
+    }
 
     #[allow(unused_variables)]
     fn finish_for(
@@ -113,6 +120,13 @@ pub trait VisitorMut<P: AsGeneratorPool> {
     ) -> Action {
         Action::None
     }
+    #[allow(unused_variables)]
+    fn finish_delay(
+        &mut self, id: Id, delay: &mut usize, comp_view: &mut ComponentViewMut,
+        pool: &mut P
+    ) -> Action {
+        Action::None
+    }
 
     /// Returns whether the traversal had any effect on the control.
     fn traverse_component(
@@ -135,6 +149,9 @@ pub trait VisitorMut<P: AsGeneratorPool> {
         let id = control.id_in(pool);
         match control.deref_mut() {
             Control::Empty => Action::None,
+            Control::Delay(delay) => {
+                self.start_delay(id, delay, comp_view, pool)
+            }
             Control::For(for_) => self.start_for(id, for_, comp_view, pool),
             Control::Seq(seq) => self.start_seq(id, seq, comp_view, pool),
             Control::Par(par) => self.start_par(id, par, comp_view, pool),
@@ -148,7 +165,7 @@ pub trait VisitorMut<P: AsGeneratorPool> {
         .execute(&mut control, &mut did_modify);
 
         match control.deref_mut() {
-            Control::Empty => {}
+            Control::Empty | Control::Delay(_) => {}
             Control::For(for_) => {
                 did_modify |= self.traverse_control(for_.body, comp_view, pool);
             }
@@ -179,6 +196,9 @@ pub trait VisitorMut<P: AsGeneratorPool> {
         let id = control.id_in(pool);
         match control.deref_mut() {
             Control::Empty => Action::None,
+            Control::Delay(delay) => {
+                self.finish_delay(id, delay, comp_view, pool)
+            }
             Control::For(for_) => self.finish_for(id, for_, comp_view, pool),
             Control::Seq(seq) => self.finish_seq(id, seq, comp_view, pool),
             Control::Par(par) => self.finish_par(id, par, comp_view, pool),

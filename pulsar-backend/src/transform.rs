@@ -4,11 +4,12 @@
 //! the License, or (at your option) any later version.
 
 use pulsar_ir::{component::Component, from_ast::AsGeneratorPool};
+use pulsar_utils::id::Gen;
 
 pub mod agen;
 
 pub trait Transform<P: AsGeneratorPool> {
     fn apply(
-        &mut self, comp: &Component, pool: &mut P
+        &mut self, comp: &Component, pool: &mut P, gen: &mut Gen
     ) -> anyhow::Result<Component>;
 }

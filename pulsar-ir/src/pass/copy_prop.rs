@@ -9,7 +9,7 @@ use crate::{
     from_ast::AsGeneratorPool,
     port::Port,
     visitor::{Action, VisitorMut},
-    Ir
+    Ir,
 };
 use pulsar_utils::{id::Id, pool::Handle};
 use std::collections::HashMap;
@@ -23,7 +23,7 @@ pub fn replace_kill(ir: &Ir, new_kill: Handle<Port>) -> Ir {
     match ir {
         Ir::Add(_, a, b) => Ir::Add(new_kill, *a, *b),
         Ir::Mul(_, a, b) => Ir::Mul(new_kill, *a, *b),
-        Ir::Assign(_, b) => Ir::Assign(new_kill, *b)
+        Ir::Assign(_, b) => Ir::Assign(new_kill, *b),
     }
 }
 
@@ -32,7 +32,7 @@ impl CopyProp {
         let mut assigns = HashMap::<Handle<Port>, Ir>::new();
 
         fn replace(
-            assigns: &HashMap<Handle<Port>, Ir>, port: Handle<Port>
+            assigns: &HashMap<Handle<Port>, Ir>, port: Handle<Port>,
         ) -> Handle<Port> {
             *assigns
                 .get(&port)
@@ -52,12 +52,12 @@ impl CopyProp {
                     Ir::Add(kill, src1, src2) => Ir::Add(
                         kill,
                         replace(&assigns, src1),
-                        replace(&assigns, src2)
+                        replace(&assigns, src2),
                     ),
                     Ir::Mul(kill, src1, src2) => Ir::Mul(
                         kill,
                         replace(&assigns, src1),
-                        replace(&assigns, src2)
+                        replace(&assigns, src2),
                     ),
                     Ir::Assign(kill, src) => {
                         if let Some(latest_killer) = assigns.get(&src) {
@@ -76,7 +76,7 @@ impl CopyProp {
 impl<P: AsGeneratorPool> VisitorMut<P> for CopyProp {
     fn finish_seq(
         &mut self, _id: Id, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
-        _pool: &mut P
+        _pool: &mut P,
     ) -> Action {
         self.copy_prop(&mut seq.children);
         Action::None
@@ -84,7 +84,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for CopyProp {
 
     fn finish_par(
         &mut self, _id: Id, par: &mut Par, _comp_view: &mut ComponentViewMut,
-        _pool: &mut P
+        _pool: &mut P,
     ) -> Action {
         self.copy_prop(&mut par.children);
         Action::None
@@ -95,4 +95,6 @@ impl<P: AsGeneratorPool> Pass<P> for CopyProp {
     fn name(&self) -> &str {
         "copy-prop"
     }
+
+    fn setup(&mut self, _options: super::PassOptions) {}
 }

@@ -68,18 +68,18 @@ impl CalyxTarget {
         &self, comp: &Component, comp_name: String, builder: &mut CalyxBuilder
     ) {
         let mut ports = Vec::new();
-        for (var, cell) in comp.inputs() {
+        for var in comp.inputs() {
             ports.push(cir::PortDef::new(
                 var.to_string(),
-                cell.port_width() as u64,
+                comp.cells().get(var).unwrap().port_width() as u64,
                 cir::Direction::Input,
                 calyx_attr![]
             ));
         }
-        for (var, cell) in comp.outputs() {
+        for var in comp.outputs() {
             ports.push(cir::PortDef::new(
                 var.to_string(),
-                cell.port_width() as u64,
+                comp.cells().get(var).unwrap().port_width() as u64,
                 cir::Direction::Output,
                 calyx_attr![]
             ));
@@ -92,7 +92,6 @@ impl CalyxTarget {
         cells: &HashMap<Variable, Handle<Cell>>,
         calyx_comp: &'a mut CalyxComponent<'b, ()>
     ) -> CalyxPort {
-        println!("emitport {}", port);
         match port {
             Port::Constant(value) => {
                 if direction == Direction::ReadFrom {
@@ -113,11 +112,14 @@ impl CalyxTarget {
                     "out"
                 })
             }
-            Port::Access(array, _) => {
+            Port::LoweredAccess(array) => {
                 calyx_comp.signature().get(array.to_string())
             }
-            Port::PartialAccess(_, _) => {
+            Port::PartialAccess(..) => {
                 panic!("run the Canonicalize pass (got {:?})", port)
+            }
+            Port::Access(..) => {
+                panic!("run the RewriteAccesses pass")
             }
         }
     }
@@ -161,7 +163,7 @@ impl CalyxTarget {
                     calyx_comp
                 );
                 let lhs =
-                    self.emit_port(lhs, Direction::WriteTo, cells, calyx_comp);
+                    self.emit_port(lhs, Direction::ReadFrom, cells, calyx_comp);
                 let rhs =
                     self.emit_port(rhs, Direction::ReadFrom, cells, calyx_comp);
                 let multiplier =
@@ -194,6 +196,10 @@ impl CalyxTarget {
     ) {
         match control {
             Control::Empty => {}
+            Control::Delay(delay) => {
+                let delay = calyx_comp.add_static_group("delay", *delay);
+                calyx_control.insert_static(&delay);
+            }
             Control::For(for_) => calyx_control.seq(|calyx_control| {
                 let index = calyx_comp.find(for_.variant().to_string());
                 let lower = self.emit_port(
@@ -338,8 +344,17 @@ impl<P: AsGeneratorPool> Target<P> for CalyxTarget {
             flat_assign: true,
             emit_primitive_extmodules: false
         };
-        pm.execute_plan(&mut calyx_ctx, &["all".to_string()], &[], false)
-            .map_err(|e| anyhow!(DisplayDebug(e)))?;
+        pm.execute_plan(
+            &mut calyx_ctx,
+            &[
+                "well-formed".to_string(),
+                "compile".to_owned(),
+                "lower".to_string()
+            ],
+            &[],
+            false
+        )
+        .map_err(|e| anyhow!(DisplayDebug(e)))?;
 
         // let backend = cback::VerilogBackend;
         // backend

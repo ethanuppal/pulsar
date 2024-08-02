@@ -12,7 +12,10 @@ use pulsar_frontend::{
     ast::pretty_print::PrettyPrint,
     attribute::{AttributeProvider, Attributes}
 };
-use pulsar_utils::{id::Id, pool::Handle};
+use pulsar_utils::{
+    id::{Gen, Id},
+    pool::Handle
+};
 use std::{
     collections::{HashMap, HashSet},
     fmt::{self, Display, Write}
@@ -22,8 +25,8 @@ use std::{
 pub struct Component {
     label: Label,
     attributes: Attributes,
-    inputs: Vec<(Variable, Handle<Cell>)>,
-    outputs: Vec<(Variable, Handle<Cell>)>,
+    inputs: Vec<Variable>,
+    outputs: Vec<Variable>,
     // internal_cells: Vec<Handle<Cell>>,
     /// Like reg-alloc but for cells. need better way to represent
     cell_alloc: HashMap<Variable, Handle<Cell>>,
@@ -40,8 +43,8 @@ impl Component {
         Self {
             label,
             attributes: Attributes::default(),
-            inputs,
-            outputs,
+            inputs: inputs.iter().map(|(var, _)| *var).collect(),
+            outputs: outputs.iter().map(|(var, _)| *var).collect(),
             // internal_cells: Vec::new(),
             cell_alloc: initial_cell_alloc,
             cfg
@@ -52,11 +55,11 @@ impl Component {
         &self.label
     }
 
-    pub fn inputs(&self) -> &[(Variable, Handle<Cell>)] {
+    pub fn inputs(&self) -> &[Variable] {
         &self.inputs
     }
 
-    pub fn outputs(&self) -> &[(Variable, Handle<Cell>)] {
+    pub fn outputs(&self) -> &[Variable] {
         &self.outputs
     }
 
@@ -66,7 +69,7 @@ impl Component {
 
     pub fn internal_cells(&self) -> Vec<(Variable, Handle<Cell>)> {
         let mut interface = HashSet::new();
-        for (var, _) in self.inputs.iter().chain(&self.outputs) {
+        for var in self.inputs.iter().chain(&self.outputs) {
             interface.insert(var);
         }
         self.cell_alloc
@@ -103,12 +106,12 @@ impl PrettyPrint for Component {
             self.label,
             self.inputs
                 .iter()
-                .map(|(var, _)| var.to_string())
+                .map(|var| var.to_string())
                 .collect::<Vec<_>>()
                 .join(", "),
             self.outputs
                 .iter()
-                .map(|(var, _)| var.to_string())
+                .map(|var| var.to_string())
                 .collect::<Vec<_>>()
                 .join(", ")
         )?;
@@ -147,8 +150,8 @@ impl Display for Component {
 /// borrowed.
 pub struct ComponentViewMut<'comp> {
     pub label: &'comp mut Label,
-    pub inputs: &'comp mut Vec<(Variable, Handle<Cell>)>,
-    pub outputs: &'comp mut Vec<(Variable, Handle<Cell>)>,
+    pub inputs: &'comp mut Vec<Variable>,
+    pub outputs: &'comp mut Vec<Variable>,
     pub cell_alloc: &'comp mut HashMap<Variable, Handle<Cell>>
 }
 

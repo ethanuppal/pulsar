@@ -4,6 +4,7 @@
 //! the License, or (at your option) any later version.
 
 use self::{port::Port, variable::Variable};
+use port::PortUsage;
 use pulsar_utils::pool::Handle;
 use std::fmt::{self, Display};
 
@@ -32,14 +33,18 @@ impl Ir {
         }
     }
 
+    // messy
+
     pub fn gen(&self) -> Vec<Handle<Port>> {
+        use port::PortUsage;
+
         match self {
             Ir::Add(_, port, port2) | Ir::Mul(_, port, port2) => {
-                vec![*port, *port2]
+                let mut result = port.ports_used();
+                result.extend(port2.ports_used());
+                result
             }
-            Ir::Assign(_, port) => {
-                vec![*port]
-            }
+            Ir::Assign(_, port) => port.ports_used()
         }
     }
 
@@ -52,6 +57,43 @@ impl Ir {
                 vec![port]
             }
         }
+    }
+
+    pub fn ports_ref(&self) -> Vec<Handle<Port>> {
+        match self {
+            Ir::Add(port0, port1, port2) | Ir::Mul(port0, port1, port2) => {
+                vec![*port0, *port1, *port2]
+            }
+            Ir::Assign(port0, port1) => {
+                vec![*port0, *port1]
+            }
+        }
+    }
+
+    pub fn ports_mut(&mut self) -> Vec<&mut Handle<Port>> {
+        match self {
+            Ir::Add(port0, port1, port2) | Ir::Mul(port0, port1, port2) => {
+                vec![port0, port1, port2]
+            }
+            Ir::Assign(port0, port1) => {
+                vec![port0, port1]
+            }
+        }
+    }
+
+    pub fn ports_used_ref(&self) -> Vec<Handle<Port>> {
+        match self {
+            Ir::Add(port0, port1, port2) | Ir::Mul(port0, port1, port2) => {
+                vec![port0.ports_used(), port1.ports_used(), port2.ports_used()]
+            }
+            Ir::Assign(port0, port1) => {
+                vec![port0.ports_used(), port1.ports_used()]
+            }
+        }
+        .iter()
+        .flatten()
+        .cloned()
+        .collect()
     }
 }
 

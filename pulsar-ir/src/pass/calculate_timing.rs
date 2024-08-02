@@ -10,17 +10,17 @@ use crate::{
     control::Control,
     from_ast::AsGeneratorPool,
     visitor::{Action, VisitorMut},
-    Ir
+    Ir,
 };
 
-use super::Pass;
+use super::{Pass, PassOptions};
 
 pub struct CalculateTiming;
 
 impl<P: AsGeneratorPool> VisitorMut<P> for CalculateTiming {
     fn start_enable(
         &mut self, id: Id, enable: &mut Ir, _comp_view: &mut ComponentViewMut,
-        pool: &mut P
+        pool: &mut P,
     ) -> Action {
         let control = Handle::<Control>::from_id(id, pool);
         pool.set_metadata(
@@ -28,8 +28,8 @@ impl<P: AsGeneratorPool> VisitorMut<P> for CalculateTiming {
             match enable {
                 Ir::Add(_, _, _) => 0,
                 Ir::Mul(_, _, _) => 4,
-                Ir::Assign(_, _) => 0
-            }
+                Ir::Assign(_, _) => 0,
+            },
         );
         Action::None
     }
@@ -39,4 +39,6 @@ impl<P: AsGeneratorPool> Pass<P> for CalculateTiming {
     fn name(&self) -> &str {
         "calculate-timing"
     }
+
+    fn setup(&mut self, _options: PassOptions) {}
 }

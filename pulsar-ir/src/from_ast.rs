@@ -33,14 +33,8 @@ pub trait AsGeneratorPool:
     AsControlPool + AsPool<Port, ()> + AsPool<Cell, ()> {
 }
 
-#[derive(Default)]
-pub struct ComponentGenerator {
-    var_gen: Gen,
-    env: Environment<String, Variable> // cells: Environment<Variable, Cell>
-}
-
 pub fn ast_to_ir<P: AsGeneratorPool>(
-    ast: AST, mut pass_runner: PassRunner<P>, pool: &mut P
+    ast: AST, mut pass_runner: PassRunner<P>, pool: &mut P, var_gen: &mut Gen
 ) -> Vec<Component> {
     ast.into_iter()
         .map(|decl| match &decl.value {
@@ -50,7 +44,7 @@ pub fn ast_to_ir<P: AsGeneratorPool>(
                 inputs,
                 outputs,
                 body
-            } => ComponentGenerator::new().gen(
+            } => ComponentGenerator::new(var_gen).gen(
                 *name,
                 inputs,
                 outputs,
@@ -62,9 +56,21 @@ pub fn ast_to_ir<P: AsGeneratorPool>(
         .collect()
 }
 
-impl ComponentGenerator {
-    pub fn new() -> Self {
-        Self::default()
+pub struct ComponentGenerator<'gen> {
+    var_gen: &'gen mut Gen,
+    env: Environment<String, Variable> // cells: Environment<Variable, Cell>
+}
+
+impl<'gen> ComponentGenerator<'gen> {
+    pub fn new(var_gen: &'gen mut Gen) -> Self {
+        Self {
+            var_gen,
+            env: Environment::new()
+        }
+    }
+
+    pub fn new_var(&mut self) -> Variable {
+        Variable::from(self.var_gen.next())
     }
 
     pub fn gen<P: AsGeneratorPool>(
@@ -107,11 +113,6 @@ impl ComponentGenerator {
             Component::new(label, input_cells, output_cells, pool.add(cfg));
         pass_runner.run(&mut comp, pool);
         comp
-    }
-
-    /// A new IR variable unique to this generator.
-    fn new_var(&mut self) -> Variable {
-        Variable::from(self.var_gen.next())
     }
 
     /// Generates IR for `expr` in `par`, returning its result. If `expr` is an

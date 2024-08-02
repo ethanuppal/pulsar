@@ -9,15 +9,16 @@ use crate::{
     from_ast::AsGeneratorPool,
     port::Port,
     variable::Variable,
-    visitor::{Action, VisitorMut}
+    visitor::{Action, VisitorMut},
+    Ir,
 };
 use pulsar_utils::{id::Id, pool::Handle};
 use std::{
     collections::{HashMap, HashSet},
-    ops::Deref
+    ops::Deref,
 };
 
-use super::Pass;
+use super::{Pass, PassOptions};
 
 /// Conservative dead-code elimination. If an port assigned to does not
 /// appear within its scope, and it is not an output port, then the assignment
@@ -26,10 +27,13 @@ use super::Pass;
 /// Due to bad design on my part, each IR operation does not get an id, so dead
 /// code messes up whenever there are at least two reads of a variable, even if
 /// that variable is actually dead.
+///
+/// Requires that `CalculateTiming` has been run.
 #[derive(Default)]
 pub struct DeadCode {
+    preserve_timing: bool,
     output_ports: Vec<Variable>,
-    gen_sets: HashMap<Id, HashSet<Handle<Port>>>
+    gen_sets: HashMap<Id, HashSet<Handle<Port>>>,
 }
 
 impl DeadCode {
@@ -38,7 +42,7 @@ impl DeadCode {
     /// Precondition: all non-enable control in `children` already has a gen set
     /// computed.
     fn calculate_gen_set<P: AsGeneratorPool>(
-        &mut self, id: Id, children: &mut Vec<Handle<Control>>, pool: &P
+        &mut self, id: Id, children: &mut Vec<Handle<Control>>, pool: &P,
     ) {
         // bad software engineering here lol. see main struct doc comment for
         // why it's slightly broken
@@ -48,13 +52,13 @@ impl DeadCode {
                 for port in ir.gen() {
                     gen_set.insert(port);
                 }
-            } else if !matches!(**child, Control::Empty) {
+            } else if !matches!(**child, Control::Empty | Control::Delay(_)) {
                 // flatten and remove original child set
                 gen_set.extend(
                     self.gen_sets
                         .remove_entry(&child.id_in(pool))
                         .expect("precondition")
-                        .1
+                        .1,
                 );
             }
         }
@@ -76,7 +80,9 @@ impl DeadCode {
     /// Precondition: the gen set exists for the control with id `id` and
     /// children `children` (aka [`DeadCode::calculate_gen_set`] or
     /// [`DeadCode::extend_gen_set`]).
-    fn dead_code(&self, id: Id, children: &mut Vec<Handle<Control>>) -> Action {
+    fn dead_code<P: AsGeneratorPool>(
+        &self, id: Id, children: &mut Vec<Handle<Control>>, pool: &P,
+    ) -> Action {
         let gen_set = self
             .gen_sets
             .get(&id)
@@ -91,7 +97,12 @@ impl DeadCode {
                         .iter()
                         .all(|kill_var| !self.output_ports.contains(kill_var))
                 {
-                    children.remove(i);
+                    if self.preserve_timing {
+                        children.remove(i);
+                    } else {
+                        let latency = *pool.get_metadata(children[i]);
+                        *children[i] = Control::Delay(latency);
+                    }
                     did_modify = true;
                 }
             }
@@ -110,13 +121,15 @@ impl<P: AsGeneratorPool> VisitorMut<P> for DeadCode {
             "You're using the dead code pass, which is currently unstable"
         );
 
-        self.output_ports =
-            comp.outputs().iter().map(|(var, _)| var).cloned().collect();
+        self.output_ports = comp.outputs().to_vec();
+
+        log::trace!("BEFORE DEAD CODE:");
+        log::trace!("{}", comp);
     }
 
     fn finish_for(
         &mut self, id: Id, for_: &mut For, _comp_view: &mut ComponentViewMut,
-        pool: &mut P
+        pool: &mut P,
     ) -> Action {
         self.extend_gen_set(id, for_.body.id_in(pool));
         Action::None
@@ -124,7 +137,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for DeadCode {
 
     fn finish_if_else(
         &mut self, id: Id, if_else: &mut IfElse,
-        _comp_view: &mut ComponentViewMut, pool: &mut P
+        _comp_view: &mut ComponentViewMut, pool: &mut P,
     ) -> Action {
         self.extend_gen_set(id, if_else.true_branch.id_in(pool));
         self.extend_gen_set(id, if_else.false_branch.id_in(pool));
@@ -133,23 +146,27 @@ impl<P: AsGeneratorPool> VisitorMut<P> for DeadCode {
 
     fn finish_seq(
         &mut self, id: Id, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
-        pool: &mut P
+        pool: &mut P,
     ) -> Action {
         self.calculate_gen_set(id, &mut seq.children, pool);
-        self.dead_code(id, &mut seq.children)
+        self.dead_code(id, &mut seq.children, pool)
     }
 
     fn finish_par(
         &mut self, id: Id, par: &mut Par, _comp_view: &mut ComponentViewMut,
-        pool: &mut P
+        pool: &mut P,
     ) -> Action {
         self.calculate_gen_set(id, &mut par.children, pool);
-        self.dead_code(id, &mut par.children)
+        self.dead_code(id, &mut par.children, pool)
     }
 }
 
 impl<P: AsGeneratorPool> Pass<P> for DeadCode {
     fn name(&self) -> &str {
         "dead-code"
+    }
+
+    fn setup(&mut self, options: PassOptions) {
+        self.preserve_timing = options.contains(PassOptions::PRESERVE_TIMING);
     }
 }

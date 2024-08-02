@@ -205,6 +205,7 @@ impl Display for IfElse {
 pub enum Control {
     #[default]
     Empty,
+    Delay(usize),
     For(For),
     Seq(Seq),
     Par(Par),
@@ -216,6 +217,7 @@ impl PrettyPrint for Control {
     fn pretty_print(&self, f: &mut IndentFormatter<'_, '_>) -> fmt::Result {
         match self {
             Control::Empty => Ok(()),
+            Control::Delay(delay) => write!(f, "delay {}", delay),
             Control::For(for_) => for_.pretty_print(f),
             Control::Seq(seq) => seq.pretty_print(f),
             Control::Par(par) => par.pretty_print(f),

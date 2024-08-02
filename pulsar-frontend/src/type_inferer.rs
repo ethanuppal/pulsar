@@ -565,7 +565,7 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                 // todo: lhs_type is an lvalue
                 self.new_constraint(lhs_type, rhs_type);
             }
-            StmtValue::Divider(_) => todo!(),
+            StmtValue::Divider(_) => {}
             StmtValue::For {
                 var,
                 lower,

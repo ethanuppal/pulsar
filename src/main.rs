@@ -4,7 +4,7 @@
 //! the License, or (at your option) any later version.
 
 use pulsar_backend::{
-    target::{calyx::CalyxTarget, OutputFile},
+    target::{calyx::CalyxTarget, print::PrintTarget, OutputFile},
     transform::agen::AddressGeneratorTransform,
     BackendBuilder
 };
@@ -19,6 +19,7 @@ use pulsar_ir::{from_ast, pass::PassRunner};
 use pulsar_lang::{context::Context, utils::OptionCheckError};
 use pulsar_utils::{
     error::{ErrorCode, ErrorManager},
+    id::Gen,
     span::Source
 };
 use std::env;
@@ -91,11 +92,13 @@ pub fn main() -> anyhow::Result<()> {
 
     log::info!("Optimizing...");
 
-    let mut comps = from_ast::ast_to_ir(ast, PassRunner::lowering(), &mut ctx);
+    let mut var_gen = Gen::new();
+    let mut comps =
+        from_ast::ast_to_ir(ast, PassRunner::compile(), &mut ctx, &mut var_gen);
 
-    for comp in &comps {
-        println!("{}", comp);
-    }
+    // for comp in &comps {
+    //     println!("{}", comp);
+    // }
 
     let Some(main) = comps
         .iter_mut()
@@ -112,13 +115,16 @@ pub fn main() -> anyhow::Result<()> {
 
     log::info!("Emitting calyx accelerator and address generator (TODO)...");
 
-    let mut calyx_backend = BackendBuilder::new().target(CalyxTarget).build();
-    calyx_backend.lower(main, &mut ctx, OutputFile::Stdout)?;
     let mut agen_backend = BackendBuilder::new()
-        .target(CalyxTarget)
+        .target(PrintTarget)
         .through(AddressGeneratorTransform)
         .build();
-    agen_backend.lower(main, &mut ctx, OutputFile::Stdout)?;
+    agen_backend.emit(main, &mut ctx, &mut var_gen, OutputFile::Stdout)?;
+
+    PassRunner::lower().run(main, &mut ctx);
+
+    let mut calyx_backend = BackendBuilder::new().target(PrintTarget).build();
+    calyx_backend.emit(main, &mut ctx, &mut var_gen, OutputFile::Stdout)?;
 
     // let command_output = Command::new("fud")
     //     .args(["c", "global.root"])

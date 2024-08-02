@@ -5,7 +5,10 @@
 
 use super::variable::Variable;
 use pulsar_utils::pool::Handle;
-use std::fmt::{self, Display};
+use std::{
+    fmt::{self, Display},
+    ops::Deref
+};
 
 /// A port represents a constant or an lvalue.
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -15,7 +18,8 @@ pub enum Port {
     /// Non-canonical -- the `Canonicalize` collapses these into
     /// [`Port::Access`].
     PartialAccess(Handle<Port>, Handle<Port>),
-    Access(Variable, Vec<Handle<Port>>)
+    Access(Variable, Vec<Handle<Port>>),
+    LoweredAccess(Variable)
 }
 
 impl Port {
@@ -43,6 +47,7 @@ impl Port {
                 result.extend(index.vars());
                 result
             }
+            Self::LoweredAccess(var) => vec![*var],
             _ => vec![]
         }
     }
@@ -63,7 +68,26 @@ impl Display for Port {
                     .map(|i| format!("[{}]", i))
                     .collect::<Vec<_>>()
                     .join("")
-            )
+            ),
+            Self::LoweredAccess(var) => write!(f, "{}[<generated>]", var)
         }
+    }
+}
+
+// messy
+
+pub trait PortUsage {
+    fn ports_used(&self) -> Vec<Handle<Port>>;
+}
+
+impl PortUsage for Handle<Port> {
+    fn ports_used(&self) -> Vec<Handle<Port>> {
+        let mut result = vec![*self];
+        match self.deref() {
+            Port::Constant(_) | Port::Variable(_) | Port::LoweredAccess(_) => {}
+            Port::PartialAccess(_, port) => result.push(*port),
+            Port::Access(_, ports) => result.extend(ports)
+        }
+        result
     }
 }

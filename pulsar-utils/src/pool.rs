@@ -87,6 +87,12 @@ impl<T> Clone for Handle<T> {
     }
 }
 
+impl<T: Clone> Handle<T> {
+    pub fn clone_out(&self) -> T {
+        unsafe { (*self.pointer).clone() }
+    }
+}
+
 impl<T> Copy for Handle<T> {}
 
 impl<T: PartialEq> PartialEq for Handle<T> {

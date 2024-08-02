@@ -5,7 +5,10 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use pulsar_ir::{component::Component, from_ast::AsGeneratorPool};
+use pulsar_ir::{
+    component::Component, from_ast::AsGeneratorPool, pass::PassRunner
+};
+use pulsar_utils::id::Gen;
 use target::{OutputFile, Target};
 use transform::Transform;
 
@@ -18,15 +21,16 @@ pub struct Backend<P: AsGeneratorPool> {
 }
 
 impl<P: AsGeneratorPool> Backend<P> {
-    pub fn lower(
-        &mut self, comp: &Component, pool: &mut P, output: OutputFile
+    pub fn emit(
+        &mut self, comp: &Component, pool: &mut P, gen: &mut Gen,
+        output: OutputFile
     ) -> anyhow::Result<()> {
         let mut transforms = self.transforms.iter_mut();
         let mut result_comp;
         let comp = if let Some(first) = transforms.next() {
-            result_comp = first.apply(comp, pool)?;
+            result_comp = first.apply(comp, pool, gen)?;
             for transform in transforms {
-                result_comp = transform.apply(&result_comp, pool)?;
+                result_comp = transform.apply(&result_comp, pool, gen)?;
             }
             &result_comp
         } else {

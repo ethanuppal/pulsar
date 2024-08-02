@@ -7,6 +7,7 @@ use pulsar_ir::{component::Component, from_ast::AsGeneratorPool};
 use std::path::PathBuf;
 
 pub mod calyx;
+pub mod print;
 
 /// This interface hasn't been finalized yet, so it is quite sloppy as written
 pub enum OutputFile {
