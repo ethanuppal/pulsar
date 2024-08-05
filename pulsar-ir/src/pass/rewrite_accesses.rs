@@ -5,11 +5,11 @@
 
 use super::{Pass, PassOptions};
 use crate::{
-    component::ComponentViewMut,
+    component::{Component, ComponentViewMut},
     from_ast::AsGeneratorPool,
     port::Port,
     visitor::{Action, VisitorMut},
-    Ir,
+    Ir
 };
 use pulsar_utils::id::Id;
 use std::ops::Deref;
@@ -19,7 +19,7 @@ pub struct RewriteAccesses;
 impl<P: AsGeneratorPool> VisitorMut<P> for RewriteAccesses {
     fn start_enable(
         &mut self, _id: Id, enable: &mut Ir, _comp_view: &mut ComponentViewMut,
-        _pool: &mut P,
+        _pool: &mut P
     ) -> Action {
         let mut did_modify = false;
         for port in enable.ports_mut() {
@@ -37,9 +37,13 @@ impl<P: AsGeneratorPool> VisitorMut<P> for RewriteAccesses {
 }
 
 impl<P: AsGeneratorPool> Pass<P> for RewriteAccesses {
-    fn name(&self) -> &str {
+    fn name() -> &'static str {
         "rewrite-accesses"
     }
 
-    fn setup(&mut self, _options: PassOptions) {}
+    fn from(
+        _options: PassOptions, _comp: &mut Component, _pool: &mut P
+    ) -> Self {
+        Self
+    }
 }

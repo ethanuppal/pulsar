@@ -25,7 +25,9 @@ pub enum Port {
 impl Port {
     pub fn root_var(&self) -> Option<Variable> {
         match self {
-            Port::Variable(var) | Port::Access(var, _) => Some(*var),
+            Port::Variable(var)
+            | Port::Access(var, _)
+            | Port::LoweredAccess(var) => Some(*var),
             Port::PartialAccess(port, _) => port.root_var(),
             _ => None
         }

@@ -9,7 +9,7 @@ use crate::{
     port::Port,
     variable::Variable,
     visitor::{Action, VisitorMut},
-    Ir,
+    Ir
 };
 use pulsar_utils::{id::Id, pool::Handle};
 use std::{collections::HashSet, ops::Deref};
@@ -29,13 +29,13 @@ pub struct WellFormed {
     assigned_ports: HashSet<Handle<Port>>,
     // Redundant but yeah
     assigned_vars: HashSet<Variable>,
-    read_vars: HashSet<Variable>,
+    read_vars: HashSet<Variable>
 }
 
 impl<P: AsGeneratorPool> VisitorMut<P> for WellFormed {
     fn start_enable(
         &mut self, _id: Id, enable: &mut Ir, _comp_view: &mut ComponentViewMut,
-        _pool: &mut P,
+        _pool: &mut P
     ) -> Action {
         for port in enable.ports_used_ref() {
             if let Port::Variable(var) = port.deref() {
@@ -79,9 +79,13 @@ impl<P: AsGeneratorPool> VisitorMut<P> for WellFormed {
 }
 
 impl<P: AsGeneratorPool> Pass<P> for WellFormed {
-    fn name(&self) -> &str {
+    fn name() -> &'static str {
         "well-formed"
     }
 
-    fn setup(&mut self, _options: PassOptions) {}
+    fn from(
+        _options: PassOptions, _comp: &mut Component, _pool: &mut P
+    ) -> Self {
+        Self::default()
+    }
 }

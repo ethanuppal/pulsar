@@ -8,6 +8,7 @@ use port::PortUsage;
 use pulsar_utils::pool::Handle;
 use std::fmt::{self, Display};
 
+pub mod analysis;
 pub mod cell;
 pub mod component;
 pub mod control;
@@ -33,9 +34,14 @@ impl Ir {
         }
     }
 
+    pub fn kill_var(&self) -> Option<Variable> {
+        self.kill().root_var()
+    }
+
     // messy
 
-    pub fn gen(&self) -> Vec<Handle<Port>> {
+    /// Every single port read by this IR instruction, recursively.
+    pub fn gen_used(&self) -> Vec<Handle<Port>> {
         use port::PortUsage;
 
         match self {
@@ -59,6 +65,7 @@ impl Ir {
         }
     }
 
+    /// The top-level ports in this IR instruction.
     pub fn ports_ref(&self) -> Vec<Handle<Port>> {
         match self {
             Ir::Add(port0, port1, port2) | Ir::Mul(port0, port1, port2) => {
@@ -70,6 +77,7 @@ impl Ir {
         }
     }
 
+    /// The top-level ports in this IR instruction.
     pub fn ports_mut(&mut self) -> Vec<&mut Handle<Port>> {
         match self {
             Ir::Add(port0, port1, port2) | Ir::Mul(port0, port1, port2) => {
@@ -81,6 +89,7 @@ impl Ir {
         }
     }
 
+    /// Every single port referenced in this IR instruction.
     pub fn ports_used_ref(&self) -> Vec<Handle<Port>> {
         match self {
             Ir::Add(port0, port1, port2) | Ir::Mul(port0, port1, port2) => {

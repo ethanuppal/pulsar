@@ -1,11 +1,9 @@
 func main(input: [Int; 4096]) -> (output: [Int; 4096]) {
     for row in 1 ..< 63 {
         for col in 1 ..< 63 {
-            timetravel -> (index) {
-                let col_start = row * 64
-                ---
-                index = col_start + col
-            }
+            let col_start = row * 64
+            ---
+            let index = col_start + col
             output[index] = input[index]
         }
     }

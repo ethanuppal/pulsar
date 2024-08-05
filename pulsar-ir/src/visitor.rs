@@ -3,16 +3,15 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use std::ops::DerefMut;
-
-use pulsar_utils::{id::Id, pool::Handle};
-
 use crate::{
     component::{Component, ComponentViewMut},
     control::{Control, For, IfElse, Par, Seq},
     from_ast::AsGeneratorPool,
     Ir
 };
+use either::Either::{self, Left, Right};
+use pulsar_utils::{id::Id, pool::Handle};
+use std::{iter, ops::DerefMut};
 
 pub enum Action {
     None,
@@ -37,6 +36,16 @@ impl Action {
                 *did_modify = true;
             }
         }
+    }
+}
+
+fn reverse_if<Item, I: iter::DoubleEndedIterator<Item = Item>>(
+    iter: I, reverse: bool
+) -> Either<I, iter::Rev<I>> {
+    if reverse {
+        Right(iter.rev())
+    } else {
+        Left(iter)
     }
 }
 
@@ -121,6 +130,14 @@ pub trait VisitorMut<P: AsGeneratorPool> {
         Action::None
     }
     #[allow(unused_variables)]
+    fn finish_enable(
+        &mut self, id: Id, enable: &mut Ir, comp_view: &mut ComponentViewMut,
+        pool: &mut P
+    ) -> Action {
+        Action::None
+    }
+
+    #[allow(unused_variables)]
     fn finish_delay(
         &mut self, id: Id, delay: &mut usize, comp_view: &mut ComponentViewMut,
         pool: &mut P
@@ -130,11 +147,12 @@ pub trait VisitorMut<P: AsGeneratorPool> {
 
     /// Returns whether the traversal had any effect on the control.
     fn traverse_component(
-        &mut self, comp: &mut Component, pool: &mut P
+        &mut self, comp: &mut Component, pool: &mut P, reverse: bool
     ) -> bool {
         self.start_component(comp, pool);
         let (cfg, mut comp_view) = comp.as_view_mut();
-        let did_modify = self.traverse_control(cfg, &mut comp_view, pool);
+        let did_modify =
+            self.traverse_control(cfg, &mut comp_view, pool, reverse);
         self.finish_component(comp, pool);
         did_modify
     }
@@ -142,8 +160,10 @@ pub trait VisitorMut<P: AsGeneratorPool> {
     /// Returns whether the traversal had any effect on the component.
     fn traverse_control(
         &mut self, mut control: Handle<Control>,
-        comp_view: &mut ComponentViewMut, pool: &mut P
+        comp_view: &mut ComponentViewMut, pool: &mut P, reverse: bool
     ) -> bool {
+        log::trace!("visiting control: {}", control);
+
         let mut did_modify = false;
 
         let id = control.id_in(pool);
@@ -167,27 +187,33 @@ pub trait VisitorMut<P: AsGeneratorPool> {
         match control.deref_mut() {
             Control::Empty | Control::Delay(_) => {}
             Control::For(for_) => {
-                did_modify |= self.traverse_control(for_.body, comp_view, pool);
+                did_modify |=
+                    self.traverse_control(for_.body, comp_view, pool, reverse);
             }
             Control::Seq(seq) => {
-                for child in &seq.children {
+                for child in reverse_if(seq.children().iter(), reverse) {
                     did_modify |=
-                        self.traverse_control(*child, comp_view, pool);
+                        self.traverse_control(*child, comp_view, pool, reverse);
                 }
             }
             Control::Par(par) => {
-                for child in &par.children {
+                for child in reverse_if(par.children().iter(), reverse) {
                     did_modify |=
-                        self.traverse_control(*child, comp_view, pool);
+                        self.traverse_control(*child, comp_view, pool, reverse);
                 }
             }
             Control::IfElse(if_else) => {
-                did_modify |=
-                    self.traverse_control(if_else.true_branch, comp_view, pool);
+                did_modify |= self.traverse_control(
+                    if_else.true_branch,
+                    comp_view,
+                    pool,
+                    reverse
+                );
                 did_modify |= self.traverse_control(
                     if_else.false_branch,
                     comp_view,
-                    pool
+                    pool,
+                    reverse
                 );
             }
             Control::Enable(_) => {}
@@ -205,7 +231,9 @@ pub trait VisitorMut<P: AsGeneratorPool> {
             Control::IfElse(if_else) => {
                 self.finish_if_else(id, if_else, comp_view, pool)
             }
-            Control::Enable(_) => Action::None
+            Control::Enable(enable) => {
+                self.finish_enable(id, enable, comp_view, pool)
+            }
         }
         .execute(&mut control, &mut did_modify);
 

@@ -8,10 +8,9 @@ type Repr = u16;
 #[repr(u8)]
 pub enum Attribute {
     /// Not present in user source.
-    Generated = 1 << 0
-    // /// A main accelerator kernel for which an address generator should be
-    // /// created.
-    // Kernel = 1 << 1
+    Generated = 1 << 0 /* /// A main accelerator kernel for which an address generator should be
+                        * /// created.
+                        * Kernel = 1 << 1 */
 }
 
 #[derive(Default, PartialEq, Eq, Clone, Copy)]

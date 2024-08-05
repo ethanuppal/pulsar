@@ -9,12 +9,12 @@ use pulsar_utils::id::Id;
 
 use crate::{
     cell::Cell,
-    component::ComponentViewMut,
+    component::{Component, ComponentViewMut},
     control::{Control, For, Seq},
     from_ast::AsGeneratorPool,
     port::Port,
     visitor::{Action, VisitorMut},
-    Ir,
+    Ir
 };
 
 use super::{Pass, PassOptions};
@@ -32,11 +32,11 @@ pub fn min_bits_to_represent(value: usize) -> usize {
 impl<P: AsGeneratorPool> VisitorMut<P> for CellAlloc {
     fn start_for(
         &mut self, id: Id, for_: &mut For, comp_view: &mut ComponentViewMut,
-        pool: &mut P,
+        pool: &mut P
     ) -> Action {
         let index_reg_bits = match for_.exclusive_upper_bound() {
             Port::Constant(value) => min_bits_to_represent(*value as usize),
-            _ => 64,
+            _ => 64
         };
         comp_view
             .cell_alloc
@@ -49,7 +49,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for CellAlloc {
     // are any nested pars it won't work :(
     fn start_seq(
         &mut self, id: Id, seq: &mut Seq, comp_view: &mut ComponentViewMut,
-        pool: &mut P,
+        pool: &mut P
     ) -> Action {
         for child in &seq.children {
             if let Control::Enable(enable) = child.deref() {
@@ -65,9 +65,13 @@ impl<P: AsGeneratorPool> VisitorMut<P> for CellAlloc {
 }
 
 impl<P: AsGeneratorPool> Pass<P> for CellAlloc {
-    fn name(&self) -> &str {
+    fn name() -> &'static str {
         "cell-alloc"
     }
 
-    fn setup(&mut self, _options: PassOptions) {}
+    fn from(
+        _options: PassOptions, _comp: &mut Component, _pool: &mut P
+    ) -> Self {
+        Self
+    }
 }

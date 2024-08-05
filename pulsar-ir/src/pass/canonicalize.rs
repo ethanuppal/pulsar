@@ -4,12 +4,12 @@
 //! the License, or (at your option) any later version.
 
 use crate::{
-    component::ComponentViewMut,
+    component::{Component, ComponentViewMut},
     control::{Control, Par, Seq},
     from_ast::AsGeneratorPool,
     port::Port,
     visitor::{Action, VisitorMut},
-    Ir,
+    Ir
 };
 use match_deref::match_deref;
 use pulsar_utils::{id::Id, pool::Handle};
@@ -18,7 +18,7 @@ use std::ops::{Deref, DerefMut};
 use super::{copy_prop::replace_kill, Pass, PassOptions};
 
 fn fold_partial_access<P: AsGeneratorPool>(
-    mut port: Handle<Port>, pool: &mut P,
+    mut port: Handle<Port>, pool: &mut P
 ) -> Handle<Port> {
     if let Port::PartialAccess(..) = port.deref() {
         let mut indices = Vec::new();
@@ -53,7 +53,7 @@ impl Canonicalize {
     /// Either the original control pair returned unchanged on the left or a
     /// replacement on the right.
     fn collapse_partial_access_pair<P: AsGeneratorPool>(
-        &self, first: &Control, second: &Control, pool: &mut P,
+        &self, first: &Control, second: &Control, pool: &mut P
     ) -> Option<Control> {
         match_deref! {
             match &(first, second) {
@@ -101,7 +101,7 @@ impl Canonicalize {
     }
 
     fn collapse_partial_accesses<P: AsGeneratorPool>(
-        &self, children: &mut Vec<Handle<Control>>, pool: &mut P,
+        &self, children: &mut Vec<Handle<Control>>, pool: &mut P
     ) {
         // first, take pairs of PartialAccess/PartialAccess and
         // Access/PartialAccess and fold them up into Access
@@ -113,7 +113,7 @@ impl Canonicalize {
                 if let Some(replace) = self.collapse_partial_access_pair(
                     &children[i],
                     &children[i + 1],
-                    pool,
+                    pool
                 ) {
                     *children[i] = replace;
                     children.remove(i + 1);
@@ -140,15 +140,16 @@ impl Canonicalize {
 impl<P: AsGeneratorPool> VisitorMut<P> for Canonicalize {
     fn start_seq(
         &mut self, _id: Id, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
-        pool: &mut P,
+        pool: &mut P
     ) -> Action {
         self.collapse_partial_accesses(&mut seq.children, pool);
+
         Action::ModifiedInternally
     }
 
     fn start_par(
         &mut self, _id: Id, par: &mut Par, _comp_view: &mut ComponentViewMut,
-        pool: &mut P,
+        pool: &mut P
     ) -> Action {
         self.collapse_partial_accesses(&mut par.children, pool);
         Action::ModifiedInternally
@@ -156,9 +157,13 @@ impl<P: AsGeneratorPool> VisitorMut<P> for Canonicalize {
 }
 
 impl<P: AsGeneratorPool> Pass<P> for Canonicalize {
-    fn name(&self) -> &str {
+    fn name() -> &'static str {
         "canonicalize"
     }
 
-    fn setup(&mut self, _options: PassOptions) {}
+    fn from(
+        _options: PassOptions, _comp: &mut Component, _pool: &mut P
+    ) -> Self {
+        Self
+    }
 }

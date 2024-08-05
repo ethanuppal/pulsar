@@ -14,11 +14,11 @@ use pulsar_ir::{
     memory::Memory,
     pass::{
         cell_alloc::CellAlloc, collapse_control::CollapseControl,
-        copy_prop::CopyProp, dead_code::DeadCode, PassOptions, PassRunner,
+        copy_prop::CopyProp, dead_code::DeadCode, PassOptions, PassRunner
     },
     port::Port,
     variable::Variable,
-    Ir,
+    Ir
 };
 use pulsar_utils::id::Gen;
 use std::{collections::HashMap, ops::Deref};
@@ -29,7 +29,7 @@ pub struct AddressGeneratorTransform;
 impl AddressGeneratorTransform {
     fn build_for<P: AsGeneratorPool>(
         &self, builder: &mut ControlBuilder<P>, for_: &For,
-        memories: &HashMap<Variable, Memory>,
+        memories: &HashMap<Variable, Memory>
     ) {
         let body = builder.with_pool(|pool| {
             let mut builder = ControlBuilder::new(pool);
@@ -41,13 +41,13 @@ impl AddressGeneratorTransform {
             for_.variant(),
             for_.lower_bound().clone(),
             for_.exclusive_upper_bound().clone(),
-            body,
+            body
         )));
     }
 
     fn build_seq<P: AsGeneratorPool>(
         &self, builder: &mut ControlBuilder<P>, seq: &Seq,
-        memories: &HashMap<Variable, Memory>,
+        memories: &HashMap<Variable, Memory>
     ) {
         let new_seq = builder.with_pool(|pool| {
             let mut builder = ControlBuilder::new(pool);
@@ -62,7 +62,7 @@ impl AddressGeneratorTransform {
 
     fn build_par<P: AsGeneratorPool>(
         &self, builder: &mut ControlBuilder<P>, par: &Par,
-        memories: &HashMap<Variable, Memory>,
+        memories: &HashMap<Variable, Memory>
     ) {
         let new_par = builder.with_pool(|pool| {
             let mut builder = ControlBuilder::new(pool);
@@ -86,7 +86,7 @@ impl AddressGeneratorTransform {
     ///   with assignments to the address ports after computing their addresses.
     fn build_ir<P: AsGeneratorPool>(
         &self, builder: &mut ControlBuilder<P>, ir: &Ir,
-        memories: &HashMap<Variable, Memory>,
+        memories: &HashMap<Variable, Memory>
     ) {
         // since anything involving address access won't have side effects by
         // disallowing data-dependent addressing, we should be fine to ignore
@@ -103,7 +103,7 @@ impl AddressGeneratorTransform {
 
     fn build_control<P: AsGeneratorPool>(
         &self, builder: &mut ControlBuilder<P>, control: &Control,
-        memories: &HashMap<Variable, Memory>,
+        memories: &HashMap<Variable, Memory>
     ) {
         match control {
             Control::Empty => {}
@@ -114,26 +114,26 @@ impl AddressGeneratorTransform {
             Control::Seq(seq) => self.build_seq(builder, seq, memories),
             Control::Par(par) => self.build_par(builder, par, memories),
             Control::IfElse(_) => todo!(),
-            Control::Enable(ir) => self.build_ir(builder, ir, memories),
+            Control::Enable(ir) => self.build_ir(builder, ir, memories)
         }
     }
 }
 
 impl<P: AsGeneratorPool> Transform<P> for AddressGeneratorTransform {
     fn apply(
-        &mut self, comp: &Component, pool: &mut P, var_gen: &mut Gen,
+        &mut self, comp: &Component, pool: &mut P, var_gen: &mut Gen
     ) -> anyhow::Result<Component> {
         let memories = comp
             .cells()
             .iter()
             .flat_map(|(var, cell)| match cell.deref() {
                 Cell::Memory(memory) => Some((*var, memory.clone())),
-                Cell::Register(_) => None,
+                Cell::Register(_) => None
             })
             .collect::<HashMap<_, _>>();
         let label = Label::from(
             Name::from(format!("{}_agen", comp.label().name.unmangled())),
-            Visibility::Public,
+            Visibility::Public
         );
 
         let mut builder = ControlBuilder::new(pool);
@@ -149,25 +149,25 @@ impl<P: AsGeneratorPool> Transform<P> for AddressGeneratorTransform {
                     (
                         *var,
                         pool.add(Cell::Register(
-                            memory.flattened_address_width(),
-                        )),
+                            memory.flattened_address_width()
+                        ))
                     )
                 })
                 .collect(),
-            pool.add(cfg),
+            pool.add(cfg)
         );
 
         println!("??? {}", agen);
 
-        let mut runner = PassRunner::core();
+        // let mut runner = PassRunner::core();
         // runner.register_converge(10, |runner| {
         //     runner.register(CopyProp);
         //     runner.register(DeadCode::new(false));
-        // });
-        runner
-            .register(CollapseControl::default(), PassOptions::PRESERVE_TIMING);
-        runner.register(CellAlloc, PassOptions::PRESERVE_TIMING);
-        runner.run(&mut agen, pool);
+        // // });
+        // runner
+        //     .register(CollapseControl::default(),
+        // PassOptions::PRESERVE_TIMING); runner.register(CellAlloc,
+        // PassOptions::PRESERVE_TIMING); runner.run(&mut agen, pool);
 
         Ok(agen)
     }

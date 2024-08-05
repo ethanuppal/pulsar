@@ -8,14 +8,18 @@ mod tests {
     use insta::assert_snapshot;
     use pulsar_frontend::{
         ast::{
-            decl::{Decl, DeclValue}, expr::{Expr, ExprValue}, node::{AsNodePool, NodeInterface}, stmt::{Stmt, StmtValue}, ty::TypeValue
+            decl::{Decl, DeclValue},
+            expr::{Expr, ExprValue},
+            node::{AsNodePool, NodeInterface},
+            stmt::{Stmt, StmtValue},
+            ty::TypeValue
         },
         token::{Token, TokenType}
     };
     use pulsar_lang::context::Context;
     use pulsar_utils::{
-        span::Loc,
-        pool::{AsPool, Handle}
+        pool::{AsPool, Handle},
+        span::Loc
     };
     use std::cell::RefCell;
 
@@ -40,7 +44,7 @@ mod tests {
     #[test]
     fn test_format_constant_int() {
         let dumb = CTX.with_borrow_mut(|ctx| dumb_token(ctx));
-        
+
         assert_snapshot!(
             Expr::new(ExprValue::ConstantInt(5), dumb,dumb).to_string(), @"5"
         )
@@ -73,8 +77,8 @@ mod tests {
     #[test]
     fn test_format_function() {
         let dumb = CTX.with_borrow_mut(|ctx| dumb_token(ctx));
-        let x =
-            CTX.with_borrow_mut(|ctx| make_token(ctx, TokenType::Identifier, "x"));
+        let x = CTX
+            .with_borrow_mut(|ctx| make_token(ctx, TokenType::Identifier, "x"));
 
         CTX.with_borrow_mut(|ctx| {
             let value = ctx.new(
@@ -107,21 +111,18 @@ mod tests {
     #[test]
     fn test_format_let_binding() {
         let dumb = CTX.with_borrow_mut(|ctx| dumb_token(ctx));
-        let x = CTX.with_borrow_mut(|ctx| make_token(ctx, TokenType::Identifier, "x"));
+        let x = CTX
+            .with_borrow_mut(|ctx| make_token(ctx, TokenType::Identifier, "x"));
         let value = CTX.with_borrow_mut(|ctx| {
-            ctx.new(
-                ExprValue::ConstantInt(5),
-                dumb,
-                dumb
-            )
+            ctx.new(ExprValue::ConstantInt(5), dumb, dumb)
         });
-    
+
         assert_snapshot!(
             Stmt::new(
                 StmtValue::Let {
                     name: x,
                     hint: None,
-                    value 
+                    value
                 },
                 dumb,
                 dumb

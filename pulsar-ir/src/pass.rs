@@ -3,21 +3,18 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use std::ops::BitOr;
-
 use crate::{
-    component::Component, from_ast::AsGeneratorPool, visitor::VisitorMut,
+    component::Component, from_ast::AsGeneratorPool, visitor::VisitorMut
 };
-use calculate_timing::CalculateTiming;
 use canonicalize::Canonicalize;
 use cell_alloc::CellAlloc;
 use collapse_control::CollapseControl;
 use copy_prop::CopyProp;
 use dead_code::DeadCode;
 use rewrite_accesses::RewriteAccesses;
+use std::ops::BitOr;
 use well_formed::WellFormed;
 
-pub mod calculate_timing;
 pub mod canonicalize;
 pub mod cell_alloc;
 pub mod collapse_control;
@@ -47,90 +44,95 @@ impl BitOr for PassOptions {
 }
 
 pub trait Pass<P: AsGeneratorPool>: VisitorMut<P> {
-    fn name(&self) -> &str;
+    fn from(options: PassOptions, comp: &mut Component, pool: &mut P) -> Self;
 
-    fn setup(&mut self, options: PassOptions);
+    fn name() -> &'static str;
 }
 
+type PassCall<P: AsGeneratorPool> =
+    Box<dyn FnMut(&mut Component, &mut P, PassOptions) -> bool>;
+
 enum PassOp<P: AsGeneratorPool> {
-    Boxed(Box<dyn Pass<P>>, PassOptions),
+    Call(PassCall<P>, &'static str, PassOptions),
     Coverge(usize),
-    EndConverge,
+    EndConverge
 }
 
 pub struct PassRunner<P: AsGeneratorPool> {
-    passes: Vec<PassOp<P>>,
+    passes: Vec<PassOp<P>>
 }
 
-impl<P: AsGeneratorPool> PassRunner<P> {
+impl<Pool: AsGeneratorPool> PassRunner<Pool> {
     /// The minimal pass runner permitted.
     pub fn core() -> Self {
         let mut runner = Self { passes: Vec::new() };
-        runner.register(WellFormed::default(), PassOptions::NONE);
-        runner.register(Canonicalize, PassOptions::NONE);
+        runner.register::<WellFormed>(PassOptions::NONE);
+        runner.register::<Canonicalize>(PassOptions::NONE);
         runner
     }
 
-    /// The pass runner used by [`from_ast::ast_to_ir`]; notably, it does not preserve timing in
-    /// control collasing.
+    /// The pass runner used by [`from_ast::ast_to_ir`]; notably, it does not
+    /// preserve timing in control collasing.
     pub fn compile() -> Self {
         let mut runner = Self::core();
         runner.register_converge(10, |runner| {
-            runner.register(CopyProp, PassOptions::NONE);
-            runner.register(CalculateTiming, PassOptions::NONE);
-            // runner.register(DeadCode::new(true));
+            runner.register::<CopyProp>(PassOptions::NONE);
+            runner.register::<DeadCode>(PassOptions::NONE);
+            runner.register::<CollapseControl>(PassOptions::NONE);
         });
-        runner.register(CollapseControl::default(), PassOptions::NONE);
-        runner.register(CellAlloc, PassOptions::NONE);
-        runner.register(CalculateTiming, PassOptions::NONE);
+        runner.register::<CellAlloc>(PassOptions::NONE);
         runner
     }
 
-    /// A pass runner for lowering a [`Component`] for an emission target, preserving timing.
+    /// A pass runner for lowering a [`Component`] for an emission target,
+    /// preserving timing.
     pub fn lower() -> Self {
         let mut runner = Self::core();
-        runner.register(RewriteAccesses, PassOptions::PRESERVE_TIMING);
+        runner.register::<RewriteAccesses>(PassOptions::PRESERVE_TIMING);
         runner.register_converge(10, |runner| {
-            runner.register(CopyProp, PassOptions::PRESERVE_TIMING);
-            // runner.register(DeadCode::new(false));
+            runner.register::<DeadCode>(PassOptions::PRESERVE_TIMING);
+            runner.register::<CollapseControl>(PassOptions::PRESERVE_TIMING);
         });
-        runner
-            .register(CollapseControl::default(), PassOptions::PRESERVE_TIMING);
         runner
     }
 
-    pub fn register<V: Pass<P> + 'static>(
-        &mut self, pass: V, options: PassOptions,
-    ) {
-        self.passes.push(PassOp::Boxed(Box::new(pass), options));
+    pub fn register<P: Pass<Pool>>(&mut self, options: PassOptions) {
+        self.passes.push(PassOp::Call(
+            Box::new(|comp, pool, options| {
+                let mut pass = P::from(options, comp, pool);
+                // TODO: Allow opting in to reversed traversal
+                pass.traverse_component(comp, pool, false)
+            }),
+            P::name(),
+            options
+        ));
     }
 
     pub fn register_converge<F: FnOnce(&mut Self)>(
-        &mut self, iter_limit: usize, f: F,
+        &mut self, iter_limit: usize, f: F
     ) {
         self.passes.push(PassOp::Coverge(iter_limit));
         f(self);
         self.passes.push(PassOp::EndConverge);
     }
 
-    pub fn run(&mut self, comp: &mut Component, pool: &mut P) {
+    pub fn run(&mut self, comp: &mut Component, pool: &mut Pool) {
         let mut in_convergence = false;
         let mut convergence_iter_limit = 0;
         let mut convergence_region = Vec::new();
 
         for pass_op in &mut self.passes {
             match pass_op {
-                PassOp::Boxed(pass, options) => {
+                PassOp::Call(pass, name, options) => {
                     log::info!(
                         "{}running pass '{}'",
                         if in_convergence { "  " } else { "" },
-                        pass.name()
+                        name
                     );
                     if in_convergence {
                         convergence_region.push((pass, *options));
                     } else {
-                        pass.setup(*options);
-                        pass.traverse_component(comp, pool);
+                        pass(comp, pool, *options);
                     }
                 }
                 PassOp::Coverge(iter_limit) => {
@@ -144,9 +146,7 @@ impl<P: AsGeneratorPool> PassRunner<P> {
                         loop {
                             let mut did_modify = false;
                             for (pass, options) in &mut convergence_region {
-                                pass.setup(*options);
-                                did_modify |=
-                                    pass.traverse_component(comp, pool);
+                                did_modify |= pass(comp, pool, *options);
                             }
                             if !did_modify || convergence_iter_limit == 0 {
                                 break;
