@@ -21,7 +21,7 @@ use pulsar_utils::{
     disjoint_sets::DisjointSets,
     environment::Environment,
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
-    id::Gen,
+    id::{Gen, Id},
     pool::{AsPool, Handle, HandleArray},
     span::SpanProvider
 };
@@ -157,6 +157,45 @@ trait Unifier<
     }
 }
 
+#[derive(Default)]
+pub struct AffineEnvironment {
+    par_nesting: usize,
+    resources: HashSet<Handle<Expr>>
+}
+
+pub struct AffineResourceError {
+    pub owner: Handle<Expr>,
+    pub taker: Handle<Expr>
+}
+
+impl AffineEnvironment {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn enter_par(&mut self) {
+        self.par_nesting += 1;
+    }
+
+    pub fn exit_par(&mut self) {
+        self.par_nesting -= 1;
+        if self.par_nesting == 0 {
+            self.resources.clear();
+        }
+    }
+
+    pub fn take(
+        &mut self, taker: Handle<Expr>
+    ) -> Result<(), AffineResourceError> {
+        if !self.resources.insert(taker) && self.par_nesting > 0 {
+            let owner = *self.resources.get(&taker).unwrap();
+            Err(AffineResourceError { owner, taker })
+        } else {
+            Ok(())
+        }
+    }
+}
+
 pub trait AsInferencePool:
     AsASTPool + AsPool<TypeConstraint, ()> + AsPool<LiquidTypeConstraint, ()> {
 }
@@ -164,6 +203,7 @@ pub trait AsInferencePool:
 pub struct TypeInferer<'pool, 'err, P: AsInferencePool> {
     ast: HandleArray<Decl>,
     env: Environment<String, Handle<Type>>,
+    affine_env: AffineEnvironment,
     type_constraints: VecDeque<Handle<TypeConstraint>>,
     liquid_type_constraints: VecDeque<Handle<LiquidTypeConstraint>>,
     gen: Gen,
@@ -179,6 +219,7 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
         Self {
             ast,
             env: Environment::new(),
+            affine_env: AffineEnvironment::new(),
             type_constraints: VecDeque::new(),
             liquid_type_constraints: VecDeque::new(),
             gen: Gen::new(),
@@ -283,19 +324,6 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
         );
     }
 
-    // fn report_invalid_operation(&mut self, explain: String, ctx:
-    // Handle<Token>) {     self.report(
-    //         ErrorBuilder::new()
-    //             .of_style(Style::Primary)
-    //             .at_level(Level::Error)
-    //             .with_code(ErrorCode::StaticAnalysisIssue)
-    //             .at_region(ctx)
-    //             .message("Invalid operation".into())
-    //             .explain(explain)
-    //             .build()
-    //     );
-    // }
-
     fn report_unification_failure<
         T: SpanProvider + Display + Eq + Hash + Clone
     >(
@@ -384,6 +412,30 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                     .build()
             );
         }
+    }
+
+    fn report_affine_resource_error(&mut self, error: AffineResourceError) {
+        self.report(
+            ErrorBuilder::new()
+                .of_style(Style::Primary)
+                .at_level(Level::Error)
+                .with_code(ErrorCode::AffineResource)
+                .message("Cannot use affine resource twice")
+                .span(error.taker)
+                .explain("Second usage attempted here,")
+                .build()
+        );
+        self.report(
+            ErrorBuilder::new()
+                .of_style(Style::Secondary)
+                .at_level(Level::Error)
+                .with_code(ErrorCode::AffineResource)
+                .continues()
+                .span(error.owner)
+                .explain("but resource was already consumed here.")
+                .fix("Use a `---` divider to separate the usages by a logical timestep.")
+                .build(),
+        );
     }
 }
 
@@ -560,12 +612,19 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                 self.env.bind(name.value.clone(), value_type);
             }
             StmtValue::Assign(lhs, _, rhs) => {
+                self.affine_env
+                    .take(*lhs)
+                    .map_err(|err| self.report_affine_resource_error(err))
+                    .ok()?;
                 let lhs_type = self.visit_expr(*lhs)?;
                 let rhs_type = self.visit_expr(*rhs)?;
                 // todo: lhs_type is an lvalue
                 self.new_constraint(lhs_type, rhs_type);
             }
-            StmtValue::Divider(_) => {}
+            StmtValue::Divider(_) => {
+                self.affine_env.exit_par();
+                self.affine_env.enter_par();
+            }
             StmtValue::For {
                 var,
                 lower,
@@ -604,6 +663,7 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                 ref body
             } => {
                 self.env.push();
+                self.affine_env.enter_par();
                 for (param_name, param_type) in inputs {
                     self.env.bind(param_name.value.clone(), *param_type);
                 }
@@ -619,6 +679,7 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                     self.env.pop();
                 }
 
+                self.affine_env.exit_par();
                 self.env.pop();
             }
         }

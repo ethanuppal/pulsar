@@ -7,11 +7,12 @@ use pulsar_utils::{id::Id, pool::Handle};
 
 use crate::{
     component::{Component, ComponentViewMut},
-    control::{Control, Par, Seq},
+    control::{Control, For, Par, Seq},
     from_ast::AsGeneratorPool,
+    port::Port,
     visitor::{Action, VisitorMut}
 };
-use std::mem;
+use std::{mem, ops::Deref};
 
 use super::{Pass, PassOptions};
 
@@ -49,6 +50,27 @@ impl<P: AsGeneratorPool> VisitorMut<P> for CollapseControl {
         _pool: &mut P
     ) -> Action {
         self.collapse(&mut par.children)
+    }
+
+    fn finish_for(
+        &mut self, _id: Id, for_: &mut For, _comp_view: &mut ComponentViewMut,
+        _pool: &mut P
+    ) -> Action {
+        let Port::Constant(lower_bound) = for_.lower_bound() else {
+            return Action::None;
+        };
+        let Port::Constant(upper_bound) = for_.exclusive_upper_bound() else {
+            return Action::None;
+        };
+        let num_iters = if lower_bound > upper_bound {
+            0
+        } else {
+            upper_bound - lower_bound
+        };
+        if matches!(for_.body().deref(), Control::Empty) && num_iters == 0 {
+            return Action::Replace(Control::Delay(for_.init_latency()));
+        }
+        Action::None
     }
 }
 

@@ -79,7 +79,9 @@ string_associated_pub_enum! {
         #[str = "Types were not fully resolved at compile time."]
         AmbiguousType,
         #[str = "Hindley-Milner constraints were not satisfiable."]
-        UnificationFailure
+        UnificationFailure,
+        #[str = "An affine resource was used twice"]
+        AffineResource
     }
 }
 

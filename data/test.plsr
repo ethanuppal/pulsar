@@ -8,3 +8,11 @@ func main(input: [Int; 4096]) -> (output: [Int; 4096]) {
         }
     }
 }
+
+func test() -> (out: Int) {
+    for i in 0 ..< 10 {
+        out = 1
+        ---
+        out = 2
+    }
+}

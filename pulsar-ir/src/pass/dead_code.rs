@@ -9,17 +9,10 @@ use crate::{
     component::{Component, ComponentViewMut},
     control::{Control, For, IfElse, Par, Seq},
     from_ast::AsGeneratorPool,
-    port::Port,
-    variable::Variable,
     visitor::{Action, VisitorMut},
     Ir
 };
-use log::warn;
-use pulsar_utils::{id::Id, pool::Handle};
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Deref
-};
+use pulsar_utils::id::Id;
 
 /// Conservative dead-code elimination (as per [`SideEffectAnalysis`]).
 #[derive(Default)]
