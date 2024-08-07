@@ -9,7 +9,9 @@ zero-latency memory access, which is achieved by:
 1. Disallowing data-dependent addressing
 2. Requiring all root control to have fully-resolved static timing
 
-Here's an example of what the language will be able to do once feature-complete:
+The language is currently under development, but a significant portion is
+functional.
+Here's an example of what it will be able to do once feature-complete:
 
 ```swift
 struct Complex {
@@ -46,6 +48,13 @@ gated between dividers (`---`).
 For example, a divider must be placed after multiplication but does not need to
 be placed after addition (which is purely combinational).
 
+A lot of care has been put into good error messages.
+To quote the developers of [spade](https://spade-lang.org),
+
+> Bad error messages are considered a bug. Please report them!
+
+![Affine type checking error message example](affine_error.png)
+
 <!-- The [calyx] backend is tested e2e via [verilator], a hardware simulation tool. -->
 
 ## Crates
@@ -55,7 +64,7 @@ be placed after addition (which is purely combinational).
 - [`pulsar-frontend`](https://crates.io/crates/pulsar-frontend): Parser/AST and type checking
 - [`pulsar-ir`](https://crates.io/crates/pulsar-ir): IR definition and optimization
 - [`pulsar-backend`](https://crates.io/crates/pulsar-backend): Target emission, e.g., Verilog (via [calyx])
-- [`calyx-builder`](/calyx-builder): API for building calyx IR
+- [`calyx-builder`](/calyx-builder): API for building [calyx] IR
 
 ## License
 

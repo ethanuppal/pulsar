@@ -17,7 +17,8 @@ pub struct InfixBinaryOp {
     pub precedence: Precedence,
     pub associativity: Associativity,
     pub name: Option<String>,
-    pub required_token_ty: Option<TokenType>
+    pub required_token_ty: Option<TokenType>,
+    pub is_sequential: bool
 }
 
 pub struct PrefixUnaryOp {}
@@ -27,7 +28,7 @@ pub struct PostfixBinaryOp {
     pub name: Option<String>
 }
 
-/// Parsing information for an operator.
+/// Parsing information for an operator. At least one member must be defined.
 #[derive(Default)]
 pub struct Op {
     pub infix_binary: Option<InfixBinaryOp>,
@@ -38,13 +39,15 @@ pub struct Op {
 impl Op {
     pub fn infix_binary(
         mut self, precedence: Precedence, associativity: Associativity,
-        name: Option<String>, required_token_ty: Option<TokenType>
+        name: Option<String>, required_token_ty: Option<TokenType>,
+        is_sequential: bool
     ) -> Self {
         self.infix_binary = Some(InfixBinaryOp {
             precedence,
             associativity,
             name,
-            required_token_ty
+            required_token_ty,
+            is_sequential
         });
         self
     }
@@ -69,14 +72,15 @@ impl Op {
         match ty {
             TokenType::Plus | TokenType::Minus => Some(
                 Op::default()
-                    .infix_binary(50, Associativity::Left, None, None)
+                    .infix_binary(50, Associativity::Left, None, None, false)
                     .prefix_unary()
             ),
             TokenType::Times => Some(Op::default().infix_binary(
                 100,
                 Associativity::Left,
                 Some("multiplication".into()),
-                None
+                None,
+                true
             )),
             TokenType::LeftBracket => Some(Op::default().postfix_binary(
                 TokenType::RightBracket,
@@ -86,7 +90,8 @@ impl Op {
                 150,
                 Associativity::Left,
                 Some("member access".into()),
-                Some(TokenType::Identifier)
+                Some(TokenType::Identifier),
+                false
             )),
             _ => None
         }

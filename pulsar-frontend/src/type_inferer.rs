@@ -15,6 +15,7 @@ use crate::{
         ty::{LiquidType, LiquidTypeValue, Type, TypeValue},
         AsASTPool
     },
+    op::Op,
     token::TokenType
 };
 use pulsar_utils::{
@@ -26,8 +27,8 @@ use pulsar_utils::{
     span::SpanProvider
 };
 use std::{
-    collections::{HashSet, VecDeque},
-    fmt::Display,
+    collections::{HashMap, HashSet, VecDeque},
+    fmt::{self, Display},
     hash::Hash,
     iter::zip
 };
@@ -157,42 +158,59 @@ trait Unifier<
     }
 }
 
-#[derive(Default)]
-pub struct AffineEnvironment {
-    par_nesting: usize,
-    resources: HashSet<Handle<Expr>>
+pub struct AffineResourceError<O, R> {
+    pub owner: O,
+    pub owned: R,
+    pub taker: O,
+    pub taken: R,
+    pub fix: String
 }
 
-pub struct AffineResourceError {
-    pub owner: Handle<Expr>,
-    pub taker: Handle<Expr>
+/// An affine environment where only the root permits multiple consumption. The
+/// types are [`Copy`] because I was getting annoyed of dealing with the borrow
+/// checker.
+pub struct AffineEnvironment<Owner: Copy, Resource: Eq + Hash + Copy> {
+    nesting: usize,
+    resources: HashMap<Resource, Owner>,
+    fix: String
 }
 
-impl AffineEnvironment {
-    pub fn new() -> Self {
-        Self::default()
+impl<O: Copy, R: Eq + Hash + Copy> AffineEnvironment<O, R> {
+    pub fn new<S: AsRef<str>>(fix: S) -> Self {
+        Self {
+            nesting: 0,
+            resources: HashMap::new(),
+            fix: fix.as_ref().to_string()
+        }
     }
 
-    pub fn enter_par(&mut self) {
-        self.par_nesting += 1;
+    pub fn enter_local(&mut self) {
+        self.nesting += 1;
     }
 
-    pub fn exit_par(&mut self) {
-        self.par_nesting -= 1;
-        if self.par_nesting == 0 {
+    pub fn exit_local(&mut self) {
+        self.nesting -= 1;
+        if self.nesting == 0 {
             self.resources.clear();
         }
     }
 
     pub fn take(
-        &mut self, taker: Handle<Expr>
-    ) -> Result<(), AffineResourceError> {
-        if !self.resources.insert(taker) && self.par_nesting > 0 {
-            let owner = *self.resources.get(&taker).unwrap();
-            Err(AffineResourceError { owner, taker })
-        } else {
-            Ok(())
+        &mut self, taker: O, resource: R
+    ) -> Result<(), AffineResourceError<O, R>> {
+        if let Some((owned, owner)) = self.resources.get_key_value(&resource) {
+            if self.nesting > 0 {
+                return Err(AffineResourceError {
+                    owner: *owner,
+                    owned: *owned,
+                    taker,
+                    taken: resource,
+                    fix: self.fix.clone()
+                });
+            }
         }
+        self.resources.insert(resource, taker);
+        Ok(())
     }
 }
 
@@ -200,10 +218,21 @@ pub trait AsInferencePool:
     AsASTPool + AsPool<TypeConstraint, ()> + AsPool<LiquidTypeConstraint, ()> {
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct TimeResource;
+
+impl Display for TimeResource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<time>")
+    }
+}
+
 pub struct TypeInferer<'pool, 'err, P: AsInferencePool> {
     ast: HandleArray<Decl>,
     env: Environment<String, Handle<Type>>,
-    affine_env: AffineEnvironment,
+    assignment_affine_env: AffineEnvironment<Handle<Stmt>, Handle<Expr>>,
+    /// TODO: better name
+    expr_affine_env: AffineEnvironment<Handle<Expr>, TimeResource>,
     type_constraints: VecDeque<Handle<TypeConstraint>>,
     liquid_type_constraints: VecDeque<Handle<LiquidTypeConstraint>>,
     gen: Gen,
@@ -219,12 +248,13 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
         Self {
             ast,
             env: Environment::new(),
-            affine_env: AffineEnvironment::new(),
+            assignment_affine_env: AffineEnvironment::new("Use a `---` divider to separate the assignments by a logical timestep."),
+            expr_affine_env: AffineEnvironment::new("Extract the outer sequential operation into another `let` separated by a `---` divider."),
             type_constraints: VecDeque::new(),
             liquid_type_constraints: VecDeque::new(),
             gen: Gen::new(),
             pool,
-            error_manager
+            error_manager,
         }
     }
 
@@ -414,13 +444,22 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
         }
     }
 
-    fn report_affine_resource_error(&mut self, error: AffineResourceError) {
+    fn report_affine_resource_error<
+        S: SpanProvider,
+        O: Copy + AsRef<S>,
+        R: Eq + Hash + Copy + Display
+    >(
+        &mut self, error: AffineResourceError<O, R>
+    ) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::AffineResource)
-                .message("Cannot use affine resource twice")
+                .message(format!(
+                    "Cannot use affine resource `{}` twice",
+                    error.owned
+                ))
                 .span(error.taker)
                 .explain("Second usage attempted here,")
                 .build()
@@ -433,8 +472,8 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                 .continues()
                 .span(error.owner)
                 .explain("but resource was already consumed here.")
-                .fix("Use a `---` divider to separate the usages by a logical timestep.")
-                .build(),
+                .fix(error.fix)
+                .build()
         );
     }
 }
@@ -557,8 +596,26 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                     self.pool.generate(TypeValue::Int64, *op, *op);
                 let op_rhs_type = self.pool.duplicate(op_lhs_type);
                 let op_result_type = self.pool.duplicate(op_rhs_type);
+                let is_sequential = Op::from(op.ty)
+                    .unwrap()
+                    .infix_binary
+                    .unwrap()
+                    .is_sequential;
+
+                if is_sequential {
+                    self.expr_affine_env
+                        .take(expr, TimeResource)
+                        .map_err(|error| {
+                            self.report_affine_resource_error(error)
+                        })
+                        .ok()?;
+                    self.expr_affine_env.enter_local();
+                }
                 let lhs_type = self.visit_expr(*lhs)?;
                 let rhs_type = self.visit_expr(*rhs)?;
+                if is_sequential {
+                    self.expr_affine_env.exit_local();
+                }
                 self.new_constraint(op_lhs_type, lhs_type);
                 self.new_constraint(op_rhs_type, rhs_type);
                 op_result_type
@@ -612,9 +669,9 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                 self.env.bind(name.value.clone(), value_type);
             }
             StmtValue::Assign(lhs, _, rhs) => {
-                self.affine_env
-                    .take(*lhs)
-                    .map_err(|err| self.report_affine_resource_error(err))
+                self.assignment_affine_env
+                    .take(stmt, *lhs)
+                    .map_err(|error| self.report_affine_resource_error(error))
                     .ok()?;
                 let lhs_type = self.visit_expr(*lhs)?;
                 let rhs_type = self.visit_expr(*rhs)?;
@@ -622,8 +679,8 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                 self.new_constraint(lhs_type, rhs_type);
             }
             StmtValue::Divider(_) => {
-                self.affine_env.exit_par();
-                self.affine_env.enter_par();
+                self.assignment_affine_env.exit_local();
+                self.assignment_affine_env.enter_local();
             }
             StmtValue::For {
                 var,
@@ -663,7 +720,7 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                 ref body
             } => {
                 self.env.push();
-                self.affine_env.enter_par();
+                self.assignment_affine_env.enter_local();
                 for (param_name, param_type) in inputs {
                     self.env.bind(param_name.value.clone(), *param_type);
                 }
@@ -679,7 +736,7 @@ impl<'pool, 'err, P: AsInferencePool> TypeInferer<'pool, 'err, P> {
                     self.env.pop();
                 }
 
-                self.affine_env.exit_par();
+                self.assignment_affine_env.exit_local();
                 self.env.pop();
             }
         }

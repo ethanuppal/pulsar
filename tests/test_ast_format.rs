@@ -98,7 +98,7 @@ mod tests {
             let ty = ctx.new(TypeValue::Int64, dumb, dumb);
 
             assert_snapshot!(
-                Decl::new(DeclValue::Function { func: dumb, name: x, inputs: vec![(x, ty), (x, ty)], outputs: vec![(x, ty), (x, ty)], body }, dumb, dumb),         
+                Decl::new(DeclValue::Function { func: dumb, name: x, inputs: vec![(x, ty), (x, ty)], outputs: vec![(x, ty), (x, ty)], body }, dumb, dumb),
             @r###"
             func x(x: Int64, x: Int64) -> (x: Int64, x: Int64) {
                 let x = 5

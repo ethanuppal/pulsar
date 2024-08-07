@@ -1,0 +1,17 @@
+func test() -> (out: Int) {
+    for i in 0 ..< 10 {
+        out = 1
+        ---
+        out = 2
+    }
+}
+
+func test2() -> (out: Int) {
+    for i in 0 ..< 10 {
+        out = 1
+    }
+    ---
+    for i in 0 ..< 10 {
+        out = 2
+    }
+}

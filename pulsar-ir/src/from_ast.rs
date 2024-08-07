@@ -33,6 +33,8 @@ pub trait AsGeneratorPool:
     AsControlPool + AsPool<Port, ()> + AsPool<Cell, ()> {
 }
 
+/// Every assignment statement corresponds to a single IR assignment to the
+/// appropriate lvalue.
 pub fn ast_to_ir<P: AsGeneratorPool>(
     ast: AST, mut pass_runner: PassRunner<P>, pool: &mut P, var_gen: &mut Gen
 ) -> Vec<Component> {
