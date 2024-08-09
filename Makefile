@@ -15,6 +15,11 @@ build:
 	@echo 'cargo run -- $$@' > ./main
 	@chmod u+x ./main
 
+.PHONY: fmt
+fmt:
+	@echo '[INFO] Formatting project'
+	@cargo +nightly fmt
+
 .PHONY: test
 test: build
 	@echo '[INFO] Running tests'

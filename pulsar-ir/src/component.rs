@@ -12,13 +12,11 @@ use pulsar_frontend::{
     ast::pretty_print::PrettyPrint,
     attribute::{AttributeProvider, Attributes}
 };
-use pulsar_utils::{
-    id::{Gen, Id},
-    pool::Handle
-};
+use pulsar_utils::{id::Id, pool::Handle};
 use std::{
     collections::{HashMap, HashSet},
-    fmt::{self, Display, Write}
+    fmt::{self, Display, Write},
+    mem, ptr
 };
 
 // average research-grade software moment
@@ -166,5 +164,21 @@ impl Component {
                 cell_alloc: &mut self.cell_alloc
             }
         )
+    }
+}
+
+// hack for now
+impl ComponentViewMut<'static> {
+    pub unsafe fn undefined() -> Self {
+        // end me
+        fn useless_ref<T>() -> &'static mut T {
+            unsafe { mem::transmute::<*mut u8, _>(ptr::null_mut()) }
+        }
+        Self {
+            label: useless_ref(),
+            inputs: useless_ref(),
+            outputs: useless_ref(),
+            cell_alloc: useless_ref()
+        }
     }
 }

@@ -4,7 +4,6 @@
 //! the License, or (at your option) any later version.
 
 use super::Transform;
-use calyx_ir::WRC;
 use pulsar_ir::{
     cell::Cell,
     component::Component,
@@ -12,16 +11,25 @@ use pulsar_ir::{
     from_ast::AsGeneratorPool,
     label::{Label, Name, Visibility},
     memory::Memory,
-    pass::{
-        cell_alloc::CellAlloc, collapse_control::CollapseControl,
-        copy_prop::CopyProp, dead_code::DeadCode, PassOptions, PassRunner
-    },
+    pass::PassRunner,
     port::Port,
     variable::Variable,
     Ir
 };
-use pulsar_utils::id::Gen;
+use pulsar_utils::{id::Gen, pool::Handle};
 use std::{collections::HashMap, ops::Deref};
+
+pub struct Schedule {
+    memory: Memory,
+    shift: usize,
+    control: Handle<Control>
+}
+
+impl Schedule {}
+
+pub struct AddressGenerator {
+    schedules: HashMap<Variable, Schedule>
+}
 
 /// Synthesizes an address generator for a component.
 pub struct AddressGeneratorTransform;
@@ -91,14 +99,17 @@ impl AddressGeneratorTransform {
         // since anything involving address access won't have side effects by
         // disallowing data-dependent addressing, we should be fine to ignore
         // all the one that do I think
-        // no idea what I was writing here: let mut did_produce_access
+        let mut did_produce_access = false;
         for port in ir.ports_ref() {
             if let Port::Access(array, indices) = &*port {
+                did_produce_access = true;
                 assert!(indices.len() == 1, "disabled higher-d arrays for now");
                 builder.push_assign(*array, indices[0].clone_out());
             }
         }
-        builder.push(Control::Enable(ir.clone()));
+        if !did_produce_access {
+            builder.push(Control::Enable(ir.clone()));
+        }
     }
 
     fn build_control<P: AsGeneratorPool>(
@@ -121,7 +132,7 @@ impl AddressGeneratorTransform {
 
 impl<P: AsGeneratorPool> Transform<P> for AddressGeneratorTransform {
     fn apply(
-        &mut self, comp: &Component, pool: &mut P, var_gen: &mut Gen
+        &mut self, comp: &Component, pool: &mut P, _var_gen: &mut Gen
     ) -> anyhow::Result<Component> {
         let memories = comp
             .cells()
@@ -157,17 +168,7 @@ impl<P: AsGeneratorPool> Transform<P> for AddressGeneratorTransform {
             pool.add(cfg)
         );
 
-        println!("??? {}", agen);
-
-        // let mut runner = PassRunner::core();
-        // runner.register_converge(10, |runner| {
-        //     runner.register(CopyProp);
-        //     runner.register(DeadCode::new(false));
-        // // });
-        // runner
-        //     .register(CollapseControl::default(),
-        // PassOptions::PRESERVE_TIMING); runner.register(CellAlloc,
-        // PassOptions::PRESERVE_TIMING); runner.run(&mut agen, pool);
+        PassRunner::lower().run(&mut agen, pool);
 
         Ok(agen)
     }

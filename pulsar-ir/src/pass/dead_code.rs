@@ -27,10 +27,9 @@ impl DeadCode {
         if self.side_effects.effectual_control.contains(&id) {
             return Action::None;
         }
-        if self.preserve_timing {
-            if let Some(latency) = self.timing.get(id).latency() {
-                return Action::Replace(Control::Delay(latency.get()));
-            }
+        let latency = self.timing.get(id).latency();
+        if self.preserve_timing && latency > 0 {
+            return Action::Replace(Control::Delay(latency));
         }
         Action::Remove
     }
@@ -89,7 +88,7 @@ impl<P: AsGeneratorPool> Pass<P> for DeadCode {
         Self {
             preserve_timing: options.contains(PassOptions::PRESERVE_TIMING),
             side_effects: SideEffectAnalysis::from(comp, pool),
-            timing: TimingAnalysis::from(comp, pool)
+            timing: TimingAnalysis::for_comp(comp, pool)
         }
     }
 }

@@ -5,67 +5,65 @@
 
 use crate::{
     component::{Component, ComponentViewMut},
-    control::{For, IfElse, Par, Seq},
+    control::{Control, For, IfElse, Par, Seq},
     from_ast::AsGeneratorPool,
     visitor::{Action, VisitorMut},
     Ir
 };
 use core::panic;
-use pulsar_utils::id::Id;
-use std::{cmp, collections::HashMap, num::NonZeroUsize};
+use pulsar_utils::{id::Id, pool::Handle};
+use std::{cmp, collections::HashMap};
 
 /// Computes timing information for all non-empty control.
+///
+/// TODO: currently assumes input is needed for just 1 cycle and available for
+/// just 1 cycle
 #[derive(Clone, Copy, Default)]
 pub struct Timing {
-    latency: Option<NonZeroUsize>
+    init_interval: usize,
+    latency: usize
 }
 
 impl Timing {
-    pub fn combinational() -> Self {
-        Self { latency: None }
-    }
-
-    /// requires: `latency > 0`.
-    pub fn sequential<S: Into<usize>>(latency: S) -> Self {
+    pub fn pipelined(init_interval: usize, latency: usize) -> Self {
         Self {
-            latency: Some(NonZeroUsize::new(latency.into()).unwrap())
+            init_interval,
+            latency
         }
     }
 
-    pub fn from_delay(delay: usize) -> Self {
-        if delay == 0 {
-            Self::combinational()
-        } else {
-            Self::sequential(delay)
-        }
+    pub fn combinational() -> Self {
+        Self::pipelined(0, 0)
     }
 
-    pub fn latency(&self) -> Option<NonZeroUsize> {
+    pub fn sequential(latency: usize) -> Self {
+        Self::pipelined(0, latency)
+    }
+
+    pub fn init_interval(&self) -> usize {
+        self.init_interval
+    }
+
+    pub fn latency(&self) -> usize {
         self.latency
     }
 
-    pub fn then(self, next: Self) -> Self {
-        match (self.latency, next.latency) {
-            (None, None) => Self::combinational(),
-            (None, Some(latency)) | (Some(latency), None) => {
-                Self::sequential(latency)
-            }
-            (Some(latency0), Some(latency1)) => {
-                Self::sequential(latency0.get() + latency1.get())
-            }
-        }
+    pub fn compose(lhs: Timing, rhs: Timing) -> Timing {
+        Timing::pipelined(
+            cmp::max(lhs.init_interval(), rhs.init_interval()),
+            lhs.latency() + rhs.latency()
+        )
     }
-}
 
-pub fn max(lhs: Timing, rhs: Timing) -> Timing {
-    match ((lhs).latency, (rhs).latency) {
-        (None, None) => Timing::combinational(),
-        (Some(latency), None) | (None, Some(latency)) => {
-            Timing::sequential(latency.get()).to_owned()
-        }
-        (Some(latency0), Some(latency1)) => {
-            Timing::sequential(cmp::max(latency0.get(), latency1.get()))
-        }
+    pub fn then(self, rhs: Timing) -> Timing {
+        Timing::compose(self, rhs)
+    }
+
+    pub fn max(lhs: Timing, rhs: Timing) -> Timing {
+        Timing::pipelined(
+            cmp::max(lhs.init_interval(), rhs.init_interval()),
+            cmp::max(lhs.latency(), rhs.latency())
+        )
     }
 }
 
@@ -73,11 +71,20 @@ pub fn max(lhs: Timing, rhs: Timing) -> Timing {
 pub struct TimingAnalysis(HashMap<Id, Timing>);
 
 impl TimingAnalysis {
-    pub fn from<P: AsGeneratorPool>(
+    pub fn for_comp<P: AsGeneratorPool>(
         comp: &mut Component, pool: &mut P
     ) -> Self {
         let mut new_self = Self::default();
         new_self.traverse_component(comp, pool, false);
+        new_self
+    }
+
+    pub fn for_control<P: AsGeneratorPool>(
+        control: Handle<Control>, pool: &mut P
+    ) -> Self {
+        let mut new_self = Self::default();
+        let mut fake = unsafe { ComponentViewMut::undefined() };
+        new_self.traverse_control(control, &mut fake, pool, false);
         new_self
     }
 
@@ -103,7 +110,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for TimingAnalysis {
             id,
             match enable {
                 Ir::Add(_, _, _) => Timing::combinational(),
-                Ir::Mul(_, _, _) => Timing::sequential(4usize),
+                Ir::Mul(_, _, _) => Timing::pipelined(1, 4),
                 Ir::Assign(_, _) => Timing::combinational()
             }
         );
@@ -114,7 +121,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for TimingAnalysis {
         &mut self, id: Id, delay: &mut usize,
         _comp_view: &mut ComponentViewMut, _pool: &mut P
     ) -> Action {
-        self.set(id, Timing::from_delay(*delay));
+        self.set(id, Timing::sequential(*delay));
         Action::None
     }
 
@@ -124,7 +131,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for TimingAnalysis {
     ) -> Action {
         self.set(
             id,
-            Timing::from_delay(for_.init_latency())
+            Timing::sequential(for_.init_latency())
                 .then(self.get(for_.body().id_in(pool)))
         );
         Action::None
@@ -138,7 +145,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for TimingAnalysis {
             .children()
             .iter()
             .map(|child| self.get(child.id_in(pool)))
-            .reduce(|timing0, timing1| timing0.then(timing1))
+            .reduce(Timing::compose)
             .unwrap_or_default();
         self.set(id, timing);
         Action::None
@@ -148,12 +155,11 @@ impl<P: AsGeneratorPool> VisitorMut<P> for TimingAnalysis {
         &mut self, id: Id, par: &mut Par, _comp_view: &mut ComponentViewMut,
         pool: &mut P
     ) -> Action {
-        log::trace!("at par: {} {}", par, self.0.contains_key(&1));
         let timing = par
             .children()
             .iter()
             .map(|child| self.get(child.id_in(pool)))
-            .reduce(max)
+            .reduce(Timing::max)
             .unwrap_or_default();
         self.set(id, timing);
         Action::None
@@ -165,7 +171,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for TimingAnalysis {
     ) -> Action {
         self.set(
             id,
-            max(
+            Timing::max(
                 self.get(if_else.true_branch.id_in(pool)),
                 self.get(if_else.false_branch.id_in(pool))
             )

@@ -9,8 +9,3 @@ func main(input: [Int; 4096]) -> (output: [Int; 4096]) {
     }
 }
 
-func test(a: Int) -> (out: Int) {
-    for i in 0 ..< 10 {
-        out = a * a * a
-    }
-}

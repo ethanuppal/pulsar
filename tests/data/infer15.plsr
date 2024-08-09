@@ -1,0 +1,9 @@
+func good(a: Int) {
+    let ok = a * a
+    ---
+    let ok2 = a * ok
+}
+
+func bad(a: Int) {
+    let doom = a * a * a
+}

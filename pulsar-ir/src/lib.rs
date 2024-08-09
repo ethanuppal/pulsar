@@ -22,7 +22,9 @@ pub mod visitor;
 
 #[derive(Clone)]
 pub enum Ir {
+    /// A combinational addition
     Add(Handle<Port>, Handle<Port>, Handle<Port>),
+    /// A pipelined multiply with an II of 1 and latency of 4
     Mul(Handle<Port>, Handle<Port>, Handle<Port>),
     Assign(Handle<Port>, Handle<Port>)
 }

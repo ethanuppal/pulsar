@@ -117,11 +117,11 @@ pub fn main() -> anyhow::Result<()> {
 
     log::info!("Emitting calyx accelerator and address generator (TODO)...");
 
-    // let mut agen_backend = BackendBuilder::new()
-    //     .target(PrintTarget)
-    //     .through(AddressGeneratorTransform)
-    //     .build();
-    // agen_backend.emit(main, &mut ctx, &mut var_gen, OutputFile::Stdout)?;
+    let mut agen_backend = BackendBuilder::new()
+        .target(PrintTarget)
+        .through(AddressGeneratorTransform)
+        .build();
+    agen_backend.emit(main, &mut ctx, &mut var_gen, OutputFile::Stdout)?;
 
     PassRunner::lower().run(main, &mut ctx);
 
