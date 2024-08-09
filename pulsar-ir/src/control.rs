@@ -6,10 +6,7 @@
 use crate::{port::Port, variable::Variable, Ir};
 use inform::fmt::IndentFormatter;
 use pulsar_frontend::ast::pretty_print::PrettyPrint;
-use pulsar_utils::{
-    id::Id,
-    pool::{AsPool, Handle}
-};
+use pulsar_utils::pool::{AsPool, Handle};
 use std::{
     fmt::{self, Display, Write},
     mem, vec

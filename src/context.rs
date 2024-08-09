@@ -21,10 +21,7 @@ use pulsar_ir::{
     from_ast::AsGeneratorPool,
     port::Port
 };
-use pulsar_utils::{
-    id::Gen,
-    pool::{AsPool, Handle, Pool}
-};
+use pulsar_utils::pool::{AsPool, Handle, Pool};
 use std::io;
 
 /// Stores all objects allocated in memory pools by the compiler.

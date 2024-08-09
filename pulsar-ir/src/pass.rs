@@ -49,8 +49,7 @@ pub trait Pass<P: AsGeneratorPool>: VisitorMut<P> {
     fn name() -> &'static str;
 }
 
-type PassCall<P: AsGeneratorPool> =
-    Box<dyn FnMut(&mut Component, &mut P, PassOptions) -> bool>;
+type PassCall<P> = Box<dyn FnMut(&mut Component, &mut P, PassOptions) -> bool>;
 
 enum PassOp<P: AsGeneratorPool> {
     Call(PassCall<P>, &'static str, PassOptions),

@@ -22,7 +22,7 @@ use pulsar_utils::{
     disjoint_sets::DisjointSets,
     environment::Environment,
     error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
-    id::{Gen, Id},
+    id::Gen,
     pool::{AsPool, Handle, HandleArray},
     span::SpanProvider
 };

@@ -4,7 +4,7 @@
 //! the License, or (at your option) any later version.
 
 use pulsar_backend::{
-    target::{calyx::CalyxTarget, print::PrintTarget, OutputFile},
+    target::{print::PrintTarget, OutputFile},
     transform::agen::AddressGeneratorTransform,
     BackendBuilder
 };

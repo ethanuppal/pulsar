@@ -19,6 +19,14 @@ use pulsar_ir::{
 use pulsar_utils::{id::Gen, pool::Handle};
 use std::{collections::HashMap, ops::Deref};
 
+// ok tentative plan is
+// and yes i know this is inefficient but
+// i will go and extract all accesses so i get the program up to that access and
+// duplicate it somehow
+// or something it doesn't really matter
+// then i schedule each access separately using my bottom-up-backward algorithm
+// and ofc need to mark root for
+
 pub struct Schedule {
     memory: Memory,
     shift: usize,
@@ -29,6 +37,30 @@ impl Schedule {}
 
 pub struct AddressGenerator {
     schedules: HashMap<Variable, Schedule>
+}
+
+impl AddressGenerator {
+    /// Returns the scheduled address generators and the total time shifted
+    /// backward.
+    pub fn schedule<P: AsGeneratorPool>(
+        &self, pool: &mut P
+    ) -> (Handle<Control>, usize) {
+        let global_shift = self
+            .schedules
+            .values()
+            .map(|schedule| schedule.shift)
+            .max()
+            .unwrap_or_default();
+        let mut threads = Par::new();
+        for schedule in self.schedules.values() {
+            let delay = global_shift - schedule.shift;
+            let mut thread = Seq::new();
+            thread.push(pool.add(Control::Delay(delay)));
+            thread.push(schedule.control);
+            threads.push(pool.add(Control::Seq(thread)));
+        }
+        (pool.add(Control::Par(threads)), global_shift)
+    }
 }
 
 /// Synthesizes an address generator for a component.

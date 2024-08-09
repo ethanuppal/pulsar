@@ -13,8 +13,7 @@ use crate::{
     control::{Control, For, Seq},
     from_ast::AsGeneratorPool,
     port::Port,
-    visitor::{Action, VisitorMut},
-    Ir
+    visitor::{Action, VisitorMut}
 };
 
 use super::{Pass, PassOptions};

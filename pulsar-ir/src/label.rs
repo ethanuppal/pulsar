@@ -12,7 +12,7 @@ use pulsar_frontend::{
     token::{Token, TokenType}
 };
 use pulsar_utils::{
-    pool::{self, AsPool, Handle},
+    pool::{AsPool, Handle},
     span::Loc
 };
 use std::fmt::{self, Display, Write};

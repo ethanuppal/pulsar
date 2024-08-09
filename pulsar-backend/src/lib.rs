@@ -5,9 +5,7 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
-use pulsar_ir::{
-    component::Component, from_ast::AsGeneratorPool, pass::PassRunner
-};
+use pulsar_ir::{component::Component, from_ast::AsGeneratorPool};
 use pulsar_utils::id::Gen;
 use target::{OutputFile, Target};
 use transform::Transform;

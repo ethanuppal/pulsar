@@ -5,7 +5,7 @@
 
 use super::{OutputFile, Target};
 use anyhow::anyhow;
-use calyx_backend::{self as cback, Backend};
+use calyx_backend::Backend;
 use calyx_builder::{
     finish_component, CalyxAssignmentContainer, CalyxBuilder, CalyxComponent,
     CalyxControl, CalyxControlType, CalyxPort, Sequential
@@ -18,7 +18,6 @@ use pulsar_ir::{
     component::Component,
     control::Control,
     from_ast::AsGeneratorPool,
-    pass::cell_alloc::min_bits_to_represent,
     port::Port,
     variable::Variable,
     Ir
