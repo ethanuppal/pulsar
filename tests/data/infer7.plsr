@@ -1,9 +1,9 @@
-pure func square(x: Int64) -> Int64 {
-    return x * x
+func square(x: Int64) -> (y: Int64) {
+    y = x * x
 }
 
-pure func add(x: Int64, y: Int64) -> Int64 {
-    return x + y
+func add(x: Int64, y: Int64) -> (z: Int64) {
+    z = x + y
 }
 
 func main() {

@@ -1,56 +1,149 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
+//! Implements a recursive-descent predictive parser. See the documentation at
+//! [`Parser`].
+//!
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
+
 use super::{
-    ast::{Expr, ExprValue, Node},
     op::{Op, Precedence},
-    token::{Token, TokenType},
-    ty::{Type, TypeCell}
+    token::{Token, TokenType}
 };
 use crate::{
-    ast::{NodeValue, TokenRegionProvider},
+    ast::{
+        decl::{Decl, DeclValue, ParamVec},
+        expr::{Expr, ExprValue},
+        node::NodeInterface,
+        stmt::{Stmt, StmtValue},
+        ty::{LiquidTypeValue, TypeValue},
+        AsASTPool, AST
+    },
     op::Associativity
 };
-use pulsar_utils::error::{
-    Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style
+use pulsar_utils::{
+    error::{Error, ErrorBuilder, ErrorCode, ErrorManager, Level, Style},
+    pool::{Handle, HandleArray}
 };
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::cmp;
 
-enum Ctx {
-    In(String),
-    Between(String),
-    For(String),
-    Begin(String),
-    End(String),
-    After(String)
+pub type Block = (Handle<Token>, Vec<Handle<Stmt>>, Handle<Token>);
+
+// TODO: fix some naming
+
+// please can I get rid of this
+#[derive(Default)]
+struct ParseErrorContext {
+    loc: String,
+    refback: Option<Error>
 }
 
-impl Display for Ctx {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            Self::In(loc) => format!("in {}", loc),
-            Self::Between(values) => format!("between {}", values),
-            Self::For(purpose) => format!("for {}", purpose),
-            Self::Begin(loc) => format!("at start of {}", loc),
-            Self::End(loc) => format!("at end of {}", loc),
-            Self::After(loc) => format!("after {}", loc)
-        }
-        .fmt(f)
+impl ParseErrorContext {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn refback(mut self, error: Error) -> Self {
+        self.refback = Some(error);
+        self
     }
 }
 
-pub struct Parser {
-    pos: usize,
-    buffer: Vec<Token>,
-    error_manager: Rc<RefCell<ErrorManager>>
+macro_rules! where_constructor {
+    ($name:ident, $constr:ident, $loc_str:expr) => {
+        pub fn $name<S: AsRef<str>>(mut self, value: S) -> Self {
+            self.loc = format!("{} {}", $loc_str, value.as_ref());
+            self
+        }
+    };
 }
 
-impl Parser {
+impl ParseErrorContext {
+    where_constructor!(in_, In, "in");
+    where_constructor!(between, Between, "between");
+    where_constructor!(for_, For, "for");
+    where_constructor!(begin, Begin, "at start of");
+    where_constructor!(end, End, "at end of");
+    where_constructor!(after, After, "after");
+}
+
+/// The parser is constructed via helper, error reporting, and parse functions.
+/// The naming convention is that functions named `parse_{decl,stmt,expr,type}`
+/// are the driver functions for their given syntactic category (returning
+/// [`crate::ast::node::Node`]s). These are merely wrappers around
+/// `parse_{decl,stmt,expr,type}_value` functions, which drive individual
+/// `parse_foo` functions (all of which return `Node::Value`s). At any point, a
+/// `Node` can be constructed from its `Node::Value` by wrapping it in
+/// [`parse_full_node!`].
+///
+/// Helpers:
+///
+/// - [`is_eof`](`Parser::is_eof`)
+/// - [`previous`](`Parser::previous`)
+/// - [`current`](`Parser::current`)
+/// - [`current_opt`](`Parser::current_opt`)
+/// - [`current_op_opt`](`Parser::current_op_opt`)
+/// - [`is_at`](`Parser::is_at`)
+/// - [`next_is`](`Parser::next_is`)
+/// - [`advance`](`Parser::advance`)
+/// - [`take`](`Parser::take`)
+/// - [`unget`](`Parser::unget`)
+/// - [`consume_ignored`](`Parser::consume_ignored`)
+/// - [`expect`](`Parser::expect`)
+/// - [`contained_in!`]
+/// - [`parse_full_node!`]
+/// - [`synchronize`](`Parser::synchronize`)
+/// - [`attempt_restore_to_top_level`](`Parser::attempt_restore_to_top_level`)
+///
+/// Error Reporting:
+///
+/// - All the `report_*` functions as well as [`Parser::report`].
+///
+/// Parse:
+///
+/// - Types
+///     - [`parse_primary_type`](Parser::parse_primary_type)
+///     - [`parse_array_type`](Parser::parse_array_type)
+///     - [`parse_type`](Parser::parse_type)
+/// - Expressions
+///     - [`parse_array_literal_expr_value`](Parser::parse_array_literal_expr_value)
+///     - [`parse_literal_expr_value`](Parser::parse_literal_expr_value)
+///     - [`parse_unary_prefix_expr_value`](Parser::parse_unary_prefix_expr_value)
+///     - [`parse_postfix_binary_expr`](Parser::parse_postfix_binary_expr)
+///     - [`parse_call_expr_value`](Parser::parse_call_expr_value)
+///     - [`parse_primary_expr_aux`](Parser::parse_primary_expr_aux)
+///     - [`parse_primary_expr`](Parser::parse_primary_expr)
+///     - [`parse_infix_binary_expr`](Parser::parse_infix_binary_expr)
+///     - [`parse_expr`](Parser::parse_expr)
+/// - Statements
+///     - [`parse_let`](Parser::parse_let)
+///     - [`parse_assign`](Parser::parse_assign)
+///     - [`parse_block`](Parser::parse_block)
+///     - [`end_stmt`](Parser::end_stmt)
+///     - [`parse_stmt_value`](Parser::parse_stmt_value)
+///     - [`parse_stmt`](Parser::parse_stmt)
+/// - Declarations
+///     - [`parse_params`](Parser::parse_params)
+///     - [`parse_func`](Parser::parse_func)
+///     - [`parse_decl_value`](Parser::parse_decl_value)
+///     - [`parse_decl`](Parser::parse_decl)
+pub struct Parser<'ast, 'err, P: AsASTPool> {
+    pos: usize,
+    buffer: HandleArray<Token>,
+    ast_pool: &'ast mut P,
+    error_manager: &'err mut ErrorManager
+}
+
+impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     /// Constructs a parser for the given token buffer `buffer`.
     pub fn new(
-        buffer: Vec<Token>, error_manager: Rc<RefCell<ErrorManager>>
-    ) -> Parser {
-        Parser {
+        buffer: HandleArray<Token>, ast_pool: &'ast mut P,
+        error_manager: &'err mut ErrorManager
+    ) -> Self {
+        Self {
             pos: 0,
             buffer,
+            ast_pool,
             error_manager
         }
     }
@@ -59,15 +152,16 @@ impl Parser {
         self.pos == self.buffer.len()
     }
 
-    fn previous(&self) -> &Token {
-        &self.buffer[self.pos - 1]
+    /// Requires: the parser has advanced by at least one token.
+    fn previous(&self) -> Handle<Token> {
+        self.buffer.at(self.pos - 1)
     }
 
-    fn current(&self) -> &Token {
-        &self.buffer[self.pos]
+    fn current(&self) -> Handle<Token> {
+        self.buffer.at(self.pos)
     }
 
-    fn current_opt(&self) -> Option<&Token> {
+    fn current_opt(&self) -> Option<Handle<Token>> {
         if self.is_eof() {
             None
         } else {
@@ -88,7 +182,7 @@ impl Parser {
 
     fn next_is(&self, ty: TokenType) -> bool {
         if self.pos + 1 < self.buffer.len() {
-            self.buffer[self.pos + 1].ty == ty
+            self.buffer.at(self.pos + 1).ty == ty
         } else {
             false
         }
@@ -98,8 +192,8 @@ impl Parser {
         self.pos += 1;
     }
 
-    fn take(&mut self) -> Token {
-        let result = self.current().clone();
+    fn take(&mut self) -> Handle<Token> {
+        let result = self.current();
         self.advance();
         result
     }
@@ -116,23 +210,21 @@ impl Parser {
 
     /// Skips past tokens that can be arbitrarily inserted, such as newlines.
     fn consume_ignored(&mut self) {
-        while !self.is_eof() && self.current().ty == TokenType::Newline {
+        while !self.is_eof() && self.is_at(TokenType::Newline) {
             self.advance()
         }
     }
 
     /// Returns the next token in the stream if it is of type `token_type` and
     /// reports an error otherwise, returning `None`.
-    fn expect(&mut self, token_type: TokenType, context: Ctx) -> Option<Token> {
+    fn expect(
+        &mut self, token_type: TokenType, context: ParseErrorContext
+    ) -> Option<Handle<Token>> {
         if self.is_eof() {
             self.report_unexpected_eof(context);
             None
         } else if self.current().ty != token_type {
-            self.report_expected_token(
-                token_type,
-                &self.current().clone(),
-                &context.to_string()
-            );
+            self.report_expected_token(token_type, self.current(), context);
             None
         } else {
             Some(self.take())
@@ -143,68 +235,83 @@ impl Parser {
     /// parsing context `context`.
     ///
     /// Requires: `!buffer.is_empty()`.
-    fn report_unexpected_eof(&mut self, context: Ctx) {
+    fn report_unexpected_eof(&mut self, context: ParseErrorContext) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::UnexpectedEOF)
-                .at_region(self.buffer.last().unwrap())
-                .explain(format!("Unexpected EOF {}", context))
+                .span(self.buffer.last().unwrap())
+                .explain(format!("Unexpected EOF {}", context.loc))
                 .build()
         );
+        if let Some(refback) = context.refback {
+            self.report(refback);
+        }
     }
 
     /// [Reports](Parser::report): The token type of the found token `actual`
     /// diverges from the expected type `expected_ty` in the parsing context
     /// `context`.
     fn report_expected_token(
-        &mut self, expected_ty: TokenType, actual: &Token, context: &str
+        &mut self, expected_ty: TokenType, actual: Handle<Token>,
+        context: ParseErrorContext
     ) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::UnexpectedToken)
-                .at_region(actual)
-                .message(format!("Expected '{:?}' {}", expected_ty, context))
-                .explain(format!("Received '{:?}' here", actual.ty))
+                .span(actual)
+                .message(format!(
+                    "Expected '{}' {}",
+                    expected_ty.name(),
+                    context.loc
+                ))
+                .explain(format!("Received '{}' here", actual.ty.name()))
                 .build()
         );
+        if let Some(refback) = context.refback {
+            self.report(refback);
+        }
     }
 
     /// [Reports](Parser::report): See [`Parser::report_expected_token`].
     fn report_expected_tokens(
-        &mut self, expected_tys: &[TokenType], actual: &Token, context: Ctx
+        &mut self, expected_tys: &[TokenType], actual: Handle<Token>,
+        context: ParseErrorContext
     ) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::UnexpectedToken)
-                .at_region(actual)
+                .span(actual)
                 .message(format!(
                     "Expected one of {} {}",
                     expected_tys
                         .iter()
-                        .map(|ty| format!("'{:?}'", ty))
+                        .map(|ty| format!("'{}'", ty.name()))
                         .collect::<Vec<String>>()
                         .join(", "),
-                    context
+                    context.loc
                 ))
-                .explain(format!("Received '{:?}' here", actual.ty))
+                .explain(format!("Received '{}' here", actual.ty.name()))
                 .build()
         );
+        if let Some(refback) = context.refback {
+            self.report(refback);
+        }
     }
 
     /// Constructs a secondary-style error that refers back to a previous token
     /// `refback` with additional explanation `explain`.
-    fn report_refback(&mut self, refback: &Token, explain: String) {
+    fn report_refback(&mut self, refback: Handle<Token>, explain: String) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Secondary)
                 .at_level(Level::Error)
-                .at_region(refback)
+                .span(refback)
                 .continues()
                 .explain(explain)
                 .build()
@@ -213,59 +320,58 @@ impl Parser {
 
     /// [Reports](Parser::report): A construct (marked by `token`) is found at
     /// top level that should not be. See [`Parser::report_not_top_level`].
-    fn report_top_level(&mut self, token: &Token) {
+    fn report_invalid_top_level(&mut self, token: Handle<Token>) {
         self.report(ErrorBuilder::new()
             .of_style(Style::Primary)
             .at_level(Level::Error)
             .with_code(ErrorCode::InvalidTopLevelConstruct)
-            .at_region(token)
-            .message(format!("Unexpected {:?} at top level", token.ty))
+            .span(token)
+            .message(format!("Unexpected {} at top level", token.ty.name()))
             .fix(
                 "Allowed constructs at top level include functions and imports"
-                    .into()
             )
             .build());
     }
 
     /// [Reports](Parser::report): A construct (marked by `token`) that belongs
     /// only at top level is found further nested. See
-    /// [`Parser::report_top_level`].
-    fn report_not_top_level(&mut self, token: &Token) {
+    /// [`Parser::report_invalid_top_level`].
+    fn report_unexpected_top_level(&mut self, token: Handle<Token>) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::ConstructShouldBeTopLevel)
-                .at_region(token)
-                .message("Unexpected top-level construct".into())
-                .fix("Did you mean to place it at the top level?".into())
+                .span(token)
+                .message("Unexpected top-level construct")
+                .fix("Did you mean to place it at the top level?")
                 .build()
         );
     }
 
     /// [Reports](Parser::report): `token` represents an invalid start to a
     /// statement.
-    fn report_invalid_token(&mut self, token: &Token) {
+    fn report_invalid_start_to_statement(&mut self, token: Handle<Token>) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
-                .with_code(ErrorCode::InvalidTokenForStatement)
-                .at_region(token)
-                .message("Invalid token at the start of a statement".into())
+                .with_code(ErrorCode::InvalidTokenToStartStatement)
+                .span(token)
+                .message("Invalid token at the start of a statement")
                 .build()
         );
     }
 
     /// [Reports](Parser::report): `token` was used incorrectly as a `usage`
     /// operator when it is not.
-    fn report_invalid_operator(&mut self, token: &Token, usage: &str) {
+    fn report_invalid_operator(&mut self, token: Handle<Token>, usage: &str) {
         self.report(
             ErrorBuilder::new()
                 .of_style(Style::Primary)
                 .at_level(Level::Error)
                 .with_code(ErrorCode::InvalidOperatorSyntax)
-                .at_region(token)
+                .span(token)
                 .message(format!(
                     "{} is not an {} operator",
                     token.value, usage
@@ -276,86 +382,106 @@ impl Parser {
     }
 
     fn report(&mut self, error: Error) {
-        self.error_manager.borrow_mut().record(error);
+        self.error_manager.record(error);
     }
 }
 
+/// ```
+/// let ctx = ParseErrorContext::new();
+/// expect_n! { self /* lexer */; current /* name for matched token */; ctx;
+///     TokenType::A => { foo },
+///     TokenType::B | TokenType::C => { bar }
+/// }
+/// ```
 macro_rules! expect_n {
-    ($self:ident in [$($token_type:expr),*] => $context:expr) => {
+    ($self:ident; $context:expr; match $token:ident: $($token_type:pat => $action:expr),*) => {
         if $self.is_eof() {
-            $self.report_unexpected_eof($context.into());
-            None
-        } else if ![$($token_type),*].contains(&$self.current().ty) {
-            $self.report_expected_tokens(
-                &[$($token_type),*],
-                &$self.current().clone(),
-                $context
-            );
+            $self.report_unexpected_eof($context);
             None
         } else {
-            Some($self.take())
+            let $token = $self.current();
+            match $self.current().ty {
+                $(
+                    $token_type => {
+                        $self.advance();
+                        $action
+                    },
+                )*
+                _ => {
+                    let token_type_patterns = [$(stringify!($token_type)),*];
+                    let mut token_types = Vec::new();
+                    for subpattern in token_type_patterns {
+                        for sub in subpattern.split('|').map(str::trim) {
+                            println!("{}", sub);
+                            token_types.push(TokenType::from_pattern(sub).expect("failed to round-trip serialize"));
+                        }
+                    }
+                    $self.report_expected_tokens(
+                        &token_types,
+                        $self.current(),
+                        $context
+                    );
+                    None
+                }
+            }
         }
     };
 }
 
 /// `contained_in! { self; left_type, name, right_type; ... }` computes an
 /// expression or series of statements followed by an expression (`...`)
-/// surrounded by tokens of type `left_type` and `right_type`.
+/// surrounded by tokens of type `left_type` and `right_type`. `name` is a
+/// string that is used in error messages to describe the syntactic construct
+/// for when the containing tokens are invalid.
+///
+/// If the `...` body returns `value`, then `contained_in!` returns
+/// `Some((left_token, value, right_token))`; otherwise, it returns `None`. The
+/// `...` body may use `?` try syntax. Here, `left_token` corresponds to
+/// `left_type` and likewise for `right_token`.
 macro_rules! contained_in {
     ($self:ident; $open_type:expr, $loc_ctx:expr, $close_type:expr; $($action:tt)*) => {
         {
-            let open_token = $self.expect($open_type, Ctx::Begin($loc_ctx.into()))?;
+            let open_token = $self.expect($open_type, ParseErrorContext::new().begin($loc_ctx))?;
             let result = {$($action)*};
-            let close_token = $self.expect($close_type, Ctx::End($loc_ctx.into()));
+            let close_token = $self.expect($close_type, ParseErrorContext::new().end($loc_ctx));
             if close_token.is_none() {
                 $self.report_refback(
-                    &open_token,
+                    open_token,
                     format!("{} opened here", $open_type)
                 );
                 return None;
             }
-            Some(result)
+            Some((open_token, result, close_token.unwrap()))
         }
     };
 }
 
-/// See [`parse_full_expr!`] and [`parse_full_node!`].
-macro_rules! parse_full_abstract {
-    ($self:ident.$method:ident<$type:ty>($($arg:expr),*)) => {{
+/// Constructs an expression returning `Option<N>` for some [`NodeInterface`]
+/// `N` given a member function returning `Option<N::V>`, and assuming that the
+/// parser's pool implements [`AsNodePool<N>`]. For example, if `self.foo()`
+/// returns `Option<N::V>`, you can use `parse_full_node!(self.foo())`.
+macro_rules! parse_full_node {
+    ($self:ident.$method:ident($($arg:expr),*)) => {{
         let start_token = $self.current().clone();
         let value = $self.$method($($arg),*);
-        let end_token = $self.previous().clone();
-        value.map(|v| <$type>::new(v, start_token, end_token))
+        value.map(|v| {
+            let end_token = $self.previous().clone();
+            $self.ast_pool.new(v, start_token, end_token)
+        })
     }};
-}
-
-/// `parse_full_expr!(self.method_returning_expr_value())` wraps the
-/// [`ExprValue`] as an [`Expr`] by keeping track of the surrounding tokens.
-macro_rules! parse_full_expr {
-    ($self:ident.$method:ident($($arg:expr),*)) => {
-        parse_full_abstract!($self.$method<Expr>($($arg),*))
-    };
-}
-
-/// `parse_full_node!(self.method_returning_node_value())` wraps the
-/// [`NodeValue`] as an [`Node`] by keeping track of the surrounding tokens.
-macro_rules! parse_full_node {
-    ($self:ident.$method:ident($($arg:expr),*)) => {
-        parse_full_abstract!($self.$method<Node>($($arg),*))
-    };
 }
 
 impl TokenType {
     fn begins_top_level_construct(&self) -> bool {
-        matches!(self, Self::Func | Self::Pure) // || Self::Import
+        matches!(self, Self::Func) // || Self::Import
     }
 }
 
-impl Parser {
+impl<'ast, 'err, P: AsASTPool> Parser<'ast, 'err, P> {
     /// Advances until EOF, or when specified by `current_exit`, or when a
     /// top-level construct is potentially found.
-    fn synchronize(
-        &mut self, custom_exit: fn(&Token) -> bool, description: String
+    fn synchronize<S: AsRef<str>>(
+        &mut self, custom_exit: fn(Handle<Token>) -> bool, description: S
     ) {
         if !self.is_eof() {
             self.report(
@@ -363,10 +489,8 @@ impl Parser {
                     .of_style(Style::Primary)
                     .at_level(Level::Info)
                     .with_code(ErrorCode::UnexpectedToken)
-                    .at_region(self.current())
-                    .message(
-                        "Attempting to recover understanding of code".into()
-                    )
+                    .span(self.current())
+                    .message("Attempting to recover understanding of code")
                     .explain(description)
                     .build()
             );
@@ -379,88 +503,109 @@ impl Parser {
         }
     }
 
-    /// Identical to [`Parser::synchronize`] but with no custom exit.`
+    /// Identical to [`Parser::synchronize`] but with no custom exit.
     fn attempt_restore_to_top_level(&mut self) {
-        self.synchronize(|_| false, "Seeking top-level construct".into());
+        self.synchronize(|_| false, "Seeking top-level construct");
     }
 
-    fn parse_primary_type(&mut self, name: Option<&str>) -> Option<Type> {
-        let context = match name {
-            Some(name) => Ctx::In(name.into()),
-            None => Ctx::For("primary type".into())
-        };
-        let type_token = self.expect(TokenType::Identifier, context)?;
-        Some(match type_token.value.as_str() {
-            "Int64" | "Int" => Type::Int64,
-            "Unit" => Type::Unit,
-            other => Type::Name(other.into())
-        })
-    }
+    /// Requires: `self.is_at(TokenType::RightBracket)`.
+    fn parse_array_type(&mut self) -> Option<TypeValue> {
+        self.unget();
 
-    fn parse_array_type(&mut self, inner: Type) -> Option<Type> {
-        let size_token = contained_in! { self;
+        let (_, result, _) = contained_in! { self;
             TokenType::LeftBracket, "array type", TokenType::RightBracket;
-            self.expect(TokenType::Integer, Ctx::For("array size".into()))?
-        }?;
 
-        let size = size_token
+            let inner = parse_full_node!(self.parse_type(Some("element type")))?;
+
+            self.expect(TokenType::Semicolon , ParseErrorContext::new().between("array element type and size"))?;
+
+            let size_token = self.expect(TokenType::Integer, ParseErrorContext::new().for_("array size"))?;
+
+            let size = size_token
             .value
             .as_str()
             .parse::<i64>()
             .expect("number token can be parsed as number");
-        if size < 0 {
-            self.report(
-                ErrorBuilder::new()
-                    .of_style(Style::Primary)
-                    .at_level(Level::Error)
-                    .with_code(ErrorCode::MalformedType)
-                    .at_region(&size_token)
-                    .message("Array size cannot be negative".into())
-                    .build()
-            );
-            return None;
-        } else if size == 0 {
-            self.report(
-                ErrorBuilder::new()
-                    .of_style(Style::Primary)
-                    .at_level(Level::Warning)
-                    .with_code(ErrorCode::MalformedType)
-                    .at_region(&size_token)
-                    .message("Array size is zero".into())
-                    .build()
-            );
-        }
-
-        let result = Type::Array(TypeCell::new(inner), size as isize);
-        if self.is_at(TokenType::LeftBracket) {
-            self.parse_array_type(result)
-        } else {
-            Some(result)
-        }
-    }
-
-    fn parse_type(&mut self, name: Option<&str>) -> Option<Type> {
-        if self.is_eof() {
-            self.report_unexpected_eof(Ctx::In(
-                match name {
-                    Some(name) => name,
-                    None => "type"
+            match size.cmp(&0) {
+                cmp::Ordering::Less => {
+                    self.report(
+                        ErrorBuilder::new()
+                            .of_style(Style::Primary)
+                            .at_level(Level::Error)
+                            .with_code(ErrorCode::MalformedType)
+                            .span(size_token)
+                            .message("Array size cannot be negative")
+                            .build()
+                    );
+                    return None;
                 }
-                .into()
-            ));
-            return None;
-        }
-        let primary = self.parse_primary_type(name)?;
-        if self.is_at(TokenType::LeftBracket) {
-            self.parse_array_type(primary)
-        } else {
-            Some(primary)
+                cmp::Ordering::Equal => {
+                    self.report(
+                        ErrorBuilder::new()
+                            .of_style(Style::Primary)
+                            .at_level(Level::Warning)
+                            .with_code(ErrorCode::MalformedType)
+                            .span(size_token)
+                            .message("Array size is zero")
+                            .build()
+                    );
+                }
+                _ => {}
+            }
+
+            let size_liquid_type = self.ast_pool.generate(
+                LiquidTypeValue::Equal(size as usize),
+                size_token,
+                size_token
+            );
+
+            TypeValue::Array(inner, size_liquid_type)
+        }?;
+        Some(result)
+    }
+
+    fn parse_primary_type<S: AsRef<str>>(
+        &mut self, name: Option<S>
+    ) -> Option<TypeValue> {
+        let parse_ctx = name
+            .map_or(ParseErrorContext::new().for_("primary type"), |name| {
+                ParseErrorContext::new().in_(name)
+            });
+        expect_n! { self; parse_ctx; match current:
+            TokenType::Identifier => {
+                Some(match current.value.as_str() {
+                    "Int64" | "Int" => TypeValue::Int64,
+                    "Unit" => TypeValue::Unit,
+                    other => TypeValue::Name(other.into())
+                })
+            },
+            TokenType::LeftBracket => self.parse_array_type()
         }
     }
+
+    fn parse_type(&mut self, name: Option<&str>) -> Option<TypeValue> {
+        if self.is_eof() {
+            self.report_unexpected_eof(
+                ParseErrorContext::new().in_::<&str>(name.unwrap_or("type"))
+            );
+            return None;
+        }
+        // let start = self.current();
+        let primary_value = self.parse_primary_type(name)?;
+        // let end = self.previous();
+        // if self.is_at(TokenType::LeftBracket) {
+        //     let primary = self.ast_pool.new(primary_value, start, end);
+        //     self.parse_array_type(primary)
+        // } else {
+        Some(primary_value)
+        // }
+    }
+
+    // ============================== EXPRESSIONS ==============================
 
     fn parse_array_literal_expr_value(&mut self) -> Option<ExprValue> {
         let mut elements = vec![];
-        let mut should_continue = false;
+        let mut should_continue = None;
         let mut i = 0;
         contained_in! { self;
             TokenType::LeftBracket, "array literal", TokenType::RightBracket;
@@ -469,7 +614,7 @@ impl Parser {
                 if i > 0 {
                     self.expect(
                         TokenType::Comma,
-                        Ctx::Between("array elements".into())
+                        ParseErrorContext::new().between("array elements")
                     )?;
                     self.consume_ignored();
                 }
@@ -480,7 +625,7 @@ impl Parser {
                         }
                     }
                     (Some(TokenType::Dots), _) => {
-                        should_continue = true;
+                        should_continue = Some(self.current());
                         self.advance();
                         break;
                     }
@@ -491,7 +636,7 @@ impl Parser {
                 if let Some(element) = element_opt {
                     elements.push(element);
                 } else {
-                    self.synchronize(|token| token.ty == TokenType::RightBrace, "Seeking end of array literal".into());
+                    self.synchronize(|token| token.ty == TokenType::RightBrace, "Seeking end of array literal");
                     return None;
                 }
 
@@ -503,41 +648,41 @@ impl Parser {
     }
 
     fn parse_literal_expr_value(&mut self) -> Option<ExprValue> {
-        let literal_token = expect_n! { self in
-            [TokenType::Integer, TokenType::Float, TokenType::Char, TokenType::LeftBracket, TokenType::Identifier] => Ctx::Begin("literal expression".into())
-        }?;
-        match literal_token.ty {
+        expect_n!(self; ParseErrorContext::new().in_("literal expression");
+            match literal_token:
+
             TokenType::Integer => Some(ExprValue::ConstantInt(
                 literal_token.value.parse::<i64>().unwrap()
             )),
             TokenType::LeftBracket => {
                 self.unget();
                 self.parse_array_literal_expr_value()
-            }
-            TokenType::Identifier => {
-                Some(ExprValue::BoundName(literal_token.clone()))
-            }
-            _ => None
-        }
+            },
+            TokenType::Identifier => Some(ExprValue::BoundName(literal_token))
+        )
+        // let literal_token = expect_n! { self in
+        //     [TokenType::Integer, TokenType::Float, TokenType::Char,
+        // TokenType::LeftBracket, TokenType::Identifier] =>
+        // ParseErrorContext::new().begin("literal expression") }?;
     }
 
     fn parse_unary_prefix_expr_value(
         &mut self, prefix_op: Op
     ) -> Option<ExprValue> {
         if prefix_op.is_unary_prefix() {
-            self.report_invalid_operator(&self.current().clone(), "unary");
+            self.report_invalid_operator(self.current(), "unary");
             return None;
         }
 
         let op_token = self.take();
         let rhs = self.parse_expr()?;
 
-        Some(ExprValue::PrefixOp(op_token, Box::new(rhs)))
+        Some(ExprValue::PrefixOp(op_token, rhs))
     }
 
-    fn parse_postfix_binary_expr_value(
-        &mut self, mut lhs: Expr
-    ) -> Option<ExprValue> {
+    fn parse_postfix_binary_expr(
+        &mut self, mut lhs: Handle<Expr>
+    ) -> Option<Handle<Expr>> {
         while let Some(postfix_bop) =
             self.current_op_opt().and_then(|op| op.postfix_binary)
         {
@@ -546,30 +691,27 @@ impl Parser {
             let op2 = self.expect(
                 postfix_bop.close_token_ty,
                 postfix_bop.name.map_or(
-                    Ctx::After(
+                    ParseErrorContext::new().after(
                         "second subexpression in postfix binary expression"
-                            .into()
                     ),
-                    |name| Ctx::In(name)
+                    |name| ParseErrorContext::new().in_(name)
                 )
             )?;
-            let start_token = lhs.start_token().clone();
-            let end_token = op2.clone();
-            lhs = Expr::new(
-                ExprValue::PostfixBop(Box::new(lhs), op1, Box::new(rhs), op2),
+            let start_token = lhs.start_token();
+            let end_token = op2;
+            lhs = self.ast_pool.new(
+                ExprValue::PostfixBop(lhs, op1, rhs, op2),
                 start_token,
                 end_token
             );
         }
-        Some(lhs.value)
+        Some(lhs)
     }
 
-    /// Warning: do not call this function unless it is wrapped in
-    /// [`parse_expr_full!`].
     fn parse_call_expr_value(&mut self) -> Option<ExprValue> {
         let name = self.expect(
             TokenType::Identifier,
-            Ctx::Begin("call expression".into())
+            ParseErrorContext::new().begin("call expression")
         )?;
 
         let mut args = vec![];
@@ -578,7 +720,7 @@ impl Parser {
             let mut i = 0;
             while !self.is_eof() && self.current().ty != TokenType::RightPar {
                 if i > 0 {
-                    self.expect(TokenType::Comma, Ctx::Between("arguments".into()))?;
+                    self.expect(TokenType::Comma, ParseErrorContext::new().between("arguments"))?;
                     self.consume_ignored();
                 }
                 if self.is_at(TokenType::RightPar) {
@@ -589,7 +731,7 @@ impl Parser {
                 if let Some(arg) = arg_opt {
                     args.push(arg);
                 } else {
-                    self.synchronize(|token| token.ty == TokenType::RightPar, "Seeking end of call arguments".into());
+                    self.synchronize(|token| token.ty == TokenType::RightPar, "Seeking end of call arguments");
                     return None;
                 }
 
@@ -597,99 +739,62 @@ impl Parser {
             }
         };
 
-        Some(ExprValue::Call(name.clone(), args))
+        Some(ExprValue::Call(name, args))
     }
 
-    fn parse_primary_expr_value_aux(&mut self) -> Option<ExprValue> {
+    fn parse_primary_expr_aux(&mut self) -> Option<Handle<Expr>> {
         if self.is_eof() {
-            self.report_unexpected_eof(Ctx::Begin("primary expression".into()));
+            self.report_unexpected_eof(
+                ParseErrorContext::new().begin("primary expression")
+            );
             None
         } else if let Some(prefix_op) =
             self.current_op_opt().filter(|op| op.is_unary_prefix())
         {
-            self.parse_unary_prefix_expr_value(prefix_op)
+            parse_full_node!(self.parse_unary_prefix_expr_value(prefix_op))
         } else if self.is_at(TokenType::LeftPar) {
             let open_paren = self.take();
-            let expr_value = self.parse_expr()?.value;
-            let closing_paren =
-                self.expect(TokenType::RightPar, Ctx::In("expression".into()));
+            let wrapped = self.parse_expr()?;
+            let closing_paren = self.expect(
+                TokenType::RightPar,
+                ParseErrorContext::new().in_("expression")
+            );
             if closing_paren.is_none() {
                 self.report_refback(
-                    &open_paren,
+                    open_paren,
                     "Parentheses opened here".into()
                 );
                 None
             } else {
-                Some(expr_value)
+                Some(wrapped)
             }
-        } else if self.is_at(TokenType::HardwareMap) {
-            let map_token = self.expect(
-                TokenType::HardwareMap,
-                Ctx::Begin("hardware map".into())
-            )?;
-            self.expect(
-                TokenType::LeftAngle,
-                Ctx::In("hardware map expression".into())
-            )?;
-            let parallel_factor_token = self.expect(
-                TokenType::Integer,
-                Ctx::In("hardware map expression".into())
-            )?;
-            self.expect(
-                TokenType::RightAngle,
-                Ctx::In("hardware map expression".into())
-            )?;
-            self.expect(
-                TokenType::LeftPar,
-                Ctx::In("hardware map expression".into())
-            )?;
-            let f = self.expect(
-                TokenType::Identifier,
-                Ctx::In("hardware map expression".into())
-            )?;
-            self.expect(
-                TokenType::Comma,
-                Ctx::In("hardware map expression".into())
-            )?;
-            let arr = self.parse_expr()?;
-            self.expect(
-                TokenType::RightPar,
-                Ctx::In("hardware map expression".into())
-            )?;
-            // TODO: check for negatives
-            Some(ExprValue::HardwareMap(
-                map_token.clone(),
-                parallel_factor_token.value.parse::<usize>().unwrap(),
-                f,
-                Box::new(arr)
-            ))
         } else if self.is_at(TokenType::Identifier)
             && self.next_is(TokenType::LeftPar)
         {
             // TODO: allow calling expressions and more complex names with `::`
-            self.parse_call_expr_value()
+            parse_full_node!(self.parse_call_expr_value())
         } else {
-            self.parse_literal_expr_value()
+            parse_full_node!(self.parse_literal_expr_value())
         }
     }
 
-    fn parse_primary_expr_value(&mut self) -> Option<ExprValue> {
-        let primary = parse_full_expr!(self.parse_primary_expr_value_aux())?;
+    fn parse_primary_expr(&mut self) -> Option<Handle<Expr>> {
+        let primary = self.parse_primary_expr_aux()?;
         if self
             .current_op_opt()
             .map_or(false, |op| op.is_postfix_binary())
         {
-            self.parse_postfix_binary_expr_value(primary)
+            self.parse_postfix_binary_expr(primary)
         } else {
-            Some(primary.value)
+            Some(primary)
         }
     }
 
     /// Implements [operator-precedence parsing](https://en.wikipedia.org/wiki/Operator-precedence_parser).
     fn parse_infix_binary_expr(
-        &mut self, mut lhs: Expr, min_precedence: Precedence
-    ) -> Option<Expr> {
-        let mut lookahead = self.current().clone();
+        &mut self, mut lhs: Handle<Expr>, min_precedence: Precedence
+    ) -> Option<Handle<Expr>> {
+        let mut lookahead = self.current();
         while !self.is_eof()
             && Op::from(lookahead.ty)
                 .and_then(|op| op.infix_binary)
@@ -701,11 +806,11 @@ impl Parser {
                 .and_then(|op| op.infix_binary)
                 .expect("while cond guarantees");
 
-            let mut rhs = parse_full_expr!(self.parse_primary_expr_value())?;
+            let mut rhs = self.parse_primary_expr()?;
             if self.is_eof() {
                 break;
             }
-            lookahead = self.current().clone();
+            lookahead = self.current();
             while !self.is_eof()
                 && Op::from(lookahead.ty)
                     .and_then(|next_op| next_op.infix_binary)
@@ -728,12 +833,12 @@ impl Parser {
                         0
                     };
                 rhs = self.parse_infix_binary_expr(rhs, new_min_precedence)?;
-                lookahead = self.current().clone();
+                lookahead = self.current();
             }
-            let start_token = lhs.start_token().clone();
-            let end_token = rhs.end_token().clone();
-            lhs = Expr::new(
-                ExprValue::InfixBop(Box::new(lhs), op_token, Box::new(rhs)),
+            let start_token = lhs.start_token();
+            let end_token = rhs.end_token();
+            lhs = self.ast_pool.new(
+                ExprValue::InfixBop(lhs, op_token, rhs),
                 start_token,
                 end_token
             );
@@ -741,14 +846,14 @@ impl Parser {
         Some(lhs)
     }
 
-    fn parse_expr(&mut self) -> Option<Expr> {
+    fn parse_expr(&mut self) -> Option<Handle<Expr>> {
         self.consume_ignored();
-        let primary = parse_full_expr!(self.parse_primary_expr_value())?;
+        let primary = self.parse_primary_expr()?;
         if let Some(op) = self.current_op_opt() {
             if op.is_infix_binary() {
                 self.parse_infix_binary_expr(primary, -1)
             } else {
-                self.report_invalid_operator(&self.current().clone(), "binary");
+                self.report_invalid_operator(self.current(), "binary");
                 None
             }
         } else {
@@ -756,184 +861,131 @@ impl Parser {
         }
     }
 
-    fn parse_let(&mut self) -> Option<NodeValue> {
-        self.expect(TokenType::Let, Ctx::Begin("let binding".into()))?;
+    // ============================== STATEMENTS ===============================
+
+    /// Requires: `self.is_at(TokenType::Let)`.
+    fn parse_let(&mut self) -> Option<StmtValue> {
+        self.expect(
+            TokenType::Let,
+            ParseErrorContext::new().begin("let binding")
+        )?;
 
         let name = self.expect(
             TokenType::Identifier,
-            Ctx::For("name in let binding".into())
+            ParseErrorContext::new().for_("name in let binding")
         )?;
 
         let mut hint = None;
-        if self.current().ty == TokenType::Colon {
+        if self.is_at(TokenType::Colon) {
             self.advance();
-            hint = Some(TypeCell::new(
-                self.parse_type("let binding type hint".into())?
-            ));
+            hint = Some(parse_full_node!(
+                self.parse_type(Some("let binding type hint"))
+            )?);
         }
 
         self.expect(
             TokenType::Assign,
-            Ctx::After("name in let binding".into())
+            ParseErrorContext::new().after("name in let binding")
         )?;
 
         let value = self.parse_expr()?;
 
-        Some(NodeValue::LetBinding {
-            name,
-            hint,
-            value: Box::new(value)
-        })
+        Some(StmtValue::Let { name, hint, value })
     }
 
-    fn parse_return(&mut self) -> Option<NodeValue> {
-        let token = self
-            .expect(TokenType::Return, Ctx::Begin("return statement".into()))?;
+    /// Requires: `lhs` has just been parsed as a valid expression in the token
+    /// stream.
+    fn parse_assign(&mut self, lhs: Handle<Expr>) -> Option<StmtValue> {
+        let assign = self.expect(
+            TokenType::Assign,
+            ParseErrorContext::new()
+                .between("terms in assignment")
+                .refback(
+                    ErrorBuilder::new()
+                        .at_level(Level::Error)
+                        .of_style(Style::Secondary)
+                        .with_code(ErrorCode::WompWomp)
+                        .continues()
+                        .span(lhs)
+                        .explain("Assignment began here")
+                        .fix(format!("Insert '=' after `{}`", lhs))
+                        .build()
+                )
+        )?;
+        let rhs = self.parse_expr()?;
+        Some(StmtValue::Assign(lhs, assign, rhs))
+    }
 
-        let value = if self.is_at(TokenType::Newline) {
-            None
-        } else {
-            Some(Box::new(self.parse_expr()?))
-        };
+    /// Requires: `self.is_at(TokenType::For)`;
+    fn parse_for(&mut self) -> Option<StmtValue> {
+        self.expect(
+            TokenType::For,
+            ParseErrorContext::new().begin("for statement")
+        )?;
+        let var = self.expect(
+            TokenType::Identifier,
+            ParseErrorContext::new().for_("loop variable")
+        )?;
+        self.expect(
+            TokenType::In,
+            ParseErrorContext::new().after("loop variable")
+        )?;
+        let lower = self.parse_expr()?;
 
-        Some(NodeValue::Return {
-            keyword_token: token,
-            value
+        // todo: handle `...`
+        self.expect(
+            TokenType::DotsUntil,
+            ParseErrorContext::new().between("range bounds")
+        )?;
+
+        let exclusive_upper = self.parse_expr()?;
+
+        let (_, body, _) = self.parse_block("for body")?;
+
+        Some(StmtValue::For {
+            var,
+            lower,
+            exclusive_upper,
+            body
         })
     }
 
     /// Parses a brace-enclosed list of statements, e.g., `parse_block("function
     /// body")`.
-    fn parse_block(&mut self, name: &str) -> Option<Vec<Node>> {
-        self.consume_ignored();
-
-        let mut nodes = vec![];
-        let mut block_failed = false;
-
+    fn parse_block(&mut self, name: &str) -> Option<Block> {
         contained_in! { self;
             TokenType::LeftBrace, name, TokenType::RightBrace;
+
+            let mut nodes = vec![];
+
             self.consume_ignored();
             while !self.is_eof() && self.current().ty != TokenType::RightBrace {
-                let stmt_opt = self.parse_stmt(false);
+                let stmt_opt = self.parse_stmt();
                 if let Some(stmt) = stmt_opt {
                     nodes.push(stmt);
                 } else {
-                    block_failed = true;
                     self.synchronize(|token| token.ty == TokenType::RightBrace, format!("Seeking end of {}", name));
-                    break;
+                    return None;
                 }
             }
-        };
 
-        if block_failed {
-            None
-        } else {
-            Some(nodes)
+            nodes
         }
-    }
-
-    fn parse_func(&mut self) -> Option<NodeValue> {
-        let mut pure_token = None;
-        if self.is_at(TokenType::Pure) {
-            pure_token = Some(self.take());
-        }
-
-        self.expect(
-            TokenType::Func,
-            Ctx::Begin("function declaration".into())
-        )?;
-
-        let name = self
-            .expect(TokenType::Identifier, Ctx::For("function name".into()))?;
-
-        let open_paren = self.expect(
-            TokenType::LeftPar,
-            Ctx::Begin(format!("function parameters in `{}`", name.value))
-        )?;
-
-        self.consume_ignored();
-
-        let mut i = 0;
-        let mut params = vec![];
-        while !self.is_eof() && self.current().ty != TokenType::RightPar {
-            if i > 0 {
-                self.expect(
-                    TokenType::Comma,
-                    Ctx::Between(format!(
-                        "function parameters in `{}`",
-                        name.value
-                    ))
-                )?;
-                self.consume_ignored();
-            }
-            if self.is_at(TokenType::RightPar) {
-                break;
-            }
-
-            let name = self.expect(
-                TokenType::Identifier,
-                Ctx::For(format!("parameter name in `{}`", name.value))
-            )?;
-            self.expect(
-                TokenType::Colon,
-                Ctx::After(format!("parameter name in `{}`", name.value))
-            )?;
-            let ty = self.parse_type("parameter type".into())?;
-            params.push((name, ty));
-
-            self.consume_ignored();
-            i += 1
-        }
-
-        let close_paren = self.expect(
-            TokenType::RightPar,
-            Ctx::End("function parameters".into())
-        );
-        if close_paren.is_none() {
-            self.report_refback(&open_paren, "Parentheses opened here".into());
-            return None;
-        }
-
-        let mut ret = Type::Unit;
-        if self.is_at(TokenType::Arrow) {
-            self.advance();
-            ret = self.parse_type("function return type".into())?;
-        }
-
-        let mut body = self.parse_block("function body")?;
-        if ret == Type::Unit {
-            body.push(
-                Node::new(
-                    NodeValue::Return {
-                        keyword_token: name.clone(),
-                        value: None
-                    },
-                    name.clone(),
-                    name.clone()
-                )
-                .mark_generated()
-            );
-        }
-
-        Some(NodeValue::Function {
-            name: name.clone(),
-            params,
-            ret,
-            pure_token,
-            body
-        })
     }
 
     /// Requires: a statement must have been parsed, and as consequence at least
     /// one token has already been encountered.
-    fn end_stmt(&mut self) -> Option<Token> {
-        let ending_token = self.previous().clone();
+    fn end_stmt(&mut self) -> Option<Handle<Token>> {
+        let ending_token = self.previous();
 
-        if !self.is_eof() && self.current().ty == TokenType::RightBrace {
+        if !self.is_eof() && self.is_at(TokenType::RightBrace) {
             return Some(ending_token);
         }
 
-        self.expect(TokenType::Newline, Ctx::After("statement".into()))?;
+        self.expect(
+            TokenType::Newline,
+            ParseErrorContext::new().after("statement")
+        )?;
 
         self.consume_ignored();
 
@@ -941,67 +993,168 @@ impl Parser {
     }
 
     /// Requires: `!self.is_eof()`.
-    fn parse_stmt_value(&mut self, top_level: bool) -> Option<NodeValue> {
+    fn parse_stmt_value(&mut self) -> Option<StmtValue> {
         self.consume_ignored();
-        if self.is_eof() || self.error_manager.borrow().is_full() {
+        if self.is_eof() || self.error_manager.is_full() {
             return None;
         }
 
-        let current_ty = self.current().ty;
-        match (current_ty, top_level) {
-            (TokenType::Func, true) | (TokenType::Pure, true) => {
-                if let Some(func) = self.parse_func() {
-                    return Some(func);
-                }
-            }
-            (TokenType::Let, false) => {
-                if let Some(let_stmt) = self.parse_let() {
-                    return Some(let_stmt);
-                }
-            }
-            (TokenType::Return, false) => {
-                if let Some(return_stmt) = self.parse_return() {
-                    return Some(return_stmt);
-                }
-            }
-            _ => {
-                if current_ty.begins_top_level_construct() && !top_level {
-                    self.report_not_top_level(&self.current().clone());
-                } else if !current_ty.begins_top_level_construct() && top_level
-                {
-                    self.report_top_level(&self.current().clone());
+        match self.current().ty {
+            TokenType::Let => self.parse_let(),
+            TokenType::Divider => Some(StmtValue::Divider(self.take())),
+            TokenType::For => self.parse_for(),
+            other => {
+                if let Some(expr) = self.parse_expr() {
+                    return self.parse_assign(expr);
+                } else if other.begins_top_level_construct() {
+                    self.report_unexpected_top_level(self.current());
                 } else {
-                    self.report_invalid_token(&self.current().clone());
+                    self.report_invalid_start_to_statement(self.current());
                 }
-                self.advance();
+                self.advance(); // to prevent infinite loop
+                None
             }
-        }
-
-        if top_level {
-            self.attempt_restore_to_top_level();
-            self.parse_stmt_value(true)
-        } else {
-            None
         }
     }
 
-    fn parse_stmt(&mut self, top_level: bool) -> Option<Node> {
+    fn parse_stmt(&mut self) -> Option<Handle<Stmt>> {
         if self.is_eof() {
             return None;
         }
-        let node = parse_full_node!(self.parse_stmt_value(top_level))?;
+        let node = parse_full_node!(self.parse_stmt_value())?;
         if self.end_stmt().is_none() {
             self.advance();
             return None;
         }
         Some(node)
     }
+
+    // ============================= DECLARATIONS ==============================
+
+    fn parse_params<S: AsRef<str>, T: AsRef<str>>(
+        &mut self, source: S, kind: T
+    ) -> Option<(Handle<Token>, ParamVec, Handle<Token>)> {
+        contained_in! { self;
+            TokenType::LeftPar, source.as_ref(), TokenType::RightPar;
+            self.consume_ignored();
+
+            let mut i = 0;
+            let mut params = ParamVec::new();
+            while !self.is_eof() && self.current().ty != TokenType::RightPar {
+                if i > 0 {
+                    self.expect(
+                        TokenType::Comma,
+                        ParseErrorContext::new().between(format!(
+                            "{} parameters in `{}`",
+                            kind.as_ref(),
+                            source.as_ref()
+                        ))
+                    )?;
+                    self.consume_ignored();
+                }
+                if self.is_at(TokenType::RightPar) {
+                    break;
+                }
+
+                let name = self.expect(
+                    TokenType::Identifier,
+                    ParseErrorContext::new().for_(format!("{} parameter name in `{}`", kind.as_ref(), source.as_ref()))
+                )?;
+                self.expect(
+                    TokenType::Colon,
+                    ParseErrorContext::new().for_(format!("{} parameter name in `{}`", kind.as_ref(), source.as_ref()))
+                )?;
+                let ty =
+                    parse_full_node!(self.parse_type(Some(&format!("{} parameter type", kind.as_ref()))))?;
+                params.push((name, ty));
+
+                self.consume_ignored();
+                i += 1
+            }
+
+            params
+        }
+    }
+
+    fn parse_func(&mut self) -> Option<DeclValue> {
+        let func = self.expect(
+            TokenType::Func,
+            ParseErrorContext::new().begin("function declaration")
+        )?;
+
+        let name = self.expect(
+            TokenType::Identifier,
+            ParseErrorContext::new().for_("function name")
+        )?;
+
+        self.consume_ignored();
+        let (_, inputs, _) = self.parse_params(&name.value, "input")?;
+
+        self.consume_ignored();
+        let outputs = if self.is_at(TokenType::Arrow) {
+            self.advance();
+            self.consume_ignored();
+            let (_, outputs, _) = self.parse_params(&name.value, "output")?;
+            outputs
+        } else {
+            ParamVec::new()
+        };
+        self.consume_ignored();
+
+        let (_open_brace, body, _close_brace) =
+            self.parse_block("function body")?;
+
+        Some(DeclValue::Function {
+            func,
+            name,
+            inputs,
+            outputs,
+            body
+        })
+    }
+
+    /// Requires: `!self.is_eof()`.
+    fn parse_decl_value(&mut self) -> Option<DeclValue> {
+        self.consume_ignored();
+        if self.is_eof() || self.error_manager.is_full() {
+            return None;
+        }
+
+        match self.current().ty {
+            TokenType::Func => self.parse_func(),
+            _ => {
+                self.report_invalid_top_level(self.current());
+                None
+            }
+        }
+    }
+
+    fn parse_decl(&mut self) -> Option<Handle<Decl>> {
+        if self.is_eof() {
+            return None;
+        }
+        if let Some(decl) = parse_full_node!(self.parse_decl_value()) {
+            Some(decl)
+        } else {
+            self.attempt_restore_to_top_level();
+            self.parse_decl()
+        }
+    }
+
+    pub fn parse(mut self) -> Option<AST> {
+        while self.parse_decl().is_some() {}
+        if self.error_manager.has_errors() {
+            None
+        } else {
+            Some(self.ast_pool.as_pool_mut().as_array())
+        }
+    }
 }
 
-impl Iterator for Parser {
-    type Item = Node;
+impl<'ast, 'err, P: AsASTPool> Iterator for Parser<'ast, 'err, P> {
+    type Item = Handle<Decl>;
 
-    fn next(&mut self) -> Option<Node> {
-        self.parse_stmt(true)
+    fn next(&mut self) -> Option<Handle<Decl>> {
+        self.parse_decl()
     }
 }

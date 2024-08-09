@@ -1,22 +1,39 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use pulsar_utils::id::{Gen, Id};
-use std::fmt::Display;
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+use pulsar_utils::id::Id;
+use std::{
+    cmp,
+    fmt::{self, Display}
+};
+
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub struct Variable {
     id: Id
 }
 
-impl Variable {
-    pub fn new() -> Self {
-        Self {
-            id: Gen::next("IR variable")
-        }
+impl From<Id> for Variable {
+    fn from(value: Id) -> Self {
+        Self { id: value }
     }
 }
 
 impl Display for Variable {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "i{}", self.id)
+    }
+}
+
+impl PartialOrd for Variable {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Variable {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.id.cmp(&other.id)
     }
 }

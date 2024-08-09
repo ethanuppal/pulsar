@@ -14,3 +14,5 @@ readme.workspace = true
 [dependencies]
 colored.workspace = true
 lazy_static.workspace = true
+memmap2.workspace = true
+log.workspace = true

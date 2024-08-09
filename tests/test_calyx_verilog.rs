@@ -1,3 +1,8 @@
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -26,28 +31,28 @@ mod tests {
             .expect("Failed to restore the current working directory");
     }
 
-    #[test]
-    fn twice() {
-        run_verilator_test("twice");
-    }
+    // #[test]
+    // fn twice() {
+    //     run_verilator_test("twice");
+    // }
 
-    #[test]
-    fn square() {
-        run_verilator_test("square");
-    }
+    // #[test]
+    // fn square() {
+    //     run_verilator_test("square");
+    // }
 
-    #[test]
-    fn map_single() {
-        run_verilator_test("map_single");
-    }
+    // #[test]
+    // fn map_single() {
+    //     run_verilator_test("map_single");
+    // }
 
-    #[test]
-    fn map() {
-        run_verilator_test("map");
-    }
+    // #[test]
+    // fn map() {
+    //     run_verilator_test("map");
+    // }
 
-    #[test]
-    fn math() {
-        run_verilator_test("math");
-    }
+    // #[test]
+    // fn math() {
+    //     run_verilator_test("math");
+    // }
 }

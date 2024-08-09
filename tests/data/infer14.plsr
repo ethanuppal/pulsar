@@ -1,7 +1,17 @@
-func multiply(x: Int, y: Int) -> Int {
-    return x * y
+func test() -> (out: Int) {
+    for i in 0 ..< 10 {
+        out = 1
+        ---
+        out = 2
+    }
 }
 
-pure func square(value: Int) -> Int {
-    return multiply(value, value)
+func test2() -> (out: Int) {
+    for i in 0 ..< 10 {
+        out = 1
+    }
+    ---
+    for i in 0 ..< 10 {
+        out = 2
+    }
 }

@@ -1,0 +1,5 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\",\n                8)).expect(\"failed to parse/infer input\")"
+---
+func does_not_return() -> (return: Int64) {}

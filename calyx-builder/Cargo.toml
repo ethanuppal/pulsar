@@ -1,0 +1,18 @@
+[package]
+name = "calyx-builder"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+authors.workspace = true
+license-file.workspace = true
+keywords.workspace = true
+repository.workspace = true
+homepage.workspace = true
+categories.workspace = true
+readme.workspace = true
+
+[dependencies]
+calyx-utils.workspace = true
+calyx-ir.workspace = true
+calyx-frontend.workspace = true
+pulsar-utils.workspace = true

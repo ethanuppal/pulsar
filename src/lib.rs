@@ -3,10 +3,18 @@
 //! together all the langauge components. The documentation for each individual
 //! component is linked under the "Re-exports" section.
 //!
-//! Copyright (C) 2024 Ethan Uppal. All rights reserved.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
-#[doc(no_inline)]
-pub use pulsar_backend;
+pub mod context;
+pub mod utils;
+
+// #[doc(no_inline)]
+// pub use calyx_builder;
+// #[doc(no_inline)]
+// pub use pulsar_backend;
 #[doc(no_inline)]
 pub use pulsar_frontend;
 #[doc(no_inline)]

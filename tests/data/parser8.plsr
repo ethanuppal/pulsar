@@ -1,4 +1,4 @@
-func unit() -> Unit {}
-func int() -> Int {}
-func array() -> Int[64] {}
-func array(input: MyCustomType1) -> MyCustomType2 {}
+func unit() -> (unit: Unit) {}
+func int() -> (int: Int) {}
+func array() -> (array: [Int; 64]) {}
+func array(input: MyCustomType1) -> (custom: MyCustomType2) {}

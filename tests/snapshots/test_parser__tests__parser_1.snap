@@ -1,18 +1,25 @@
 ---
 source: tests/test_parser.rs
-expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", 1), error_manager)"
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\",\n                1)).expect(\"failed to parse input\")"
 ---
-func main() -> Unit {
-    return
-}
-error[E0006]: tests/data/parser1.plsr:6:5: Invalid token at the start of a statement
+error[E0003]: parser1.plsr:6:9: Expected 'assign' between terms in assignment
      │  
    5 │  func foo() {
    6 │      fun bad_nested() {
+     │          └───────── Received 'identifier' here
    7 │  
      │  
+   ...
+     │  
+   5 │  func foo() {
+   6 │      fun bad_nested() {
+     │      └── Assignment began here
+   7 │  
+     │  
+Suggestion: Insert '=' after `fun`
+For more information, pass `--explain 3`
 
-info[I0003]: tests/data/parser1.plsr:6:9: Attempting to recover understanding of code
+info[I0003]: parser1.plsr:6:9: Attempting to recover understanding of code
      │  
    5 │  func foo() {
    6 │      fun bad_nested() {
@@ -20,23 +27,33 @@ info[I0003]: tests/data/parser1.plsr:6:9: Attempting to recover understanding of
    7 │  
      │  
 
-info[I0003]: tests/data/parser1.plsr:8:6: Attempting to recover understanding of code
+info[I0003]: parser1.plsr:8:5: Attempting to recover understanding of code
      │  
    7 │  
    8 │      } 
-     │       └ Seeking top-level construct
+     │      └ Seeking top-level construct
    9 │  }
      │  
 
-error[E0005]: tests/data/parser1.plsr:12:5: Unexpected top-level construct
+error[E0003]: parser1.plsr:12:5: Expected one of 'integer', 'left-bracket', 'identifier' in literal expression
+     │  
+  11 │  func foo() {
+  12 │      func nested() {
+     │      └─── Received 'func' here
+  13 │          
+     │  
+For more information, pass `--explain 3`
+
+error[E0005]: parser1.plsr:12:5: Unexpected top-level construct
      │  
   11 │  func foo() {
   12 │      func nested() {
   13 │          
      │  
 Suggestion: Did you mean to place it at the top level?
+For more information, pass `--explain 5`
 
-info[I0003]: tests/data/parser1.plsr:12:10: Attempting to recover understanding of code
+info[I0003]: parser1.plsr:12:10: Attempting to recover understanding of code
      │  
   11 │  func foo() {
   12 │      func nested() {
@@ -44,29 +61,30 @@ info[I0003]: tests/data/parser1.plsr:12:10: Attempting to recover understanding 
   13 │          
      │  
 
-info[I0003]: tests/data/parser1.plsr:14:6: Attempting to recover understanding of code
+info[I0003]: parser1.plsr:14:5: Attempting to recover understanding of code
      │  
   13 │          
   14 │      } 
-     │       └ Seeking top-level construct
+     │      └ Seeking top-level construct
   15 │  }
      │  
 
-error[E0003]: tests/data/parser1.plsr:19:1: Expected 'identifier' for parameter name in `missing_close`
+error[E0003]: parser1.plsr:19:1: Expected 'identifier' for input parameter name in `missing_close`
      │  
   18 │  
   19 │  func missing_close_2() {
      │  └─── Received 'func' here
      │  
+For more information, pass `--explain 3`
 
-info[I0003]: tests/data/parser1.plsr:19:1: Attempting to recover understanding of code
+info[I0003]: parser1.plsr:19:1: Attempting to recover understanding of code
      │  
   18 │  
   19 │  func missing_close_2() {
      │  └─── Seeking top-level construct
      │  
 
-error[E0002]: tests/data/parser1.plsr:19:25: 
+error[E0002]: parser1.plsr:19:25: 
      │  
   18 │  
   19 │  func missing_close_2() { 
@@ -77,4 +95,5 @@ error[E0002]: tests/data/parser1.plsr:19:25:
   18 │  
   19 │  func missing_close_2() { 
      │                         └ { opened here
-     │
+     │  
+For more information, pass `--explain 2`

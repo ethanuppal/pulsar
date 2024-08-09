@@ -13,6 +13,6 @@ func param4(
 
 {}
 
-func param5(a: Int, b: Int[64], my_param40: Int[40][40]) {
+func param5(a: Int, b: [Int; 64], my_param40: [[Int; 40]; 40]) {
     
 }

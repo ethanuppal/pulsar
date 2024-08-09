@@ -1,31 +1,30 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use lazy_static::lazy_static;
-use std::{collections::HashMap, sync::Mutex};
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
-pub type Id = i64;
+pub type Id = usize;
 
+#[derive(Default)]
 pub struct Gen {
-    id_map: Mutex<HashMap<&'static str, Id>>
-}
-
-lazy_static! {
-    static ref GEN_SINGLETON: Gen = Gen {
-        id_map: Mutex::new(HashMap::new())
-    };
+    next: Id
 }
 
 impl Gen {
-    /// Returns an identifier unique among all [`Gen::next`] calls with the same
-    /// argument `name`.
-    pub fn next(name: &'static str) -> Id {
-        let mut id_map = GEN_SINGLETON.id_map.lock().unwrap();
-        if let Some(id) = id_map.get_mut(&name) {
-            let result = *id;
-            *id += 1;
-            result
-        } else {
-            id_map.insert(name, 1);
-            0
-        }
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// A unique identifier generator guaranteed to never produce `remove`.
+    pub fn new_skipping(skip: Id) -> Self {
+        Self { next: skip + 1 }
+    }
+
+    // Clippy wants me to implement [`Iterator`] or rename this from `next`.
+    #[allow(clippy::should_implement_trait)]
+    pub fn next(&mut self) -> Id {
+        let result = self.next;
+        self.next += 1;
+        result
     }
 }

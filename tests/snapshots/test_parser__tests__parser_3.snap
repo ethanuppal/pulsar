@@ -1,8 +1,8 @@
 ---
 source: tests/test_parser.rs
-expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", test_num),\n    error_manager.clone())"
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\",\n                3)).expect(\"failed to parse input\")"
 ---
-func main() -> Unit {
+func main() -> () {
     let add1 = 1
     let add2 = (1 + 2)
     let add3 = ((1 + 2) + 3)
@@ -11,5 +11,4 @@ func main() -> Unit {
     let sub3 = ((1 - 2) - 3)
     let mul2 = (1 * 2)
     let mul3 = ((1 * 2) * 3)
-    return
 }

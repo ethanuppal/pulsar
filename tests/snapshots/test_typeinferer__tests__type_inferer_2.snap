@@ -1,0 +1,22 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\",\n                2)).expect(\"failed to parse/infer input\")"
+---
+func main() -> () {
+    let a = 1
+    let b = 2
+    let arr: [Int64; 64] = [a, b, ...]
+    let complex = ((1 + (2 * 3)) + 4)
+}
+[infer2.plsr:2:13, infer2.plsr:2:14) 1: Int64
+[infer2.plsr:3:13, infer2.plsr:3:14) 2: Int64
+[infer2.plsr:4:27, infer2.plsr:4:28) a: Int64
+[infer2.plsr:4:30, infer2.plsr:4:31) b: Int64
+[infer2.plsr:4:26, infer2.plsr:4:37) [a, b, ...]: [Int64; 64]
+[infer2.plsr:5:19, infer2.plsr:5:20) 1: Int64
+[infer2.plsr:5:23, infer2.plsr:5:24) 2: Int64
+[infer2.plsr:5:27, infer2.plsr:5:28) 3: Int64
+[infer2.plsr:5:23, infer2.plsr:5:28) (2 * 3): Int64
+[infer2.plsr:5:19, infer2.plsr:5:28) (1 + (2 * 3)): Int64
+[infer2.plsr:5:31, infer2.plsr:5:32) 4: Int64
+[infer2.plsr:5:19, infer2.plsr:5:32) ((1 + (2 * 3)) + 4): Int64

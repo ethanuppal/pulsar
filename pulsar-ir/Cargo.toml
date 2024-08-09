@@ -14,3 +14,8 @@ readme.workspace = true
 [dependencies]
 pulsar-frontend.workspace = true
 pulsar-utils.workspace = true
+inform.workspace = true
+either.workspace = true
+log.workspace = true
+match_deref.workspace = true
+anyhow.workspace = true

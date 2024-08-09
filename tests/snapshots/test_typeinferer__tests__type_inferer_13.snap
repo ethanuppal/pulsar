@@ -1,0 +1,20 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\",\n                13)).expect(\"failed to parse/infer input\")"
+---
+error[E0012]: infer13.plsr:6:9: Cannot use affine resource `out` twice
+     │  
+   5 │      for i in 0 ..< 10 {
+   6 │          out = 2 
+     │          └────── Second usage attempted here,
+   7 │      }
+     │  
+   ...
+     │  
+   2 │      for i in 0 ..< 10 {
+   3 │          out = 1 
+     │          └────── but resource was already consumed here.
+   4 │      }
+     │  
+Suggestion: Use a `---` divider to separate the assignments by a logical timestep.
+For more information, pass `--explain 12`

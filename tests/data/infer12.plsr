@@ -1,8 +1,7 @@
-pure func square(value: Int) -> Int {
-    return value * value
-}
-
-func sum_squares(input: Int[4]) -> Int {
-    let squares = map<1>(square, input)
-    return 0
+func main(input: [[Int; 64]; 64], kernel: [[Int; 3]; 3]) -> (output: [[Int; 62]; 62]) {
+    for row in 1 ..< 63 {
+        for col in 1 ..< 63 {
+            output[row][col] = input[row][col]
+        }
+    }
 }

@@ -1,0 +1,11 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\",\n                5)).expect(\"failed to parse/infer input\")"
+---
+func main() -> () {
+    let small = [1]
+    let small2: [Int64; 1] = small
+}
+[infer5.plsr:2:18, infer5.plsr:2:19) 1: Int64
+[infer5.plsr:2:17, infer5.plsr:2:20) [1]: [Int64; 1]
+[infer5.plsr:3:28, infer5.plsr:3:33) small: [Int64; 1]

@@ -1,8 +1,9 @@
-func square(value: Int) -> Int {
-    return value * value
+func main() {
+    let arr = [1]
+    let first = arr[0]
 }
 
-func sum_squares(input: Int[4]) -> Int {
-    let squares = map<1>(square, input)
-    return 0
+func main2() {
+    let arr = [[1]]
+    let first = arr[0]
 }

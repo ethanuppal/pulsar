@@ -1,59 +1,115 @@
-//! The IR can be structured or unstructured, dependending on the requirements
-//! of the backend.
-//!
-//! Copyright (C) 2024 Ethan Uppal. All rights reserved.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
-use self::{label::LabelName, operand::Operand, variable::Variable};
-use std::fmt::Display;
+use self::{port::Port, variable::Variable};
+use port::PortUsage;
+use pulsar_utils::pool::Handle;
+use std::fmt::{self, Display};
 
-pub mod basic_block;
-pub mod branch_condition;
-pub mod control_flow_graph;
-pub mod generator;
+pub mod analysis;
+pub mod cell;
+pub mod component;
+pub mod control;
+pub mod from_ast;
 pub mod label;
-pub mod operand;
+pub mod memory;
+pub mod pass;
+pub mod port;
 pub mod variable;
+pub mod visitor;
 
+#[derive(Clone)]
 pub enum Ir {
-    Add(Variable, Operand, Operand),
-    Mul(Variable, Operand, Operand),
-    Assign(Variable, Operand),
-    GetParam(Variable),
-    Return(Option<Operand>),
+    /// A combinational addition
+    Add(Handle<Port>, Handle<Port>, Handle<Port>),
+    /// A pipelined multiply with an II of 1 and latency of 4
+    Mul(Handle<Port>, Handle<Port>, Handle<Port>),
+    Assign(Handle<Port>, Handle<Port>)
+}
 
-    /// `LocalAlloc(result, size, count)` allocates an array of `count`
-    /// elements, each of `size` bytes, and stores a pointer to the array in
-    /// `result`.
-    LocalAlloc(Variable, usize, usize),
+impl Ir {
+    pub fn kill(&self) -> Handle<Port> {
+        match self {
+            Ir::Add(lhs, _, _) | Ir::Mul(lhs, _, _) | Ir::Assign(lhs, _) => *lhs
+        }
+    }
 
-    /// `Store { result, value, index }` loads `value` into index `index` of
-    /// `result`.
-    Store {
-        result: Variable,
-        value: Operand,
-        index: Operand
-    },
+    pub fn kill_var(&self) -> Option<Variable> {
+        self.kill().root_var()
+    }
 
-    /// `Load { result, value, index }` loads the value at index `index` of
-    /// `value` into `result`.
-    Load {
-        result: Variable,
-        value: Operand,
-        index: Operand
-    },
+    // messy
 
-    Map {
-        result: Variable,
-        parallel_factor: usize,
-        f: LabelName,
-        input: Operand,
-        length: usize
-    },
-    Call(Option<Variable>, LabelName, Vec<Operand>)
+    /// Every single port read by this IR instruction, recursively.
+    pub fn gen_used(&self) -> Vec<Handle<Port>> {
+        use port::PortUsage;
+
+        match self {
+            Ir::Add(_, port, port2) | Ir::Mul(_, port, port2) => {
+                let mut result = port.ports_used();
+                result.extend(port2.ports_used());
+                result
+            }
+            Ir::Assign(_, port) => port.ports_used()
+        }
+    }
+
+    pub fn gen_mut(&mut self) -> Vec<&mut Handle<Port>> {
+        match self {
+            Ir::Add(_, port, port2) | Ir::Mul(_, port, port2) => {
+                vec![port, port2]
+            }
+            Ir::Assign(_, port) => {
+                vec![port]
+            }
+        }
+    }
+
+    /// The top-level ports in this IR instruction.
+    pub fn ports_ref(&self) -> Vec<Handle<Port>> {
+        match self {
+            Ir::Add(port0, port1, port2) | Ir::Mul(port0, port1, port2) => {
+                vec![*port0, *port1, *port2]
+            }
+            Ir::Assign(port0, port1) => {
+                vec![*port0, *port1]
+            }
+        }
+    }
+
+    /// The top-level ports in this IR instruction.
+    pub fn ports_mut(&mut self) -> Vec<&mut Handle<Port>> {
+        match self {
+            Ir::Add(port0, port1, port2) | Ir::Mul(port0, port1, port2) => {
+                vec![port0, port1, port2]
+            }
+            Ir::Assign(port0, port1) => {
+                vec![port0, port1]
+            }
+        }
+    }
+
+    /// Every single port referenced in this IR instruction.
+    pub fn ports_used_ref(&self) -> Vec<Handle<Port>> {
+        match self {
+            Ir::Add(port0, port1, port2) | Ir::Mul(port0, port1, port2) => {
+                vec![port0.ports_used(), port1.ports_used(), port2.ports_used()]
+            }
+            Ir::Assign(port0, port1) => {
+                vec![port0.ports_used(), port1.ports_used()]
+            }
+        }
+        .iter()
+        .flatten()
+        .cloned()
+        .collect()
+    }
 }
 
 impl Display for Ir {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             Self::Add(result, lhs, rhs) => {
                 write!(f, "{} = {} + {}", result, lhs, rhs)
@@ -61,63 +117,13 @@ impl Display for Ir {
             Self::Mul(result, lhs, rhs) => {
                 write!(f, "{} = {} * {}", result, lhs, rhs)
             }
-            Self::Assign(result, from) => write!(f, "{} = {}", result, from),
-            Self::GetParam(result) => write!(f, "{} = <next param>", result),
-            Self::Return(value_opt) => write!(
-                f,
-                "ret{}",
-                if let Some(value) = value_opt {
-                    format!(" {}", value)
-                } else {
-                    "".into()
-                }
-            ),
-            Self::LocalAlloc(result, size, count) => {
-                write!(f, "{} = <{} * ({} bytes)>", result, count, size)
-            }
-            Self::Store {
-                result,
-                value,
-                index
-            } => {
-                write!(f, "{}[{}] = {}", result, index, value)
-            }
-            Self::Load {
-                result,
-                value,
-                index
-            } => {
-                write!(f, "{} = {}[{}]", result, index, value)
-            }
-            Self::Map {
-                result,
-                parallel_factor,
-                f: func,
-                input,
-                length: _
-            } => {
-                write!(
-                    f,
-                    "{} = map<{}>({}, {})",
-                    result, parallel_factor, func, input
-                )
-            }
-            Self::Call(result_opt, name, args) => {
-                write!(
-                    f,
-                    "{}{}({})",
-                    if let Some(result) = result_opt {
-                        format!("{} = ", result)
-                    } else {
-                        "".into()
-                    },
-                    name,
-                    args.iter()
-                        .map(|arg| arg.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }
+            Self::Assign(result, from) => write!(f, "{} = {}", result, from)
         }
+    }
+}
+
+impl From<Variable> for Port {
+    fn from(value: Variable) -> Self {
+        Self::Variable(value)
     }
 }

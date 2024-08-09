@@ -1,0 +1,25 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\",\n                12)).expect(\"failed to parse/infer input\")"
+---
+func main(input: [[Int64; 64]; 64], kernel: [[Int64; 3]; 3]) -> (output: [[Int64; 62]; 62]) {
+    for row in 1 ..< 63 {
+        for col in 1 ..< 63 {
+            ((output[row])[col]) = ((input[row])[col])
+        }
+    }
+}
+[infer12.plsr:2:16, infer12.plsr:2:17) 1: Int64
+[infer12.plsr:2:22, infer12.plsr:2:24) 63: Int64
+[infer12.plsr:3:20, infer12.plsr:3:21) 1: Int64
+[infer12.plsr:3:26, infer12.plsr:3:28) 63: Int64
+[infer12.plsr:4:13, infer12.plsr:4:19) output: [[Int64; 62]; 62]
+[infer12.plsr:4:20, infer12.plsr:4:23) row: Int64
+[infer12.plsr:4:13, infer12.plsr:4:24) (output[row]): [Int64; 62]
+[infer12.plsr:4:25, infer12.plsr:4:28) col: Int64
+[infer12.plsr:4:13, infer12.plsr:4:29) ((output[row])[col]): Int64
+[infer12.plsr:4:32, infer12.plsr:4:37) input: [[Int64; 64]; 64]
+[infer12.plsr:4:38, infer12.plsr:4:41) row: Int64
+[infer12.plsr:4:32, infer12.plsr:4:42) (input[row]): [Int64; 64]
+[infer12.plsr:4:43, infer12.plsr:4:46) col: Int64
+[infer12.plsr:4:32, infer12.plsr:4:47) ((input[row])[col]): Int64

@@ -1,26 +1,25 @@
 ---
 source: tests/test_parser.rs
-expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", test_num),\n    error_manager.clone())"
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\",\n                5)).expect(\"failed to parse input\")"
 ---
-func main() -> Unit {
+func main() -> () {
     let val: Int64 = 1
-    let arr1d: Int64[5] = [1, 2, ...]
-    let zeros64: Int64[64] = [...]
-    let arr2d: Int64[5][6] = [...]
-    let warn: Int64[0] = [...]
-    let warn2: Int64[0][4] = [...]
-    return
+    let arr1d: [Int64; 5] = [1, 2, ...]
+    let zeros64: [Int64; 64] = [...]
+    let arr2d: [[Int64; 6]; 5] = [...]
+    let warn: [Int64; 0] = [...]
+    let warn2: [[Int64; 4]; 0] = [...]
 }
-warning[W0008]: tests/data/parser5.plsr:6:19: Array size is zero
+warning[W0008]: parser5.plsr:6:21: Array size is zero
      │  
-   5 │      let arr2d: Int[5][6] = [...]
-   6 │      let warn: Int[0] = [...]
-   7 │      let warn2: Int[0][4] = [...]
+   5 │      let arr2d: [[Int; 6]; 5] = [...]
+   6 │      let warn: [Int; 0] = [...]
+   7 │      let warn2: [[Int; 4]; 0] = [...]
      │  
 
-warning[W0008]: tests/data/parser5.plsr:7:20: Array size is zero
+warning[W0008]: parser5.plsr:7:27: Array size is zero
      │  
-   6 │      let warn: Int[0] = [...]
-   7 │      let warn2: Int[0][4] = [...]
+   6 │      let warn: [Int; 0] = [...]
+   7 │      let warn2: [[Int; 4]; 0] = [...]
    8 │  }
      │

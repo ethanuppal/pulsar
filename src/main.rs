@@ -1,74 +1,149 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
+
 use pulsar_backend::{
-    calyx::{CalyxBackend, CalyxBackendInput},
-    Output, PulsarBackend
+    target::{print::PrintTarget, OutputFile},
+    transform::agen::AddressGeneratorTransform,
+    BackendBuilder
 };
+// use pulsar_backend::{
+//     calyx::{CalyxBackend, CalyxBackendInput},
+//     Output, PulsarBackend
+// };
 use pulsar_frontend::{
-    lexer::Lexer, parser::Parser, static_analysis::StaticAnalyzer
+    lexer::Lexer, parser::Parser, type_inferer::TypeInferer
 };
-use pulsar_ir::generator::Generator;
-use pulsar_utils::{error::ErrorManager, loc::Source};
-use std::{
-    cell::RefCell, env, fs, io::stdout, path::PathBuf, process::Command, rc::Rc
+use pulsar_ir::{from_ast, pass::PassRunner};
+use pulsar_lang::{context::Context, utils::OptionCheckError};
+use pulsar_utils::{
+    error::{ErrorCode, ErrorManager},
+    id::Gen,
+    span::Source
 };
+use std::env;
 
-fn handle_errors(error_manager: Rc<RefCell<ErrorManager>>) -> Result<(), ()> {
-    if error_manager.borrow().has_errors() {
-        error_manager
-            .borrow_mut()
-            .consume_and_write(&mut stdout())
-            .map_err(|_| ())?;
-        return Err(());
-    }
-    Ok(())
-}
+pub fn main() -> anyhow::Result<()> {
+    env_logger::builder()
+        .filter(None, log::LevelFilter::Info)
+        .parse_env("LOG")
+        .format_timestamp(None)
+        .init();
 
-#[allow(clippy::result_unit_err)]
-pub fn main() -> Result<(), ()> {
     let mut args = env::args();
     args.next(); // ignore program path
-    let filename = args.next().unwrap_or("data/test.plsr".into());
-    let source = Source::file(
-        filename.clone(),
-        fs::read_to_string(filename).expect("Could not read file")
-    );
+    let first_arg = args.next();
+    if first_arg == Some("--explain".into()) {
+        let error_code = args
+            .next()
+            .expect("missing code after --explain")
+            .parse::<i32>()
+            .expect("invalid error code");
+        let error_code =
+            ErrorCode::from(error_code).expect("invalid error code");
+        println!("Code: {}", error_code);
+        println!("Description: {}", error_code.description());
+        return Ok(());
+    }
 
-    let error_manager = ErrorManager::with_max_count(50);
+    let filename = first_arg.unwrap_or("data/test.plsr".into());
+    let source = Source::load_file(filename.clone())?;
 
-    let lexer = Lexer::new(source, error_manager.clone());
-    let tokens: Vec<_> = lexer.into_iter().collect();
-    handle_errors(error_manager.clone())?;
+    let mut ctx = Context::new()?;
 
-    let parser = Parser::new(tokens, error_manager.clone());
-    let program_ast: Vec<_> = parser.into_iter().collect();
-    handle_errors(error_manager.clone())?;
+    let mut error_manager = ErrorManager::with_max_count(50);
 
-    let mut type_inferer = StaticAnalyzer::new(error_manager.clone());
-    let annotated_ast =
-        type_inferer.infer(program_ast).ok_or(()).map_err(|()| {
-            let _ = handle_errors(error_manager.clone());
-        })?;
-    handle_errors(error_manager)?;
+    log::info!("Parsing...");
 
-    let generator = Generator::new(annotated_ast);
-    let generated_code: Vec<_> = generator.into_iter().collect();
+    let tokens = Lexer::new(source, &mut ctx, &mut error_manager)
+        .lex()
+        .check_errors(&mut error_manager)?;
 
-    let command_output = Command::new("fud")
-        .args(["c", "global.root"])
-        .output()
-        .expect("'fud' is not installed and/or misconfigured");
-    let calyx_root = String::from_utf8_lossy(&command_output.stdout)
-        .trim()
-        .to_string();
+    let ast = Parser::new(tokens, &mut ctx, &mut error_manager)
+        .parse()
+        .check_errors(&mut error_manager)?;
 
-    let calyx_backend = CalyxBackend::new(CalyxBackendInput {
-        lib_path: PathBuf::from(calyx_root)
-    });
-    calyx_backend
-        .run(generated_code, Output::Stdout)
-        .map_err(|err| {
-            println!("{:?}\n", err);
-        })?;
+    log::info!("Inferring types...");
+
+    let ast = TypeInferer::new(ast, &mut ctx, &mut error_manager)
+        .infer()
+        .check_errors(&mut error_manager)?;
+
+    // {
+    //     use pulsar_frontend::ast::{expr::Expr, node::AsNodePool};
+    //     use pulsar_utils::{
+    //         pool::{AsPool, HandleArray},
+    //         span::SpanProvider
+    //     };
+
+    //     let exprs: HandleArray<Expr> = ctx.as_pool_mut().as_array();
+    //     for expr in exprs {
+    //         if ctx.get_ty(expr).is_invalid() {
+    //             panic!("[{}] {} did not have type resolved", expr.span(),
+    // expr);         }
+    //         println!("{} {}: {}", expr.span(), expr, ctx.get_ty(expr));
+    //     }
+    // }
+
+    // for decl in ast {
+    //     println!("{}", decl);
+    // }
+
+    log::info!("Optimizing...");
+
+    let mut var_gen = Gen::new();
+    let mut comps =
+        from_ast::ast_to_ir(ast, PassRunner::compile(), &mut ctx, &mut var_gen);
+
+    // for comp in &comps {
+    //     println!("{}", comp);
+    // }
+
+    let Some(main) = comps
+        .iter_mut()
+        .find(|comp| comp.label().name.unmangled() == "main")
+    else {
+        panic!("no `main` component")
+    };
+
+    println!("{}", main);
+
+    // let mut agens = Vec::new();
+    // for comp in comps
+    //     .iter()
+    //     .filter(|comp| comp.has_attribute(Attribute::Kernel))
+    // {}
+
+    log::info!("Emitting calyx accelerator and address generator (TODO)...");
+
+    let mut agen_backend = BackendBuilder::new()
+        .target(PrintTarget)
+        .through(AddressGeneratorTransform)
+        .build();
+    agen_backend.emit(main, &mut ctx, &mut var_gen, OutputFile::Stdout)?;
+
+    PassRunner::lower().run(main, &mut ctx);
+
+    let mut calyx_backend = BackendBuilder::new().target(PrintTarget).build();
+    calyx_backend.emit(main, &mut ctx, &mut var_gen, OutputFile::Stdout)?;
+
+    // let command_output = Command::new("fud")
+    //     .args(["c", "global.root"])
+    //     .output()
+    //     .expect("'fud' is not installed and/or misconfigured");
+    // let calyx_root = String::from_utf8_lossy(&command_output.stdout)
+    //     .trim()
+    //     .to_string();
+
+    // let calyx_backend = CalyxBackend::new(CalyxBackendInput {
+    //     lib_path: PathBuf::from(calyx_root)
+    // });
+    // calyx_backend
+    //     .run(generated_code, Output::Stdout)
+    //     .map_err(|err| {
+    //         println!("{:?}\n", err);
+    //     })?;
 
     Ok(())
 }

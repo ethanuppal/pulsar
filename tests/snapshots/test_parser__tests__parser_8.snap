@@ -1,10 +1,8 @@
 ---
 source: tests/test_parser.rs
-expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", test_num),\n    error_manager.clone())"
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\",\n                8)).expect(\"failed to parse input\")"
 ---
-func unit() -> Unit {
-    return
-}
-func int() -> Int64 {}
-func array() -> Int64[64] {}
-func array(input: MyCustomType1) -> MyCustomType2 {}
+func unit() -> (unit: Unit) {}
+func int() -> (int: Int64) {}
+func array() -> (array: [Int64; 64]) {}
+func array(input: MyCustomType1) -> (custom: MyCustomType2) {}

@@ -14,3 +14,5 @@ readme.workspace = true
 [dependencies]
 lazy_static.workspace = true
 pulsar-utils.workspace = true
+inform.workspace = true
+log.workspace = true

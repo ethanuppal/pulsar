@@ -1,8 +1,8 @@
 ---
 source: tests/test_parser.rs
-expression: "parser_output(&format!(\"tests/data/parser{}.plsr\", 9), error_manager)"
+expression: "parser_output(&format!(\"tests/data/parser{}.plsr\",\n                9)).expect(\"failed to parse input\")"
 ---
-func main() -> Int64 {
+func main() -> (return: Int64) {
     let arr = [[1]]
-    return ((arr[0])[0])
+    return = ((arr[0])[0])
 }

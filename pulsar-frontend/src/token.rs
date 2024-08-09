@@ -1,10 +1,60 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
-use core::{fmt, fmt::Debug};
-use pulsar_utils::loc::{Loc, RegionProvider};
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum TokenType {
+use core::{fmt, fmt::Debug};
+use pulsar_utils::span::{Loc, SpanProvider};
+
+macro_rules! token_type_enum {
+    ($($(@$doc:expr =>)? $name:ident),+) => {
+        #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+        pub enum TokenType {
+            $(
+                $(#[doc = $doc])?
+                $name
+            ),+
+        }
+
+        impl TokenType {
+            /// A kebab-case name for this token type.
+            pub fn name(&self) -> String {
+                match self {
+                    $(
+                        TokenType::$name => {
+                            let mut result = String::new();
+                            for (i, c) in stringify!($name).chars().enumerate() {
+                                if c.is_uppercase() {
+                                    if i > 0 {
+                                        result.push('-');
+                                    }
+                                    result.push(c.to_ascii_lowercase());
+                                } else {
+                                    result.push(c);
+                                }
+                            }
+                            result
+                        }
+                    )*
+                }
+            }
+
+            /// e.g., `TokenType::from_pattern("TokenType::Newline")`.
+            pub fn from_pattern<S: AsRef<str>>(pat: S) -> Option<Self> {
+                match pat.as_ref() {
+                    $(
+                        concat!("TokenType::", stringify!($name)) => Some(TokenType::$name),
+                    )*
+                    _ => None
+                }
+            }
+        }
+    };
+}
+
+token_type_enum! {
     Identifier,
+    @"While it is guaranteed that tokens of this type represent valid integers, they may not fit within the 64-bit signed or unsigned limit." =>
     Integer,
     Float,
     Bool,
@@ -12,8 +62,8 @@ pub enum TokenType {
     String,
     Func,
     Let,
-    Return,
-    HardwareMap,
+    For,
+    In,
     Plus,
     Minus,
     Times,
@@ -28,58 +78,18 @@ pub enum TokenType {
     RightAngle,
     Dot,
     Dots,
+    DotsUntil,
+    Divider,
     Colon,
     Comma,
     Arrow,
-    Directive,
-    Pure,
+    Semicolon,
     Newline
-}
-
-impl Debug for TokenType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Identifier => "identifier",
-                Self::Integer => "integer",
-                Self::Float => "float",
-                Self::Bool => "bool",
-                Self::Char => "char",
-                Self::String => "string",
-                Self::Func => "func",
-                Self::Let => "let",
-                Self::Return => "return",
-                Self::HardwareMap => "map",
-                Self::Plus => "plus",
-                Self::Minus => "minus",
-                Self::Times => "times",
-                Self::Assign => "assign",
-                Self::LeftPar => "left-par",
-                Self::RightPar => "right-par",
-                Self::LeftBrace => "left-brace",
-                Self::RightBrace => "right-brace",
-                Self::LeftBracket => "left-bracket",
-                Self::RightBracket => "right-bracket",
-                Self::LeftAngle => "left-angle",
-                Self::RightAngle => "right-angle",
-                Self::Colon => "colon",
-                Self::Dot => "dot",
-                Self::Dots => "dots",
-                Self::Comma => "comma",
-                Self::Arrow => "arrow",
-                Self::Directive => "directive",
-                Self::Pure => "pure",
-                Self::Newline => "newline"
-            }
-        )
-    }
 }
 
 impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let default = format!("{:?}", self);
+        let default = self.name();
         write!(
             f,
             "{}",
@@ -99,7 +109,10 @@ impl fmt::Display for TokenType {
                 Self::Assign => "=",
                 Self::Dot => ".",
                 Self::Dots => "...",
+                Self::DotsUntil => "..<",
+                Self::Divider => "---",
                 Self::Comma => ",",
+                Self::Semicolon => ";",
                 Self::Arrow => "->",
                 _ => default.as_str()
             }
@@ -107,6 +120,7 @@ impl fmt::Display for TokenType {
     }
 }
 
+/// A lexical unit of source code.
 #[derive(Clone)]
 pub struct Token {
     pub ty: TokenType,
@@ -129,22 +143,28 @@ impl Token {
 }
 
 impl Debug for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "({}, ty = {:?}, loc = {})",
+            "({}, ty = {}, loc = {})",
             if self.value == "\n" {
                 "\\n"
             } else {
                 self.value.as_str()
             },
-            self.ty,
+            self.ty.name(),
             self.loc
         )
     }
 }
 
-impl RegionProvider for Token {
+impl AsRef<Token> for Token {
+    fn as_ref(&self) -> &Token {
+        self
+    }
+}
+
+impl SpanProvider for Token {
     fn start(&self) -> Loc {
         self.loc.clone()
     }

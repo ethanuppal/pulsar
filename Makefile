@@ -15,6 +15,11 @@ build:
 	@echo 'cargo run -- $$@' > ./main
 	@chmod u+x ./main
 
+.PHONY: fmt
+fmt:
+	@echo '[INFO] Formatting project'
+	@cargo +nightly fmt
+
 .PHONY: test
 test: build
 	@echo '[INFO] Running tests'
@@ -64,9 +69,9 @@ ci_install_calyx:
 ci_check:
 	@echo "Checking that 'make' works"
 	make
-	@echo "Checking that the verilator testing harness works"
-	cd tests/calyx-verilog && make N=twice
-	cd tests/calyx-verilog && make N=map
+#	@echo "Checking that the verilator testing harness works"
+#	cd tests/calyx-verilog && make N=twice
+#	cd tests/calyx-verilog && make N=map
 # @echo "Checking that './main' works"
 # ./main 1>/dev/null 2>/dev/null || exit 0
 
@@ -78,7 +83,7 @@ clean:
 .PHONY: docs
 docs:
 	@echo '[INFO] Building and viewing documentation'
-	@cargo doc -p pulsar-frontend -p pulsar-ir -p pulsar-backend -p pulsar-utils -p pulsar --no-deps
+	@cargo doc -p pulsar-frontend -p pulsar-ir -p pulsar-backend -p pulsar-utils -p pulsar-lang --no-deps --examples
 		
 
 .PHONY: cloc

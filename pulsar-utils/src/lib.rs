@@ -1,21 +1,18 @@
 //! This crate defines utilities for the pulsar compiler, such as error
 //! reporting and semantically-rich locations. It also implements data
-//! structures such as a directed graph ([`digraph::Digraph`]) and disjoint sets
-//! ([`disjoint_set::DisjointSets`]).
+//! structures such as a scoped map ([`environment::Environment`]) and
+//! union-find ([`disjoint_sets::DisjointSets`]).
 //!
-//! Copyright (C) 2024 Ethan Uppal. All rights reserved.
+//! Copyright (C) 2024 Ethan Uppal. This program is free software: you can
+//! redistribute it and/or modify it under the terms of the GNU General Public
+//! License as published by the Free Software Foundation, either version 3 of
+//! the License, or (at your option) any later version.
 
-use std::ops::Deref;
-
-pub mod digraph;
-pub mod disjoint_set;
+pub mod disjoint_sets;
 pub mod environment;
 pub mod error;
 pub mod format;
 pub mod id;
-pub mod loc;
-pub mod mutcell;
-
-/// A type whose `clone()` involves copying no more than 8-16 bytes of data.
-pub trait CheapClone: Clone {}
-impl<T: Clone + Deref> CheapClone for T {}
+pub mod pool;
+pub mod rrc;
+pub mod span;

@@ -1,0 +1,26 @@
+---
+source: tests/test_typeinferer.rs
+expression: "typeinferer_output(&format!(\"tests/data/infer{}.plsr\",\n                4)).expect(\"failed to parse/infer input\")"
+---
+error[E0011]: infer4.plsr:2:13: Failed to unify types `Int64` and `['t0; 0]`
+     │  
+   1 │  func main() {
+   2 │     let huh: Int = []
+     │              └── Expected `Int64` here,
+   3 │  }
+     │  
+   ...
+     │  
+   1 │  func main() {
+   2 │     let huh: Int = [] 
+     │                    └─ but received `['t0; 0]` here.
+   3 │  }
+     │  
+   ...
+     │  
+   1 │  func main() {
+   2 │     let huh: Int = [] 
+     │                    └─ Call the type of the array literal's element `'t0`.
+   3 │  }
+     │  
+For more information, pass `--explain 11`
