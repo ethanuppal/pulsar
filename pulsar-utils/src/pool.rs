@@ -22,9 +22,10 @@ const ARENA_SIZE_BYTES: usize = 64 * 1024 * 1024;
 
 /// Pointer to a value allocated in a [`Pool`]. The semantics are:
 ///
-/// - [`PartialEq`], [`Eq`], [`Display`], [`Debug`] from the `T` value itself.
-/// - [`Clone`], [`Copy`], [`Hash`], [`Deref`], [`DerefMut`], [`AsRef`],
-///   [`AsMut`] from the pointer.
+/// - [`PartialEq`], [`Eq`], [`Hash`], [`Display`], [`Debug`] from the `T` value
+///   itself.
+/// - [`Clone`], [`Copy`], [`Deref`], [`DerefMut`], [`AsRef`], [`AsMut`] from
+///   the pointer.
 pub struct Handle<T> {
     pointer: *mut T
 }
