@@ -11,9 +11,7 @@ pub mod side_effect;
 pub mod timing;
 
 pub trait Analysis {
-    fn for_comp<P: AsGeneratorPool>(
-        comp: &mut Component, pool: &mut P
-    ) -> Self
+    fn for_comp<P: AsGeneratorPool>(comp: &Component, pool: &P) -> Self
     where
         Self: Default + Visitor<P> {
         let mut new_self = Self::default();

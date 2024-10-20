@@ -47,6 +47,10 @@ impl<T> Handle<T> {
             pool.as_pool_ref().contents.at_index_ref(id) as *mut T
         })
     }
+
+    pub fn same_as(&self, other: Handle<T>) -> bool {
+        self.pointer == other.pointer
+    }
 }
 
 impl<T> Deref for Handle<T> {

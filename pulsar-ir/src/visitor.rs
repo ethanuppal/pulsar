@@ -82,6 +82,8 @@ pub trait Visitor<P: AsGeneratorPool> {
         &mut self, id: Id, delay: &usize, comp: &Component, pool: &P
     ) {
     }
+    #[allow(unused_variables)]
+    fn start_control(&mut self, control: Handle<Control>, pool: &P) {}
 
     #[allow(unused_variables)]
     fn finish_for(&mut self, id: Id, for_: &For, comp: &Component, pool: &P) {}
@@ -106,6 +108,9 @@ pub trait Visitor<P: AsGeneratorPool> {
     ) {
     }
 
+    #[allow(unused_variables)]
+    fn finish_control(&mut self, control: Handle<Control>, pool: &P) {}
+
     fn traverse_component(
         &mut self, comp: &Component, pool: &P, reverse: bool
     ) {
@@ -120,6 +125,7 @@ pub trait Visitor<P: AsGeneratorPool> {
     ) {
         log::trace!("visiting control: {}", control);
 
+        self.start_control(control, pool);
         let id = control.id_in(pool);
         match control.deref() {
             Control::Empty => {}
@@ -173,6 +179,7 @@ pub trait Visitor<P: AsGeneratorPool> {
                 self.finish_enable(id, enable, comp, pool)
             }
         }
+        self.finish_control(control, pool);
     }
 }
 

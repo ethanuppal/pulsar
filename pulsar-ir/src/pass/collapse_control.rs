@@ -98,7 +98,7 @@ impl<P: AsGeneratorPool> Pass<P> for CollapseControl {
     }
 
     fn from(
-        options: PassOptions, _comp: &mut Component, _pool: &mut P
+        options: PassOptions, __comp: &mut Component, _pool: &mut P
     ) -> Self {
         Self {
             preserve_timing: options.contains(PassOptions::PRESERVE_TIMING)

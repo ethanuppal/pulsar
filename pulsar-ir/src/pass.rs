@@ -44,7 +44,7 @@ impl BitOr for PassOptions {
 }
 
 pub trait Pass<P: AsGeneratorPool>: VisitorMut<P> {
-    fn from(options: PassOptions, comp: &mut Component, pool: &mut P) -> Self;
+    fn from(options: PassOptions, _comp: &mut Component, pool: &mut P) -> Self;
 
     fn name() -> &'static str;
 }

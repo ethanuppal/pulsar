@@ -118,7 +118,7 @@ impl<P: AsGeneratorPool> Pass<P> for WellFormed {
     }
 
     fn from(
-        _options: PassOptions, _comp: &mut Component, _pool: &mut P
+        _options: PassOptions, __comp: &mut Component, _pool: &mut P
     ) -> Self {
         Self::default()
     }

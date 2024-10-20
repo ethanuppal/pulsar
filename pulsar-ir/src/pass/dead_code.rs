@@ -5,7 +5,9 @@
 
 use super::{Pass, PassOptions};
 use crate::{
-    analysis::{side_effect::SideEffectAnalysis, timing::TimingAnalysis},
+    analysis::{
+        side_effect::SideEffectAnalysis, timing::TimingAnalysis, Analysis
+    },
     component::{Component, ComponentViewMut},
     control::{Control, For, IfElse, Par, Seq},
     from_ast::AsGeneratorPool,

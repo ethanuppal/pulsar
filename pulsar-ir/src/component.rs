@@ -81,6 +81,10 @@ impl Component {
         &self.cfg
     }
 
+    pub fn cfg_pointer(&self) -> Handle<Control> {
+        self.cfg
+    }
+
     pub fn cfg_id<P: AsGeneratorPool>(&self, pool: &P) -> Id {
         self.cfg.id_in(pool)
     }
