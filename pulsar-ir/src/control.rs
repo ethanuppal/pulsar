@@ -9,13 +9,16 @@ use pulsar_frontend::ast::pretty_print::PrettyPrint;
 use pulsar_utils::pool::{AsPool, Handle};
 use std::{
     fmt::{self, Display, Write},
-    mem, vec
+    mem,
+    num::NonZeroUsize,
+    vec
 };
 
 pub struct For {
     variant: Variable,
     lower: Port,
     exclusive_upper: Port,
+    pipelined_ii: Option<NonZeroUsize>,
     pub(crate) body: Handle<Control>
 }
 
@@ -24,12 +27,13 @@ impl For {
     /// ports, so no handles need to be created for them.
     pub fn new(
         variant: Variable, lower: Port, exclusive_upper: Port,
-        body: Handle<Control>
+        pipelined_ii: Option<NonZeroUsize>, body: Handle<Control>
     ) -> Self {
         Self {
             variant,
             lower,
             exclusive_upper,
+            pipelined_ii,
             body
         }
     }
@@ -44,6 +48,10 @@ impl For {
 
     pub fn exclusive_upper_bound(&self) -> &Port {
         &self.exclusive_upper
+    }
+
+    pub fn pipelined_ii(&self) -> Option<usize> {
+        self.pipelined_ii.map(|ii| ii.into())
     }
 
     pub fn body(&self) -> Handle<Control> {
@@ -210,6 +218,28 @@ pub enum Control {
     Enable(Ir)
 }
 
+impl Control {
+    pub fn seq<I>(children: I) -> Control
+    where
+        I: IntoIterator<Item = Handle<Control>> {
+        let mut seq = Seq::new();
+        for child in children {
+            seq.push(child);
+        }
+        Self::Seq(seq)
+    }
+
+    pub fn par<I>(children: I) -> Control
+    where
+        I: IntoIterator<Item = Handle<Control>> {
+        let mut par = Par::new();
+        for child in children {
+            par.push(child);
+        }
+        Self::Par(par)
+    }
+}
+
 impl PrettyPrint for Control {
     fn pretty_print(&self, f: &mut IndentFormatter<'_, '_>) -> fmt::Result {
         match self {
@@ -310,22 +340,16 @@ impl<'pool, P: AsControlPool + AsPool<Port, ()>> ControlBuilder<'pool, P> {
     pub fn new_const(&mut self, value: i64) -> Handle<Port> {
         self.pool.add(Port::Constant(value))
     }
-}
 
-impl<'pool, P: AsControlPool + AsPool<Port, ()>> From<ControlBuilder<'pool, P>>
-    for Control
-{
-    fn from(mut value: ControlBuilder<P>) -> Self {
-        if value.pars.len() == 1 {
-            let mut result = Par::new();
-            mem::swap(&mut value.pars[0], &mut result);
-            Self::Par(result)
+    pub fn take(mut self) -> Control {
+        if self.pars.len() == 1 {
+            Control::Par(mem::take(&mut self.pars[0]))
         } else {
-            let mut seq = Seq::new();
-            for par in value.pars {
-                seq.push(value.pool.add(Self::Par(par)));
+            let mut seq_children = Vec::new();
+            for par in self.pars {
+                seq_children.push(self.pool.add(Control::Par(par)));
             }
-            Self::Seq(seq)
+            Control::seq(seq_children)
         }
     }
 }

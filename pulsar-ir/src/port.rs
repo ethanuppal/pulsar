@@ -3,6 +3,8 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
+use crate::analysis::timing::MULTIPLY_TIMING;
+
 use super::variable::Variable;
 use pulsar_utils::pool::Handle;
 use std::{
@@ -51,6 +53,22 @@ impl Port {
             }
             Self::LoweredAccess(var) => vec![*var],
             _ => vec![]
+        }
+    }
+
+    /// The number of cycles to fully expand the expression represented by this
+    /// port. For instance, a constant or variable has an expansion latency of
+    /// `0` cycles, but higher-dimensional array accesses have  expansion
+    /// latency due to the implicit multiplication.
+    pub fn expansion_latency(&self) -> usize {
+        match self {
+            Port::Constant(_)
+            | Port::Variable(_)
+            | Port::PartialAccess(_, _)
+            | Port::LoweredAccess(_) => 0,
+            Port::Access(_, indices) => {
+                (indices.len() - 1) * MULTIPLY_TIMING.latency()
+            }
         }
     }
 }

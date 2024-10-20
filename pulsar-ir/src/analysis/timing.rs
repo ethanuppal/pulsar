@@ -25,7 +25,7 @@ pub struct Timing {
 }
 
 impl Timing {
-    pub fn pipelined(init_interval: usize, latency: usize) -> Self {
+    pub const fn pipelined(init_interval: usize, latency: usize) -> Self {
         Self {
             init_interval,
             latency
@@ -66,6 +66,9 @@ impl Timing {
         )
     }
 }
+
+/// dumb hack that also relies on calyx stdlib implementation
+pub const MULTIPLY_TIMING: Timing = Timing::pipelined(1, 4);
 
 #[derive(Default)]
 pub struct TimingAnalysis(HashMap<Id, Timing>);
@@ -110,7 +113,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for TimingAnalysis {
             id,
             match enable {
                 Ir::Add(_, _, _) => Timing::combinational(),
-                Ir::Mul(_, _, _) => Timing::pipelined(1, 4),
+                Ir::Mul(_, _, _) => MULTIPLY_TIMING,
                 Ir::Assign(_, _) => Timing::combinational()
             }
         );

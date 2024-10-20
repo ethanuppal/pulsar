@@ -7,7 +7,7 @@ use crate::memory::{Memory, MemoryLevel};
 use pulsar_frontend::ast::ty::{LiquidTypeValue, Type, TypeValue};
 use std::fmt::{self, Display};
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Direction {
     WriteTo,
     ReadFrom

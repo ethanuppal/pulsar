@@ -4,9 +4,10 @@
 //! the License, or (at your option) any later version.
 
 use super::Transform;
+use core::panic;
 use pulsar_ir::{
-    cell::Cell,
-    component::Component,
+    cell::{Cell, Direction},
+    component::{Component, ComponentViewMut},
     control::{Control, ControlBuilder, For, Par, Seq},
     from_ast::AsGeneratorPool,
     label::{Label, Name, Visibility},
@@ -14,10 +15,14 @@ use pulsar_ir::{
     pass::PassRunner,
     port::Port,
     variable::Variable,
+    visitor::{Action, Visitor, VisitorMut},
     Ir
 };
-use pulsar_utils::{id::Gen, pool::Handle};
-use std::{collections::HashMap, ops::Deref};
+use pulsar_utils::{
+    id::{Gen, Id},
+    pool::Handle
+};
+use std::{collections::HashMap, iter, ops::Deref, os::unix::thread};
 
 // ok tentative plan is
 // and yes i know this is inefficient but
@@ -27,89 +32,123 @@ use std::{collections::HashMap, ops::Deref};
 // then i schedule each access separately using my bottom-up-backward algorithm
 // and ofc need to mark root for
 
-pub struct Schedule {
-    memory: Memory,
-    shift: usize,
-    control: Handle<Control>
+struct AccessPort {
+    port: Handle<Port>,
+    source: Handle<Control>,
+    direction: Direction
 }
 
-impl Schedule {}
-
-pub struct AddressGenerator {
-    schedules: HashMap<Variable, Schedule>
+#[derive(Default)]
+struct AccessExtraction {
+    access_ports: Vec<AccessPort>
 }
 
-impl AddressGenerator {
-    /// Returns the scheduled address generators and the total time shifted
-    /// backward.
-    pub fn schedule<P: AsGeneratorPool>(
-        &self, pool: &mut P
-    ) -> (Handle<Control>, usize) {
-        let global_shift = self
-            .schedules
-            .values()
-            .map(|schedule| schedule.shift)
-            .max()
-            .unwrap_or_default();
-        let mut threads = Par::new();
-        for schedule in self.schedules.values() {
-            let delay = global_shift - schedule.shift;
-            let mut thread = Seq::new();
-            thread.push(pool.add(Control::Delay(delay)));
-            thread.push(schedule.control);
-            threads.push(pool.add(Control::Seq(thread)));
+impl<P: AsGeneratorPool> Visitor<P> for AccessExtraction {
+    fn start_enable(
+        &mut self, id: Id, enable: &Ir, _comp: &Component, pool: &P
+    ) {
+        for (port, direction) in iter::once((enable.kill(), Direction::WriteTo))
+            .chain(
+                enable
+                    .gen_ref()
+                    .iter()
+                    .map(|port| (*port, Direction::ReadFrom))
+            )
+        {
+            if matches!(&*port, Port::Access(..)) {
+                self.access_ports.push(AccessPort {
+                    port,
+                    source: Handle::from_id(id, pool),
+                    direction
+                });
+            }
         }
-        (pool.add(Control::Par(threads)), global_shift)
     }
 }
 
-/// Synthesizes an address generator for a component.
-pub struct AddressGeneratorTransform;
+impl AccessExtraction {
+    pub fn from<P: AsGeneratorPool>(comp: &Component, pool: &P) -> Self {
+        let mut new_self = Self::default();
+        new_self.traverse_component(comp, pool, false);
+        new_self
+    }
+}
 
-impl AddressGeneratorTransform {
+pub struct AddressThread {
+    access_port: AccessPort,
+    control: Handle<Control>
+}
+
+// ETHAN: I'm realizing this current impl won't work since we need to identify
+// the e.g. effective for-loop parent before doing anything else right? before
+// copying over? wait maybe not. we can just replace the access with our
+// calculation, set the loop forced II, and it works. yeah
+
+struct AddressGeneratorContext {
+    // Assumed to be constant
+    memory_access_latency: usize,
+    /// The node at which time-travel must occur.
+    effective_parent: Option<Handle<Control>>,
+    dfs: Vec<Handle<Control>>,
+    threads: Vec<AddressThread>
+}
+
+impl AddressGeneratorContext {
+    pub fn new(memory_access_latency: usize) -> Self {
+        Self {
+            memory_access_latency,
+            effective_parent: None,
+            dfs: Vec::new(),
+            threads: Vec::new()
+        }
+    }
+
+    pub fn build_address_thread<P: AsGeneratorPool>(
+        &mut self, comp: &Component, pool: &mut P, access_port: AccessPort
+    ) {
+    }
+
     fn build_for<P: AsGeneratorPool>(
-        &self, builder: &mut ControlBuilder<P>, for_: &For,
-        memories: &HashMap<Variable, Memory>
+        &mut self, builder: &mut ControlBuilder<P>, for_: &For
     ) {
         let body = builder.with_pool(|pool| {
             let mut builder = ControlBuilder::new(pool);
-            self.build_control(&mut builder, &for_.body(), memories);
-            let control = builder.into();
+            self.build_control(&mut builder, for_.body());
+            let control = builder.take();
             pool.add(control)
         });
         builder.push(Control::For(For::new(
             for_.variant(),
             for_.lower_bound().clone(),
             for_.exclusive_upper_bound().clone(),
+            todo!(),
             body
         )));
     }
 
     fn build_seq<P: AsGeneratorPool>(
-        &self, builder: &mut ControlBuilder<P>, seq: &Seq,
-        memories: &HashMap<Variable, Memory>
+        &mut self, builder: &mut ControlBuilder<P>, seq: &Seq
     ) {
         let new_seq = builder.with_pool(|pool| {
             let mut builder = ControlBuilder::new(pool);
             for child in seq.children() {
-                self.build_control(&mut builder, child, memories);
+                self.build_control(&mut builder, *child);
                 builder.split();
             }
-            Control::from(builder)
+            builder.take()
         });
         builder.push(new_seq);
     }
 
     fn build_par<P: AsGeneratorPool>(
-        &self, builder: &mut ControlBuilder<P>, par: &Par,
-        memories: &HashMap<Variable, Memory>
+        &mut self, builder: &mut ControlBuilder<P>, par: &Par
     ) {
         let new_par = builder.with_pool(|pool| {
             let mut builder = ControlBuilder::new(pool);
             for child in par.children() {
-                self.build_control(&mut builder, child, memories);
+                self.build_control(&mut builder, *child);
             }
-            Control::from(builder)
+            builder.take()
         });
         builder.push(new_par);
     }
@@ -125,8 +164,7 @@ impl AddressGeneratorTransform {
     ///   delete instructions that address or write to memory and replace them
     ///   with assignments to the address ports after computing their addresses.
     fn build_ir<P: AsGeneratorPool>(
-        &self, builder: &mut ControlBuilder<P>, ir: &Ir,
-        memories: &HashMap<Variable, Memory>
+        &mut self, builder: &mut ControlBuilder<P>, ir: &Ir
     ) {
         // since anything involving address access won't have side effects by
         // disallowing data-dependent addressing, we should be fine to ignore
@@ -145,22 +183,71 @@ impl AddressGeneratorTransform {
     }
 
     fn build_control<P: AsGeneratorPool>(
-        &self, builder: &mut ControlBuilder<P>, control: &Control,
-        memories: &HashMap<Variable, Memory>
+        &mut self, builder: &mut ControlBuilder<P>, control: Handle<Control>
     ) {
-        match control {
+        self.dfs.push(control);
+        if self.dfs.len() >= 2 {
+            if let Some(effective_parent) = self.effective_parent {
+                if !matches!(&*effective_parent, Control::For(..)) {
+                    self.effective_parent = Some(self.dfs[self.dfs.len() - 2]);
+                }
+            } else {
+                self.effective_parent =
+                    Some(self.dfs[self.dfs.len() - 2 /* always 0 */]);
+            }
+        }
+        match &*control {
             Control::Empty => {}
-            Control::Delay(_) => panic!(
-                "There should be no delay control before lowering passes"
-            ),
-            Control::For(for_) => self.build_for(builder, for_, memories),
-            Control::Seq(seq) => self.build_seq(builder, seq, memories),
-            Control::Par(par) => self.build_par(builder, par, memories),
+            Control::Delay(_) =>
+        panic!("There should be no `Control::Delay`s in the IR passed to address generation. Only lowering passes should generate delays."),
+            Control::For(for_) => self.build_for(builder, for_),
+            Control::Seq(seq) => self.build_seq( builder, seq),
+            Control::Par(par) => self.build_par( builder, par),
             Control::IfElse(_) => todo!(),
-            Control::Enable(ir) => self.build_ir(builder, ir, memories)
+            Control::Enable(ir) => self.build_ir( builder, ir)
+        }
+        self.dfs.pop().expect("somehow recursion got messed up");
+        if self.dfs.len() < 2 {
+            self.effective_parent = None;
         }
     }
+
+    /// Schedules the built address threads and the latency to initiate the
+    /// schedule in advance by.
+    pub fn schedule<P: AsGeneratorPool>(
+        self, pool: &mut P
+    ) -> (Handle<Control>, usize) {
+        let thread_shifts = self
+            .threads
+            .iter()
+            .map(|thread| match thread.access_port.direction {
+                Direction::WriteTo => {
+                    thread.access_port.port.expansion_latency()
+                }
+                Direction::ReadFrom => {
+                    self.memory_access_latency
+                        + thread.access_port.port.expansion_latency()
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let global_shift =
+            thread_shifts.iter().max().cloned().unwrap_or_default();
+
+        let mut scheduled_threads = Vec::new();
+        for (i, thread) in self.threads.into_iter().enumerate() {
+            let delay =
+                pool.add(Control::Delay(global_shift - thread_shifts[i]));
+            let scheduled_thread =
+                pool.add(Control::seq([delay, thread.control]));
+            scheduled_threads.push(scheduled_thread);
+        }
+        (pool.add(Control::par(scheduled_threads)), global_shift)
+    }
 }
+
+/// Synthesizes an address generator for a component.
+pub struct AddressGeneratorTransform;
 
 impl<P: AsGeneratorPool> Transform<P> for AddressGeneratorTransform {
     fn apply(
@@ -179,9 +266,12 @@ impl<P: AsGeneratorPool> Transform<P> for AddressGeneratorTransform {
             Visibility::Public
         );
 
-        let mut builder = ControlBuilder::new(pool);
-        self.build_control(&mut builder, comp.cfg(), &memories);
-        let cfg = Control::from(builder);
+        let mut agen_context = AddressGeneratorContext::new(10);
+        let access_ports = AccessExtraction::from(comp, pool).access_ports;
+        for access_port in access_ports {
+            agen_context.build_address_thread(comp, pool, access_port);
+        }
+        let (cfg, global_shift) = agen_context.schedule(pool);
 
         let mut agen = Component::new(
             label,
@@ -197,7 +287,7 @@ impl<P: AsGeneratorPool> Transform<P> for AddressGeneratorTransform {
                     )
                 })
                 .collect(),
-            pool.add(cfg)
+            cfg
         );
 
         PassRunner::lower().run(&mut agen, pool);

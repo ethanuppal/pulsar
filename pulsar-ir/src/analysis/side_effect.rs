@@ -118,7 +118,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for SideEffectAnalysis {
         Action::None
     }
 
-    fn finish_component(&mut self, comp: &mut Component, pool: &mut P) {
+    fn finish_component(&mut self, _comp: &mut Component, _pool: &mut P) {
         for port in &self.effectual_ports {
             log::trace!("effectual port: {}", port);
         }
