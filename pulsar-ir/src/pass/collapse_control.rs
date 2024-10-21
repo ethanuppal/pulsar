@@ -30,17 +30,20 @@ impl CollapseControl {
         for i in (0..children.len()).rev() {
             if matches!(*children[i], Control::Empty | Control::Delay(0)) {
                 children.remove(i);
-            } else if i > 0 {
-                match (
+            } else if i > 0
+                && matches!(
+                    (&*children[i - 1], &*children[i]),
+                    (Control::Delay(..), Control::Delay(..))
+                )
+            {
+                let (Control::Delay(a), Control::Delay(b)) = (
                     mem::take(children[i - 1].deref_mut()),
                     mem::take(children[i].deref_mut())
-                ) {
-                    (Control::Delay(a), Control::Delay(b)) => {
-                        children.remove(i);
-                        *children[i - 1].deref_mut() = Control::Delay(a + b);
-                    }
-                    _ => {}
-                }
+                ) else {
+                    unreachable!();
+                };
+                children.remove(i);
+                *children[i - 1].deref_mut() = Control::Delay(a + b);
             }
         }
         match children.len() {
@@ -98,7 +101,7 @@ impl<P: AsGeneratorPool> Pass<P> for CollapseControl {
     }
 
     fn from(
-        options: PassOptions, __comp: &mut Component, _pool: &mut P
+        options: PassOptions, _comp: &mut Component, _pool: &mut P
     ) -> Self {
         Self {
             preserve_timing: options.contains(PassOptions::PRESERVE_TIMING)

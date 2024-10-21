@@ -97,7 +97,7 @@ impl<P: AsGeneratorPool> Pass<P> for CopyProp {
     }
 
     fn from(
-        _options: PassOptions, __comp: &mut Component, _pool: &mut P
+        _options: PassOptions, _comp: &mut Component, _pool: &mut P
     ) -> Self {
         Self
     }

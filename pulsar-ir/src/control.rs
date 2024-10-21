@@ -18,7 +18,8 @@ pub struct For {
     variant: Variable,
     lower: Port,
     exclusive_upper: Port,
-    pipelined_ii: Option<NonZeroUsize>,
+    // this being `pub` is a hack
+    pub pipelined_ii: Option<NonZeroUsize>,
     pub(crate) body: Handle<Control>
 }
 
@@ -69,8 +70,13 @@ impl PrettyPrint for For {
     fn pretty_print(&self, f: &mut IndentFormatter<'_, '_>) -> fmt::Result {
         writeln!(
             f,
-            "for {} in {} ..< {} {{",
-            self.variant, self.lower, self.exclusive_upper
+            "{}for {} in {} ..< {} {{",
+            self.pipelined_ii
+                .map(|pipelined_ii| format!("every<{}> ", pipelined_ii))
+                .unwrap_or_default(),
+            self.variant,
+            self.lower,
+            self.exclusive_upper
         )?;
         f.increase_indent();
         self.body.pretty_print(f)?;
@@ -284,11 +290,10 @@ impl<'pool, P: AsControlPool + AsPool<Port, ()>> ControlBuilder<'pool, P> {
 
     /// Enables `control` in the current logical time step since initialization
     /// or [`ControlBuilder::split`].
-    pub fn push<C: Into<Control>>(&mut self, control: C) {
-        self.pars
-            .last_mut()
-            .unwrap()
-            .push(self.pool.add(control.into()));
+    pub fn push<C: Into<Control>>(&mut self, control: C) -> Handle<Control> {
+        let added = self.pool.add(control.into());
+        self.pars.last_mut().unwrap().push(added);
+        added
     }
 
     /// Marks all later [`ControlBuilder::push`]es as occuring in a subsequent

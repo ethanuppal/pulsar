@@ -7,6 +7,7 @@ use crate::{
     component::{Component, ComponentViewMut},
     control::{Control, For, IfElse, Par, Seq},
     from_ast::AsGeneratorPool,
+    port::Port,
     visitor::{Action, Visitor},
     Ir
 };
@@ -55,6 +56,10 @@ impl Timing {
             cmp::max(lhs.init_interval(), rhs.init_interval()),
             lhs.latency() + rhs.latency()
         )
+    }
+
+    pub fn times(self, factor: usize) -> Timing {
+        Timing::pipelined(self.init_interval, self.latency * factor)
     }
 
     pub fn then(self, rhs: Timing) -> Timing {
@@ -119,10 +124,21 @@ impl<P: AsGeneratorPool> Visitor<P> for TimingAnalysis {
     }
 
     fn finish_for(&mut self, id: Id, for_: &For, _comp: &Component, pool: &P) {
+        // TODO: we assume constant integer bounds
+        let (
+            Port::Constant(lower_bound),
+            Port::Constant(exclusive_upper_bound)
+        ) = (for_.lower_bound(), for_.exclusive_upper_bound())
+        else {
+            panic!("we assume constant integer bounds");
+        };
+
         self.set(
             id,
-            Timing::sequential(for_.init_latency())
-                .then(self.get(for_.body().id_in(pool)))
+            Timing::sequential(for_.init_latency()).then(
+                self.get(for_.body().id_in(pool))
+                    .times((*exclusive_upper_bound - *lower_bound) as usize)
+            )
         );
     }
 

@@ -31,9 +31,10 @@ impl DeadCode {
         }
         let latency = self.timing.get(id).latency();
         if self.preserve_timing && latency > 0 {
-            return Action::Replace(Control::Delay(latency));
+            Action::Replace(Control::Delay(latency))
+        } else {
+            Action::Remove
         }
-        Action::Remove
     }
 }
 

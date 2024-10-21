@@ -30,6 +30,10 @@ pub struct Handle<T> {
 }
 
 impl<T> Handle<T> {
+    pub const NULL: Handle<T> = Handle {
+        pointer: ptr::null_mut()
+    };
+
     pub fn is_invalid(&self) -> bool {
         self.pointer.is_null() || !self.pointer.is_aligned()
     }

@@ -29,6 +29,7 @@ pub struct PassOptions(u64);
 impl PassOptions {
     pub const NONE: Self = PassOptions(0);
     pub const PRESERVE_TIMING: Self = PassOptions(1 << 0);
+    pub const TIMING_AWARE: Self = PassOptions(2 << 0);
 
     pub fn contains(&self, options: PassOptions) -> bool {
         (self.0 & options.0) == options.0
@@ -63,9 +64,9 @@ pub struct PassRunner<P: AsGeneratorPool> {
 
 impl<Pool: AsGeneratorPool> PassRunner<Pool> {
     /// The minimal pass runner permitted.
-    pub fn core() -> Self {
+    pub fn core(well_formed_options: PassOptions) -> Self {
         let mut runner = Self { passes: Vec::new() };
-        runner.register::<WellFormed>(PassOptions::NONE);
+        runner.register::<WellFormed>(well_formed_options);
         runner.register::<Canonicalize>(PassOptions::NONE);
         runner
     }
@@ -73,7 +74,7 @@ impl<Pool: AsGeneratorPool> PassRunner<Pool> {
     /// The pass runner used by [`from_ast::ast_to_ir`]; notably, it does not
     /// preserve timing in control collasing.
     pub fn compile() -> Self {
-        let mut runner = Self::core();
+        let mut runner = Self::core(PassOptions::NONE);
         runner.register_converge(10, |runner| {
             runner.register::<CopyProp>(PassOptions::NONE);
             runner.register::<DeadCode>(PassOptions::NONE);
@@ -86,12 +87,14 @@ impl<Pool: AsGeneratorPool> PassRunner<Pool> {
     /// A pass runner for lowering a [`Component`] for an emission target,
     /// preserving timing.
     pub fn lower() -> Self {
-        let mut runner = Self::core();
+        let mut runner = Self::core(PassOptions::TIMING_AWARE);
         runner.register::<RewriteAccesses>(PassOptions::PRESERVE_TIMING);
         runner.register_converge(10, |runner| {
+            runner.register::<CopyProp>(PassOptions::PRESERVE_TIMING);
             runner.register::<DeadCode>(PassOptions::PRESERVE_TIMING);
             runner.register::<CollapseControl>(PassOptions::PRESERVE_TIMING);
         });
+        runner.register::<CellAlloc>(PassOptions::NONE);
         runner
     }
 

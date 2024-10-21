@@ -14,6 +14,7 @@ pub struct MemoryLevel {
 
 #[derive(Clone)]
 pub struct Memory {
+    /// The first level is the outermost "array", and so on.
     levels: Vec<MemoryLevel>,
     element: usize
 }

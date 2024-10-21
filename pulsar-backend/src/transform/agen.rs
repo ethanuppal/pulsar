@@ -8,7 +8,7 @@ use core::panic;
 use pulsar_ir::{
     analysis::{timing::TimingAnalysis, Analysis},
     cell::{Cell, Direction},
-    component::{Component, ComponentViewMut},
+    component::Component,
     control::{Control, ControlBuilder, For, Par, Seq},
     from_ast::AsGeneratorPool,
     label::{Label, Name, Visibility},
@@ -16,7 +16,7 @@ use pulsar_ir::{
     pass::PassRunner,
     port::Port,
     variable::Variable,
-    visitor::{Action, Visitor, VisitorMut},
+    visitor::Visitor,
     Ir
 };
 use pulsar_utils::{
@@ -24,7 +24,10 @@ use pulsar_utils::{
     pool::Handle
 };
 use std::{
-    collections::HashMap, iter, num::NonZeroUsize, ops::Deref, os::unix::thread
+    collections::HashMap,
+    iter,
+    num::NonZeroUsize,
+    ops::{Deref, DerefMut}
 };
 
 // ok tentative plan is
@@ -37,8 +40,9 @@ use std::{
 
 struct AccessPort {
     port: Handle<Port>,
+    memory: Memory,
     source: Handle<Control>,
-    effective_parent: Handle<Control>,
+    effective_parent: Option<Handle<Control>>,
     direction: Direction
 }
 
@@ -51,7 +55,7 @@ struct AccessExtraction {
 
 impl<P: AsGeneratorPool> Visitor<P> for AccessExtraction {
     fn start_enable(
-        &mut self, id: Id, enable: &Ir, __comp: &Component, pool: &P
+        &mut self, id: Id, enable: &Ir, comp: &Component, pool: &P
     ) {
         for (port, direction) in iter::once((enable.kill(), Direction::WriteTo))
             .chain(
@@ -61,11 +65,20 @@ impl<P: AsGeneratorPool> Visitor<P> for AccessExtraction {
                     .map(|port| (*port, Direction::ReadFrom))
             )
         {
-            if matches!(&*port, Port::Access(..)) {
+            if let Port::Access(memory_var, ..) = &*port {
+                let Cell::Memory(memory) = &*comp
+                    .cells()
+                    .get(memory_var)
+                    .cloned()
+                    .expect("CellAlloc pass not run")
+                else {
+                    panic!("tried to access non-memory in main component");
+                };
                 self.access_ports.push(AccessPort {
                     port,
+                    memory: memory.clone(),
                     source: Handle::from_id(id, pool),
-                    effective_parent: self.effective_parent.unwrap(),
+                    effective_parent: self.effective_parent,
                     direction
                 });
             }
@@ -80,16 +93,27 @@ impl<P: AsGeneratorPool> Visitor<P> for AccessExtraction {
                     self.effective_parent = Some(self.dfs[self.dfs.len() - 2]);
                 }
             } else {
-                self.effective_parent =
-                    Some(self.dfs[self.dfs.len() - 2 /* always 0 */]);
+                self.effective_parent = Some(self.dfs[self.dfs.len() - 2]);
             }
         }
+        // println!(
+        //     "effective_parent = {}; control = {}",
+        //     self.effective_parent
+        //         .map(|x| x.to_string())
+        //         .unwrap_or_default(),
+        //     control
+        // );
     }
 
     fn finish_control(&mut self, _control: Handle<Control>, _pool: &P) {
-        self.dfs.pop().expect("somehow recursion got messed up");
-        if self.dfs.len() < 2 {
-            self.effective_parent = None;
+        if let Some(popped) = self.dfs.pop() {
+            if let Some(effective_parent) = self.effective_parent {
+                if popped.same_as(effective_parent)
+                    && !matches!(&*popped, Control::For(..))
+                {
+                    self.effective_parent = None;
+                }
+            }
         }
     }
 }
@@ -116,6 +140,7 @@ struct AddressGeneratorContext {
     // Assumed to be constant
     memory_access_latency: usize,
     timing: TimingAnalysis,
+    effective_parent: Option<Handle<Control>>,
     threads: Vec<AddressThread>
 }
 
@@ -124,6 +149,7 @@ impl AddressGeneratorContext {
         Self {
             memory_access_latency,
             timing,
+            effective_parent: None,
             threads: Vec::new()
         }
     }
@@ -132,6 +158,7 @@ impl AddressGeneratorContext {
         &mut self, comp: &Component, pool: &mut P, var_gen: &mut Gen,
         access_port: AccessPort
     ) {
+        self.effective_parent = None;
         let mut builder = ControlBuilder::new(pool);
         self.build_control(
             &mut builder,
@@ -139,6 +166,7 @@ impl AddressGeneratorContext {
             comp.cfg_pointer(),
             &access_port
         );
+        self.time_travel(&mut builder, &access_port);
         let control = builder.take();
         self.threads.push(AddressThread {
             access_port,
@@ -148,14 +176,9 @@ impl AddressGeneratorContext {
 
     fn build_for<P: AsGeneratorPool>(
         &mut self, builder: &mut ControlBuilder<P>, var_gen: &mut Gen,
-        for_: &For, id: Id, control: Handle<Control>, access_port: &AccessPort
-    ) {
-        let pipelined_ii = if access_port.effective_parent.same_as(control) {
-            Some(self.timing.get(id).latency())
-        } else {
-            for_.pipelined_ii()
-        }
-        .and_then(|pipelined_ii| NonZeroUsize::try_from(pipelined_ii).ok());
+        for_: &For, _id: Id, _control: Handle<Control>,
+        access_port: &AccessPort
+    ) -> Handle<Control> {
         let body = builder.with_pool(|pool| {
             let mut builder = ControlBuilder::new(pool);
             self.build_control(&mut builder, var_gen, for_.body(), access_port);
@@ -166,15 +189,15 @@ impl AddressGeneratorContext {
             for_.variant(),
             for_.lower_bound().clone(),
             for_.exclusive_upper_bound().clone(),
-            pipelined_ii,
+            for_.pipelined_ii,
             body
-        )));
+        )))
     }
 
     fn build_seq<P: AsGeneratorPool>(
         &mut self, builder: &mut ControlBuilder<P>, var_gen: &mut Gen,
         seq: &Seq, access_port: &AccessPort
-    ) {
+    ) -> Handle<Control> {
         let new_seq = builder.with_pool(|pool| {
             let mut builder = ControlBuilder::new(pool);
             for child in seq.children() {
@@ -183,13 +206,13 @@ impl AddressGeneratorContext {
             }
             builder.take()
         });
-        builder.push(new_seq);
+        builder.push(new_seq)
     }
 
     fn build_par<P: AsGeneratorPool>(
         &mut self, builder: &mut ControlBuilder<P>, var_gen: &mut Gen,
         par: &Par, access_port: &AccessPort
-    ) {
+    ) -> Handle<Control> {
         let new_par = builder.with_pool(|pool| {
             let mut builder = ControlBuilder::new(pool);
             for child in par.children() {
@@ -197,7 +220,7 @@ impl AddressGeneratorContext {
             }
             builder.take()
         });
-        builder.push(new_par);
+        builder.push(new_par)
     }
 
     /// The strategy behind this function is that the dead code pass will
@@ -213,20 +236,55 @@ impl AddressGeneratorContext {
     fn build_ir<P: AsGeneratorPool>(
         &mut self, builder: &mut ControlBuilder<P>, var_gen: &mut Gen, ir: &Ir,
         control: Handle<Control>, access_port: &AccessPort
-    ) {
+    ) -> Handle<Control> {
         if access_port.source.same_as(control) {
-            let Port::Access(memory, indices) = &*access_port.port else {
+            let Port::Access(memory_var, indices) = &*access_port.port else {
                 panic!("invalid port extracted as memory access");
             };
             let inserted = builder.with_pool(|pool| {
                 let mut builder = ControlBuilder::new(pool);
                 // TODO: generate the multiplications and stuff to compute the
                 // index
+                let mut indices_rev = indices.iter().rev().cloned();
+                let mut levels_rev =
+                    access_port.memory.levels().iter().rev().cloned();
+                let mut result_var = Variable::from(var_gen.next());
+
+                let result_var_port =
+                    builder.add_port(Port::Variable(result_var));
+                builder.push(Ir::Assign(
+                    result_var_port,
+                    indices_rev.next().unwrap()
+                ));
+
+                // inductive step
+                // ans = (ans + (index * length))
+                for index in indices_rev {
+                    let next_add = Variable::from(var_gen.next());
+                    let next_add_port = builder
+                        .with_pool(|pool| pool.add(Port::Variable(next_add)));
+                    let length = builder
+                        .new_const(levels_rev.next().unwrap().length as i64);
+                    builder.push(Ir::Mul(next_add_port, index, length));
+                    let new_result_var = Variable::from(var_gen.next());
+                    builder.push_add(
+                        next_add,
+                        Port::Variable(result_var),
+                        Port::Variable(next_add)
+                    );
+                    result_var = new_result_var;
+                }
+
+                builder.push_assign(
+                    Port::Variable(*memory_var),
+                    Port::Variable(result_var)
+                );
+
                 builder.take()
             });
-            builder.push(inserted);
+            builder.push(inserted)
         } else {
-            builder.push(ir.clone());
+            builder.push(ir.clone())
         }
     }
 
@@ -235,8 +293,8 @@ impl AddressGeneratorContext {
         control: Handle<Control>, access_port: &AccessPort
     ) {
         let id = builder.with_pool(|pool| control.id_in(pool));
-        match &*control {
-            Control::Empty => {}
+        let built_control = match &*control {
+            Control::Empty =>  Handle::NULL,
             Control::Delay(_) =>
         panic!("There should be no `Control::Delay`s in the IR passed to address generation. Only lowering passes should generate delays."),
             Control::For(for_) => self.build_for(builder, var_gen, for_, id,control, access_port),
@@ -244,6 +302,48 @@ impl AddressGeneratorContext {
             Control::Par(par) => self.build_par(builder, var_gen, par, access_port),
             Control::IfElse(_) => todo!(),
             Control::Enable(ir) => self.build_ir(builder, var_gen, ir, control, access_port)
+        };
+        if let Some(effective_parent) = access_port.effective_parent {
+            if effective_parent.same_as(control) {
+                self.effective_parent = Some(built_control);
+            }
+        }
+    }
+
+    fn time_travel<P: AsGeneratorPool>(
+        &mut self, builder: &mut ControlBuilder<P>, access_port: &AccessPort
+    ) {
+        // match &mut *self.effective_parent.unwrap() {
+        //     Control::For(_) => {}
+        //     Control::Seq(seq) => ,
+        //     Control::Par(_) => todo!(),
+        //     Control::IfElse(_) => todo!(),
+        //     Control::Enable(_) => todo!(),
+        //     _ => unreachable!("delay or empty can't be parents")
+        // }
+        // actually don't think we need to do any of this since
+        // there will be no other side effects lol
+        // so just loops
+        if let Some(Control::For(for_)) = self.effective_parent.as_deref_mut() {
+            // TODO: assert that `inserted` has an II <= the original loop
+            // latency
+            let Control::For(original_for) =
+                access_port.effective_parent.as_ref().unwrap().deref()
+            else {
+                unreachable!();
+            };
+            let original_effective_parent_body_id =
+                builder.with_pool(|pool| original_for.body().id_in(pool));
+            for_.pipelined_ii = NonZeroUsize::try_from(
+                self.timing.get(original_effective_parent_body_id).latency()
+            )
+            .ok();
+        } else {
+            println!(
+                "other effective parent: {}",
+                access_port.effective_parent.unwrap()
+            );
+            println!("but current is: {}", self.effective_parent.unwrap());
         }
     }
 
@@ -267,7 +367,8 @@ impl AddressGeneratorContext {
             .collect::<Vec<_>>();
 
         let global_shift =
-            thread_shifts.iter().max().cloned().unwrap_or_default();
+            thread_shifts.iter().max().cloned().unwrap_or_default()
+                + self.memory_access_latency;
 
         let mut scheduled_threads = Vec::new();
         for (i, thread) in self.threads.into_iter().enumerate() {
@@ -296,10 +397,6 @@ impl<P: AsGeneratorPool> Transform<P> for AddressGeneratorTransform {
                 Cell::Register(_) => None
             })
             .collect::<HashMap<_, _>>();
-        let label = Label::from(
-            Name::from(format!("{}_agen", comp.label().name.unmangled())),
-            Visibility::Public
-        );
 
         let timing = TimingAnalysis::for_comp(comp, pool);
         let mut agen_context = AddressGeneratorContext::new(10, timing);
@@ -308,6 +405,15 @@ impl<P: AsGeneratorPool> Transform<P> for AddressGeneratorTransform {
             agen_context.build_address_thread(comp, pool, var_gen, access_port);
         }
         let (cfg, global_shift) = agen_context.schedule(pool);
+
+        let label = Label::from(
+            Name::from(format!(
+                "{}_agen_shift{}",
+                comp.label().name.unmangled(),
+                global_shift
+            )),
+            Visibility::Public
+        );
 
         let mut agen = Component::new(
             label,
