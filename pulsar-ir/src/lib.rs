@@ -42,6 +42,30 @@ impl Ir {
 
     // messy
 
+    /// The top-level ports read by this IR instruction.
+    pub fn gen_ref(&self) -> Vec<Handle<Port>> {
+        match self {
+            Ir::Add(_, port, port2) | Ir::Mul(_, port, port2) => {
+                vec![*port, *port2]
+            }
+            Ir::Assign(_, port) => {
+                vec![*port]
+            }
+        }
+    }
+
+    /// The top-level ports read by this IR instruction.
+    pub fn gen_mut(&mut self) -> Vec<&mut Handle<Port>> {
+        match self {
+            Ir::Add(_, port, port2) | Ir::Mul(_, port, port2) => {
+                vec![port, port2]
+            }
+            Ir::Assign(_, port) => {
+                vec![port]
+            }
+        }
+    }
+
     /// Every single port read by this IR instruction, recursively.
     pub fn gen_used(&self) -> Vec<Handle<Port>> {
         use port::PortUsage;
@@ -53,17 +77,6 @@ impl Ir {
                 result
             }
             Ir::Assign(_, port) => port.ports_used()
-        }
-    }
-
-    pub fn gen_mut(&mut self) -> Vec<&mut Handle<Port>> {
-        match self {
-            Ir::Add(_, port, port2) | Ir::Mul(_, port, port2) => {
-                vec![port, port2]
-            }
-            Ir::Assign(_, port) => {
-                vec![port]
-            }
         }
     }
 

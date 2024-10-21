@@ -18,6 +18,6 @@ pub enum OutputFile {
 
 pub trait Target<P: AsGeneratorPool> {
     fn emit(
-        &mut self, comp: &Component, pool: &P, output: OutputFile
+        &mut self, _comp: &Component, pool: &P, output: OutputFile
     ) -> anyhow::Result<()>;
 }

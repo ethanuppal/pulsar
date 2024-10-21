@@ -7,12 +7,15 @@ use crate::{
     component::{Component, ComponentViewMut},
     control::{Control, For, IfElse, Par, Seq},
     from_ast::AsGeneratorPool,
-    visitor::{Action, VisitorMut},
+    port::Port,
+    visitor::{Action, Visitor},
     Ir
 };
 use core::panic;
 use pulsar_utils::{id::Id, pool::Handle};
-use std::{cmp, collections::HashMap};
+use std::{cmp, collections::HashMap, mem, ptr::null};
+
+use super::Analysis;
 
 /// Computes timing information for all non-empty control.
 ///
@@ -25,7 +28,7 @@ pub struct Timing {
 }
 
 impl Timing {
-    pub fn pipelined(init_interval: usize, latency: usize) -> Self {
+    pub const fn pipelined(init_interval: usize, latency: usize) -> Self {
         Self {
             init_interval,
             latency
@@ -55,6 +58,10 @@ impl Timing {
         )
     }
 
+    pub fn times(self, factor: usize) -> Timing {
+        Timing::pipelined(self.init_interval, self.latency * factor)
+    }
+
     pub fn then(self, rhs: Timing) -> Timing {
         Timing::compose(self, rhs)
     }
@@ -67,24 +74,19 @@ impl Timing {
     }
 }
 
+/// dumb hack that also relies on calyx stdlib implementation
+pub const MULTIPLY_TIMING: Timing = Timing::pipelined(1, 4);
+
 #[derive(Default)]
 pub struct TimingAnalysis(HashMap<Id, Timing>);
 
 impl TimingAnalysis {
-    pub fn for_comp<P: AsGeneratorPool>(
-        comp: &mut Component, pool: &mut P
-    ) -> Self {
-        let mut new_self = Self::default();
-        new_self.traverse_component(comp, pool, false);
-        new_self
-    }
-
     pub fn for_control<P: AsGeneratorPool>(
-        control: Handle<Control>, pool: &mut P
+        control: Handle<Control>, pool: &P
     ) -> Self {
         let mut new_self = Self::default();
-        let mut fake = unsafe { ComponentViewMut::undefined() };
-        new_self.traverse_control(control, &mut fake, pool, false);
+        let fake = unsafe { mem::transmute(0u64) };
+        new_self.traverse_control(control, fake, pool, false);
         new_self
     }
 
@@ -100,47 +102,47 @@ impl TimingAnalysis {
     }
 }
 
-impl<P: AsGeneratorPool> VisitorMut<P> for TimingAnalysis {
+impl<P: AsGeneratorPool> Visitor<P> for TimingAnalysis {
     fn finish_enable(
-        &mut self, id: Id, enable: &mut Ir, _comp_view: &mut ComponentViewMut,
-        _pool: &mut P
-    ) -> Action {
+        &mut self, id: Id, enable: &Ir, _comp: &Component, _pool: &P
+    ) {
         log::trace!("at ir {}: {}", id, enable);
         self.set(
             id,
             match enable {
                 Ir::Add(_, _, _) => Timing::combinational(),
-                Ir::Mul(_, _, _) => Timing::pipelined(1, 4),
+                Ir::Mul(_, _, _) => MULTIPLY_TIMING,
                 Ir::Assign(_, _) => Timing::combinational()
             }
         );
-        Action::None
     }
 
     fn finish_delay(
-        &mut self, id: Id, delay: &mut usize,
-        _comp_view: &mut ComponentViewMut, _pool: &mut P
-    ) -> Action {
+        &mut self, id: Id, delay: &usize, _comp: &Component, _pool: &P
+    ) {
         self.set(id, Timing::sequential(*delay));
-        Action::None
     }
 
-    fn finish_for(
-        &mut self, id: Id, for_: &mut For, _comp_view: &mut ComponentViewMut,
-        pool: &mut P
-    ) -> Action {
+    fn finish_for(&mut self, id: Id, for_: &For, _comp: &Component, pool: &P) {
+        // TODO: we assume constant integer bounds
+        let (
+            Port::Constant(lower_bound),
+            Port::Constant(exclusive_upper_bound)
+        ) = (for_.lower_bound(), for_.exclusive_upper_bound())
+        else {
+            panic!("we assume constant integer bounds");
+        };
+
         self.set(
             id,
-            Timing::sequential(for_.init_latency())
-                .then(self.get(for_.body().id_in(pool)))
+            Timing::sequential(for_.init_latency()).then(
+                self.get(for_.body().id_in(pool))
+                    .times((*exclusive_upper_bound - *lower_bound) as usize)
+            )
         );
-        Action::None
     }
 
-    fn finish_seq(
-        &mut self, id: Id, seq: &mut Seq, _comp_view: &mut ComponentViewMut,
-        pool: &mut P
-    ) -> Action {
+    fn finish_seq(&mut self, id: Id, seq: &Seq, _comp: &Component, pool: &P) {
         let timing = seq
             .children()
             .iter()
@@ -148,13 +150,9 @@ impl<P: AsGeneratorPool> VisitorMut<P> for TimingAnalysis {
             .reduce(Timing::compose)
             .unwrap_or_default();
         self.set(id, timing);
-        Action::None
     }
 
-    fn finish_par(
-        &mut self, id: Id, par: &mut Par, _comp_view: &mut ComponentViewMut,
-        pool: &mut P
-    ) -> Action {
+    fn finish_par(&mut self, id: Id, par: &Par, _comp: &Component, pool: &P) {
         let timing = par
             .children()
             .iter()
@@ -162,13 +160,11 @@ impl<P: AsGeneratorPool> VisitorMut<P> for TimingAnalysis {
             .reduce(Timing::max)
             .unwrap_or_default();
         self.set(id, timing);
-        Action::None
     }
 
     fn finish_if_else(
-        &mut self, id: Id, if_else: &mut IfElse,
-        _comp_view: &mut ComponentViewMut, pool: &mut P
-    ) -> Action {
+        &mut self, id: Id, if_else: &IfElse, _comp: &Component, pool: &P
+    ) {
         self.set(
             id,
             Timing::max(
@@ -176,6 +172,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for TimingAnalysis {
                 self.get(if_else.false_branch.id_in(pool))
             )
         );
-        Action::None
     }
 }
+
+impl Analysis for TimingAnalysis {}

@@ -27,19 +27,12 @@ use super::{Pass, PassOptions};
 /// - All ports within a `par` are assigned to no more than once.
 /// - All outermost for-loops should have constant-integer bounds.
 pub struct WellFormed {
+    check_par_disjoint: bool, /* TODO: really just needs to be a
+                               * timing-aware par disjoint check, not no
+                               * check */
     read_vars: HashSet<Variable>,
     written_vars: HashSet<Variable>,
     par_disjoint_env: AffineEnvironment<Id, Handle<Port>>
-}
-
-impl Default for WellFormed {
-    fn default() -> Self {
-        Self {
-            read_vars: HashSet::default(),
-            written_vars: HashSet::default(),
-            par_disjoint_env: AffineEnvironment::new("bug")
-        }
-    }
 }
 
 impl<P: AsGeneratorPool> VisitorMut<P> for WellFormed {
@@ -47,15 +40,19 @@ impl<P: AsGeneratorPool> VisitorMut<P> for WellFormed {
         &mut self, _id: Id, _par: &mut Par, _comp_view: &mut ComponentViewMut,
         _pool: &mut P
     ) -> Action {
-        self.par_disjoint_env.enter_local();
+        if self.check_par_disjoint {
+            self.par_disjoint_env.enter_local();
+        }
         Action::None
     }
 
     fn finish_par(
         &mut self, _id: Id, _par: &mut Par, _comp_view: &mut ComponentViewMut,
-        __pool: &mut P
+        _pool: &mut P
     ) -> Action {
-        self.par_disjoint_env.exit_local();
+        if self.check_par_disjoint {
+            self.par_disjoint_env.exit_local();
+        }
         Action::None
     }
 
@@ -78,16 +75,18 @@ impl<P: AsGeneratorPool> VisitorMut<P> for WellFormed {
             self.written_vars.insert(kill_var);
         }
 
-        self.par_disjoint_env
-            .take(id, enable.kill())
-            .unwrap_or_else(|error| {
-                panic!(
-                    "{} tried to write to {} in the same par that {} did",
-                    enable,
-                    enable.kill(),
-                    Handle::<Control>::from_id(error.owner, pool)
-                );
-            });
+        if self.check_par_disjoint {
+            self.par_disjoint_env
+                .take(id, enable.kill())
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "{} tried to write to {} in the same par that {} did",
+                        enable,
+                        enable.kill(),
+                        Handle::<Control>::from_id(error.owner, pool)
+                    );
+                });
+        }
 
         Action::None
     }
@@ -118,8 +117,13 @@ impl<P: AsGeneratorPool> Pass<P> for WellFormed {
     }
 
     fn from(
-        _options: PassOptions, _comp: &mut Component, _pool: &mut P
+        options: PassOptions, _comp: &mut Component, _pool: &mut P
     ) -> Self {
-        Self::default()
+        Self {
+            check_par_disjoint: !options.contains(PassOptions::TIMING_AWARE),
+            read_vars: HashSet::default(),
+            written_vars: HashSet::default(),
+            par_disjoint_env: AffineEnvironment::new("bug")
+        }
     }
 }

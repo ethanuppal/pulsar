@@ -5,7 +5,7 @@
 
 use crate::{
     component::{Component, ComponentViewMut},
-    control::{For, IfElse, Par, Seq},
+    control::{Control, For, IfElse, Par, Seq},
     from_ast::AsGeneratorPool,
     port::Port,
     visitor::{Action, VisitorMut},
@@ -40,7 +40,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for SideEffectAnalysis {
             .collect();
     }
 
-    fn start_delay(
+    fn finish_delay(
         &mut self, id: Id, delay: &mut usize,
         _comp_view: &mut ComponentViewMut, _pool: &mut P
     ) -> Action {
@@ -63,6 +63,7 @@ impl<P: AsGeneratorPool> VisitorMut<P> for SideEffectAnalysis {
             {
                 self.effectual_ports.extend(enable.gen_used());
                 self.effectual_control.insert(id);
+                log::trace!("keep ir {}", enable);
             }
         }
         Action::None
@@ -118,9 +119,15 @@ impl<P: AsGeneratorPool> VisitorMut<P> for SideEffectAnalysis {
         Action::None
     }
 
-    fn finish_component(&mut self, comp: &mut Component, pool: &mut P) {
+    fn finish_component(&mut self, _comp: &mut Component, pool: &mut P) {
         for port in &self.effectual_ports {
             log::trace!("effectual port: {}", port);
+        }
+        for id in &self.effectual_control {
+            log::trace!(
+                "effectual control: {}",
+                Handle::<Control>::from_id(*id, pool)
+            );
         }
     }
 }

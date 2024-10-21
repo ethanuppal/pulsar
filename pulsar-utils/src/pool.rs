@@ -31,6 +31,10 @@ pub struct Handle<T> {
 }
 
 impl<T> Handle<T> {
+    pub const NULL: Handle<T> = Handle {
+        pointer: ptr::null_mut()
+    };
+
     pub fn is_invalid(&self) -> bool {
         self.pointer.is_null() || !self.pointer.is_aligned()
     }
@@ -47,6 +51,10 @@ impl<T> Handle<T> {
             // 💀
             pool.as_pool_ref().contents.at_index_ref(id) as *mut T
         })
+    }
+
+    pub fn same_as(&self, other: Handle<T>) -> bool {
+        self.pointer == other.pointer
     }
 }
 

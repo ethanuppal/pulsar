@@ -109,7 +109,7 @@ impl<'gen> ComponentGenerator<'gen> {
         for stmt in body {
             self.gen_stmt(*stmt, &mut builder)
         }
-        let cfg = builder.into();
+        let cfg = builder.take();
 
         let mut comp =
             Component::new(label, input_cells, output_cells, pool.add(cfg));
@@ -208,12 +208,12 @@ impl<'gen> ComponentGenerator<'gen> {
                         self.gen_stmt(*stmt, &mut builder);
                     }
                     self.env.pop();
-                    let control = builder.into();
+                    let control = builder.take();
                     pool.add(control)
                 });
                 self.env.pop();
                 builder.push(Control::For(For::new(
-                    variant, lower_port, upper_port, body
+                    variant, lower_port, upper_port, None, body
                 )));
             }
         }

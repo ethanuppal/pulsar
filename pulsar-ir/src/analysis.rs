@@ -3,5 +3,19 @@
 //! License as published by the Free Software Foundation, either version 3 of
 //! the License, or (at your option) any later version.
 
+use crate::{
+    component::Component, from_ast::AsGeneratorPool, visitor::Visitor
+};
+
 pub mod side_effect;
 pub mod timing;
+
+pub trait Analysis {
+    fn for_comp<P: AsGeneratorPool>(comp: &Component, pool: &P) -> Self
+    where
+        Self: Default + Visitor<P> {
+        let mut new_self = Self::default();
+        new_self.traverse_component(comp, pool, false);
+        new_self
+    }
+}

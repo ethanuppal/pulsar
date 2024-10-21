@@ -5,7 +5,9 @@
 
 use super::{Pass, PassOptions};
 use crate::{
-    analysis::{side_effect::SideEffectAnalysis, timing::TimingAnalysis},
+    analysis::{
+        side_effect::SideEffectAnalysis, timing::TimingAnalysis, Analysis
+    },
     component::{Component, ComponentViewMut},
     control::{Control, For, IfElse, Par, Seq},
     from_ast::AsGeneratorPool,
@@ -29,9 +31,10 @@ impl DeadCode {
         }
         let latency = self.timing.get(id).latency();
         if self.preserve_timing && latency > 0 {
-            return Action::Replace(Control::Delay(latency));
+            Action::Replace(Control::Delay(latency))
+        } else {
+            Action::Remove
         }
-        Action::Remove
     }
 }
 

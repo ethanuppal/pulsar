@@ -10,6 +10,6 @@ pub mod agen;
 
 pub trait Transform<P: AsGeneratorPool> {
     fn apply(
-        &mut self, comp: &Component, pool: &mut P, gen: &mut Gen
+        &mut self, _comp: &Component, pool: &mut P, gen: &mut Gen
     ) -> anyhow::Result<Component>;
 }
